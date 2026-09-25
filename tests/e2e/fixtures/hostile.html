@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soft Silk Saree – Peacock Green | Hostile CSS test</title>
+<style>
+  /* Deliberately aggressive global CSS, like some themes ship. */
+  * { all: unset; }
+  head, script, style, title { display: none !important; }
+  html, body { display: block; font-family: "Comic Sans MS", cursive; font-size: 22px; color: lime; background: #222; line-height: 3; }
+  div, p, h1, section { display: block; }
+  button { background: red !important; color: yellow !important; border: 5px dashed blue !important; font-size: 40px !important; padding: 20px !important; }
+  input, textarea { background: black !important; color: black !important; }
+  a { color: magenta !important; font-size: 30px !important; }
+  svg { width: 400px !important; height: 400px !important; }
+  p { margin: 40px; }
+  #marker { height: 200px; background: #444; }
+</style>
+</head>
+<body>
+  <h1>Soft Silk Saree – Peacock Green</h1>
+  <div id="marker">Layout marker</div>
+  <p>Price ₹4,200.</p>
+  <button id="host-button">Host button</button>
+  <script>
+    window.__cls = 0;
+    new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__cls += e.value; }).observe({ type: "layout-shift", buffered: true });
+  </script>
+  <script src="{{APP}}/widget.js" data-key="pk_ananya_demo_0001" async></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+.env
+.env.local
+.env.*.local
+.env.local-stack
+node_modules
+.next
+test-results
+playwright-report
+test.html

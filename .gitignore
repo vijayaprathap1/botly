@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+.env
+.env.local
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+test-results
+playwright-report
+.vercel
+public/widget.js
+public/widget.js.map
+.local-db
+.env.local-stack
+
+.vercel

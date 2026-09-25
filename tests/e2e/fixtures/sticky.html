@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sticky header test</title>
+<style>
+  body { margin: 0; font-family: system-ui; }
+  header { position: sticky; top: 0; z-index: 99999; height: 70px; background: #0f172a; color: #fff; display: flex; align-items: center; padding: 0 16px; }
+  .overlay { position: fixed; bottom: 0; right: 0; width: 200px; height: 200px; z-index: 2147482000; pointer-events: none; }
+  main { height: 3000px; padding: 16px; }
+</style>
+</head>
+<body>
+  <header>Store header (z-index 99999)</header>
+  <div class="overlay"></div>
+  <main><p>Scroll me.</p></main>
+  <script src="{{APP}}/widget.js" data-key="pk_ananya_demo_0001" async></script>
+</body>
+</html>
