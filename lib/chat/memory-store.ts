@@ -119,4 +119,16 @@ export class MemoryStore implements ChatStore {
   async logNotification(n: NotificationLog) {
     this.notifications.push(n);
   }
+
+  async consumeReply(orgId: string) {
+    const bot = [...this.bots.values()].find((b) => b.org.id === orgId);
+    const o = bot?.org;
+    if (!o) return "ok" as const;
+    if (o.suspended) return "suspended" as const;
+    if (o.plan !== "trial") return "ok" as const;
+    if (o.trial_ends_at && new Date(o.trial_ends_at) < new Date()) return "expired" as const;
+    if ((o.trial_replies_used ?? 0) >= (o.trial_reply_limit ?? 50)) return "limit" as const;
+    for (const b of this.bots.values()) if (b.org.id === orgId) b.org.trial_replies_used = (o.trial_replies_used ?? 0) + 1;
+    return "ok" as const;
+  }
 }

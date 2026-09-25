@@ -100,4 +100,14 @@ export class SupabaseStore implements ChatStore {
     const res = await this.db.from("notifications").insert({ ...n, sent_at: n.status === "sent" ? new Date().toISOString() : null });
     if (res.error) console.error("[store] logNotification", res.error.message);
   }
+
+  async consumeReply(orgId: string) {
+    const { data, error } = await this.db.rpc("consume_reply", { p_org_id: orgId });
+    if (error) {
+      // Fail open for paying customers if the gate itself errors; log loudly.
+      console.error("[store] consumeReply", error.message);
+      return "ok" as const;
+    }
+    return data as "ok" | "expired" | "limit" | "suspended";
+  }
 }

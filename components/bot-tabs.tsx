@@ -7,14 +7,10 @@ export function BotTabs({ botId, isAdmin }: { botId: string; isAdmin: boolean })
   const base = `/app/bots/${botId}`;
   const tabs = [
     { href: base, label: "Overview", exact: true },
-    ...(isAdmin
-      ? [
-          { href: `${base}/onboarding`, label: "Onboarding" },
-          { href: `${base}/knowledge`, label: "Knowledge" },
-          { href: `${base}/playground`, label: "Playground" },
-          { href: `${base}/settings`, label: "Settings" },
-        ]
-      : []),
+    { href: `${base}/knowledge`, label: "Knowledge" },
+    { href: `${base}/playground`, label: isAdmin ? "Playground" : "Preview" },
+    { href: `${base}/settings`, label: "Settings" },
+    { href: `${base}/onboarding`, label: isAdmin ? "Onboarding" : "Import" },
     { href: `${base}/conversations`, label: "Conversations" },
     { href: `${base}/leads`, label: "Leads" },
     { href: `${base}/unanswered`, label: "Unanswered" },

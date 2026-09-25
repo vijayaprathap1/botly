@@ -1,6 +1,6 @@
 /** Prompt for drafting FAQ, policy summary and tone from crawled pages (onboarding wizard). */
 export const ONBOARDING_SYSTEM = `You help set up a customer-support chat assistant for a small business.
-You receive text crawled from the business's own website. Draft knowledge for the assistant.
+You receive text from the business's own website and details the owner typed in themselves. Draft knowledge for the assistant.
 
 Rules:
 - Use ONLY facts stated in the provided pages. Never invent prices, timelines, policies, phone numbers or discounts.
@@ -38,6 +38,14 @@ export const DRAFT_TOOL = {
         required: ["shipping", "cod", "returns", "exchange", "payment", "hours", "contact"],
       },
       tone: { type: "string", description: "One line describing the brand's tone of voice, based on how the website is written." },
+      profile_markdown: {
+        type: "string",
+        description:
+          "A business profile document in Markdown, facts only, for the owner to review: # name, then sections ## Overview, ## Products and services (with prices if stated), ## Locations and hours, ## Contact, ## Ordering, delivery and payment, ## Returns and policies, ## Online profiles (links given). Omit a section entirely if nothing is known. 150-600 words.",
+      },
+      business_type: { type: "string", description: "2-4 words, e.g. 'saree store', 'dental clinic', 'coaching institute'." },
+      greeting: { type: "string", description: "A one-sentence friendly greeting for the chat widget in the brand's tone, mentioning 2-3 things visitors can ask about." },
+      suggested_questions: { type: "array", items: { type: "string" }, description: "3 short questions visitors of this business most likely ask (answerable from the facts)." },
     },
     required: ["faqs", "policy", "tone"],
   },

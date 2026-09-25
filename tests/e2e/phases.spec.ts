@@ -59,6 +59,8 @@ async function signIn(page: Page, email: string) {
 const panel = (p: Page) => p.locator("#botly-widget .panel");
 const say = async (p: Page, text: string) => {
   await p.locator("#botly-widget .composer textarea").fill(text);
+  // The widget ignores Enter while the previous reply is still streaming.
+  await expect(p.locator("#botly-widget .composer button").last()).toBeEnabled({ timeout: 15_000 });
   await p.locator("#botly-widget .composer textarea").press("Enter");
 };
 
@@ -151,10 +153,11 @@ test("client access: owner sees only their business, no cost, can suggest answer
   await expect(owner.getByText("Meenakshi Silks")).toHaveCount(0);
   await expect(owner.getByText("Cost")).toHaveCount(0);
   await owner.getByText("Ananya Handlooms").first().click();
-  await expect(owner.getByRole("link", { name: "Knowledge" })).toHaveCount(0);
-  await expect(owner.getByRole("link", { name: "Settings" })).toHaveCount(0);
+  // Clients edit their own assistant, but never platform settings (model, plan, quota).
   await owner.goto(`${APP}/app/bots/${BOT}/settings`);
-  await expect(owner).toHaveURL(/\/app$/); // admin-only page bounces
+  await expect(owner.getByLabel("Greeting")).toBeVisible();
+  await expect(owner.getByLabel("Model")).toBeHidden();
+  await expect(owner.getByText("Super admin")).toHaveCount(0);
   // Owner suggests an answer
   await pool.query("select merge_unanswered($1, null, 'Is there parking near the store?', 'en')", [BOT]);
   await owner.goto(`${APP}/app/bots/${BOT}/unanswered`);

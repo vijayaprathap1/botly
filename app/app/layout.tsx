@@ -16,6 +16,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {session.isAdmin ? <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">admin</span> : null}
           </Link>
           <div className="flex items-center gap-2 text-sm">
+            {session.isAdmin ? <Link href="/app/admin" className="rounded-md px-2 py-1 text-slate-700 hover:bg-slate-100">Super admin</Link> : null}
+            {session.orgIds.length ? <Link href="/app/billing" className="rounded-md px-2 py-1 text-slate-700 hover:bg-slate-100">Billing</Link> : null}
             <span className="hidden max-w-[16rem] truncate text-slate-600 sm:inline">{session.email}</span>
             <form action="/auth/signout" method="post">
               <button className="rounded-md px-2 py-1 text-slate-700 hover:bg-slate-100">Sign out</button>

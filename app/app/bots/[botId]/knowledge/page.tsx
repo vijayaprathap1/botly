@@ -4,7 +4,7 @@ import { rebuildIndex } from "@/app/app/actions-phase2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { SelectAll, SubmitButton } from "@/components/client";
 import { Badge, btn, Card, Empty, inputClass, Notice } from "@/components/ui";
-import { requireAdmin } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { getBot } from "@/lib/dashboard";
 import { fmtDateTime, fmtInt } from "@/lib/format";
@@ -15,7 +15,7 @@ const TYPES = ["policy", "faq", "product", "page", "file", "note"] as const;
 const STATUS_TONE = { approved: "green", draft: "amber", archived: "gray" } as const;
 
 export default async function KnowledgePage({ params, searchParams }: { params: Promise<{ botId: string }>; searchParams: Promise<{ type?: string; status?: string; q?: string }> }) {
-  await requireAdmin();
+  const session = await requireSession();
   const { botId } = await params;
   const sp = await searchParams;
   const bot = await getBot(botId);

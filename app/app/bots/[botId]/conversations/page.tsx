@@ -63,12 +63,10 @@ export default async function ConversationsPage({ params, searchParams }: { para
           </div>
           <button className={btn.secondary}>Filter</button>
         </form>
-        {session.isAdmin ? (
-          <div className="mt-3 flex flex-wrap gap-2 text-sm">
-            <a className={btn.ghost} href={`/api/admin/export?bot=${bot.id}&type=conversations&format=csv`}>Export CSV</a>
-            <a className={btn.ghost} href={`/api/admin/export?bot=${bot.id}&type=conversations&format=json`}>Export JSON</a>
-          </div>
-        ) : null}
+        <div className="mt-3 flex flex-wrap gap-2 text-sm">
+          <a className={btn.ghost} href={`/api/admin/export?bot=${bot.id}&type=conversations&format=csv`}>Export CSV</a>
+          <a className={btn.ghost} href={`/api/admin/export?bot=${bot.id}&type=conversations&format=json`}>Export JSON</a>
+        </div>
       </Card>
 
       {rows.length === 0 ? (

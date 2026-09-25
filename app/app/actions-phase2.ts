@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
+import { requireBotEditor } from "@/lib/bot-access";
 import { requireAdmin, requireSession } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { afterKnowledgeChange } from "@/lib/knowledge-sync";
@@ -19,13 +20,13 @@ const text = (v: FormDataEntryValue | null) => String(v ?? "").trim();
 // ─── Unanswered inbox (P10) ──────────────────────────────────────────────────
 /** One step: the answer becomes an approved FAQ and the question is marked answered. */
 export async function answerUnanswered(botId: string, questionId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  const session = await requireAdmin();
+  const { session, bot: editable } = await requireBotEditor(botId);
   if (!uuid.safeParse(questionId).success) return { error: "Bad id" };
   const answer = text(form.get("answer")).slice(0, 4000);
   const question = text(form.get("question")).slice(0, 300);
   if (answer.length < 2) return { error: "Write the answer first" };
   if (question.length < 2) return { error: "The question can't be empty" };
-  const db = await supabaseServer();
+  const db = supabaseAdmin();
   const content = `Q: ${question}\nA: ${answer}`;
   const { data: src, error } = await db
     .from("knowledge_sources")
@@ -41,11 +42,11 @@ export async function answerUnanswered(botId: string, questionId: string, _: Act
 }
 
 export async function setUnansweredStatus(botId: string, form: FormData) {
-  await requireAdmin();
+  const { session, bot: editable } = await requireBotEditor(botId);
   const id = text(form.get("id"));
   const status = text(form.get("status"));
   if (!uuid.safeParse(id).success || !["open", "ignored"].includes(status)) return;
-  const db = await supabaseServer();
+  const db = supabaseAdmin();
   await db.from("unanswered_questions").update({ status }).eq("id", id).eq("bot_id", botId);
   revalidatePath(`/app/bots/${botId}/unanswered`);
 }
@@ -65,10 +66,11 @@ export async function suggestAnswer(botId: string, questionId: string, _: Action
 
 // ─── Client (owner) access ───────────────────────────────────────────────────
 export async function inviteOwner(botId: string, orgId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  const session = await requireAdmin();
+  const { session, bot: editable } = await requireBotEditor(botId);
+  if (editable.org_id !== orgId) return { error: "Not allowed" };
   const email = text(form.get("email")).toLowerCase();
   if (!z.string().email().safeParse(email).success) return { error: "Enter a valid email" };
-  const db = await supabaseServer();
+  const db = supabaseAdmin();
   const { data: org } = await db.from("organizations").select("name").eq("id", orgId).single();
   const { error } = await db.from("org_invites").upsert({ org_id: orgId, email, invited_by: session.userId, accepted_at: null }, { onConflict: "org_id,email" });
   if (error) return { error: error.message };
@@ -87,11 +89,12 @@ export async function inviteOwner(botId: string, orgId: string, _: ActionState, 
 }
 
 export async function revokeOwner(botId: string, form: FormData) {
-  await requireAdmin();
+  const { session, bot: editable } = await requireBotEditor(botId);
   const id = text(form.get("inviteId"));
   if (!uuid.safeParse(id).success) return;
-  const db = await supabaseServer();
+  const db = supabaseAdmin();
   const { data: inv } = await db.from("org_invites").select("org_id, accepted_user_id").eq("id", id).single();
+  if (!inv || inv.org_id !== editable.org_id) return;
   if (inv?.accepted_user_id) await db.from("memberships").delete().eq("user_id", inv.accepted_user_id).eq("org_id", inv.org_id).eq("role", "owner");
   await db.from("org_invites").delete().eq("id", id);
   revalidatePath(`/app/bots/${botId}`);
@@ -99,7 +102,7 @@ export async function revokeOwner(botId: string, form: FormData) {
 
 // ─── Privacy: delete one visitor's data (DPDP) ──────────────────────────────
 export async function deleteVisitorData(botId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  await requireAdmin();
+  const { session, bot: editable } = await requireBotEditor(botId);
   const phoneRaw = text(form.get("phone"));
   const visitorId = text(form.get("visitorId"));
   if (form.get("confirm") !== "DELETE") return { error: 'Type DELETE to confirm' };
@@ -120,12 +123,13 @@ export async function deleteVisitorData(botId: string, _: ActionState, form: For
 
 // ─── Report / retention settings ─────────────────────────────────────────────
 export async function updateOrgOps(botId: string, orgId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  await requireAdmin();
+  const { bot: editable } = await requireBotEditor(botId);
+  if (editable.org_id !== orgId) return { error: "Not allowed" };
   const minutes = Number(text(form.get("minutes")));
   const retention = Number(text(form.get("retention")));
   if (!(minutes > 0 && minutes <= 120)) return { error: "Minutes per conversation: 0.5 to 120" };
   if (!Number.isInteger(retention) || retention < 1 || retention > 120) return { error: "Retention: 1 to 120 months" };
-  const db = await supabaseServer();
+  const db = supabaseAdmin();
   const { error } = await db.from("organizations").update({ minutes_saved_per_conversation: minutes, retention_months: retention }).eq("id", orgId);
   if (error) return { error: error.message };
   revalidatePath(`/app/bots/${botId}`, "layout");
@@ -134,7 +138,7 @@ export async function updateOrgOps(botId: string, orgId: string, _: ActionState,
 
 // ─── Retrieval index ────────────────────────────────────────────────────────
 export async function rebuildIndex(botId: string) {
-  await requireAdmin();
+  const { session, bot: editable } = await requireBotEditor(botId);
   const { syncChunks } = await import("@/lib/retrieval/index-sync");
   try {
     await syncChunks(botId);

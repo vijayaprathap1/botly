@@ -111,6 +111,14 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   ]);
   if (blocked) return fail("rate_limited", "You're sending messages quickly. Please wait a minute and try again.");
 
+  // 2b. Plan gate: free-trial replies and days, suspended accounts ---------------------
+  const gate = await deps.store.consumeReply(bot.org.id);
+  if (gate !== "ok") {
+    emit("tool_card", { type: "fallback_contact", reason: "quota", contact: bot.fallback_contact } satisfies ToolCard);
+    emit("done", { conversationId: req.conversationId ?? null, quota: gate === "suspended" ? "suspended" : "trial_ended" });
+    return outcome;
+  }
+
   // 3. Conversation (+ quota on the first message) ---------------------------------
   const month = monthKey(now, bot.org.timezone);
   const quota = effectiveQuota(bot.org.monthly_conversation_quota, bot.monthly_conversation_quota);

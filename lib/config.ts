@@ -41,7 +41,8 @@ export const config = {
   get crawlMaxPages() {
     return int("CRAWL_MAX_PAGES", 40);
   },
-  defaultQuota(plan: "starter" | "growth") {
+  defaultQuota(plan: "trial" | "starter" | "growth") {
+    if (plan === "trial") return 1_000_000; // trials are limited by replies, not conversations
     return plan === "growth" ? int("DEFAULT_QUOTA_GROWTH", 10_000) : int("DEFAULT_QUOTA_STARTER", 2_000);
   },
   get adminEmails(): string[] {

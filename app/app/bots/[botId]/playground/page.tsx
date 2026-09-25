@@ -1,10 +1,10 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { getBot, installSnippet } from "@/lib/dashboard";
 import { Playground } from "./playground";
 
 export default async function PlaygroundPage({ params }: { params: Promise<{ botId: string }> }) {
-  await requireAdmin();
+  const session = await requireSession();
   const { botId } = await params;
   const bot = await getBot(botId);
   return (
@@ -14,6 +14,7 @@ export default async function PlaygroundPage({ params }: { params: Promise<{ bot
       testUrl={`${config.appUrl}/t/${bot.test_token}`}
       snippet={installSnippet(config.appUrl, bot.public_key)}
       greeting={bot.greeting}
+      isAdmin={session.isAdmin}
     />
   );
 }

@@ -1,11 +1,11 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui";
-import { requireAdmin } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 import { SourceForm } from "../source-form";
 
 export default async function EditSourcePage({ params }: { params: Promise<{ botId: string; sourceId: string }> }) {
-  await requireAdmin();
+  const session = await requireSession();
   const { botId, sourceId } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(sourceId)) notFound();
   const db = await supabaseServer();

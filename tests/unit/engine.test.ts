@@ -296,4 +296,27 @@ describe("chat engine", () => {
       expect(lead).toMatchObject({ type: "callback", preferred_time: "2099-01-05, evening", phone: "+919790011223" });
     });
   });
+
+  it("free trial: replies are counted and stop at the limit with the contact card", async () => {
+    const bot = [...store.bots.values()][0]!;
+    Object.assign(bot.org, { plan: "trial", trial_reply_limit: 2, trial_replies_used: 0, trial_ends_at: new Date(Date.now() + 86_400_000).toISOString() });
+    const llm = new QueueLlm([{ text: "one" }, { text: "two" }, { text: "never" }]);
+    await runChat(deps(llm), req("a"), ctx, emit);
+    await runChat(deps(llm), { ...req("b"), visitorId: "visitor-trial-02" }, ctx, emit);
+    events.length = 0;
+    await runChat(deps(llm), { ...req("c"), visitorId: "visitor-trial-03" }, ctx, emit);
+    expect(llm.calls).toHaveLength(2);
+    expect(events.find((e) => e.event === "tool_card")!.data).toMatchObject({ type: "fallback_contact", reason: "quota" });
+    expect(events.find((e) => e.event === "done")!.data.quota).toBe("trial_ended");
+  });
+
+  it("expired trial and suspended accounts get no AI replies", async () => {
+    const bot = [...store.bots.values()][0]!;
+    Object.assign(bot.org, { plan: "trial", trial_reply_limit: 50, trial_replies_used: 0, trial_ends_at: new Date(Date.now() - 1000).toISOString() });
+    const llm = new QueueLlm([{ text: "x" }]);
+    await runChat(deps(llm), req("a"), ctx, emit);
+    Object.assign(bot.org, { plan: "starter", suspended: true });
+    await runChat(deps(llm), { ...req("b"), visitorId: "visitor-susp-01" }, ctx, emit);
+    expect(llm.calls).toHaveLength(0);
+  });
 });

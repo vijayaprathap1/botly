@@ -5,6 +5,8 @@ import { after } from "next/server";
 import { afterKnowledgeChange } from "@/lib/knowledge-sync";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { requireBotEditor } from "@/lib/bot-access";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireAdmin, requireSession } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { parseProductCsv, productContent } from "@/lib/csv";
@@ -41,7 +43,7 @@ function cleanOrigins(list: string[]): string[] {
 const createSchema = z.object({
   orgName: z.string().trim().min(1).max(200),
   businessType: z.string().trim().min(1).max(100),
-  plan: z.enum(["starter", "growth"]),
+  plan: z.enum(["trial", "starter", "growth"]),
   quota: z.coerce.number().int().min(0).max(1_000_000).optional(),
   timezone: z.string().trim().min(1).max(64),
   botName: z.string().trim().min(1).max(120),
@@ -110,7 +112,7 @@ function parseHours(form: FormData): BusinessHours | string {
 }
 
 export async function updateBotSettings(botId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  await requireAdmin();
+  const { session, bot: editable } = await requireBotEditor(botId);
   if (!uuid.safeParse(botId).success) return { error: "Bad bot id" };
   const color = text(form.get("primary_color"));
   if (!/^#[0-9a-f]{6}$/i.test(color)) return { error: "Primary colour must look like #9f1239" };
@@ -135,7 +137,7 @@ export async function updateBotSettings(botId: string, _: ActionState, form: For
   const model = text(form.get("model")) || config.defaultModel;
   if (!/^claude-[a-z0-9.\-]+$/.test(model)) return { error: "Model must be a Claude model id, e.g. claude-haiku-4-5" };
 
-  const db = await supabaseServer();
+  const db = supabaseAdmin();
   const patch = {
     name: text(form.get("name")).slice(0, 120) || "Website assistant",
     greeting: text(form.get("greeting")).slice(0, 500),
@@ -162,15 +164,21 @@ export async function updateBotSettings(botId: string, _: ActionState, form: For
       show_powered_by: form.get("show_powered_by") === "on",
     },
     active: form.get("active") === "on",
-    model,
-    monthly_conversation_quota: botQuota,
+    // Plan-controlled and platform-only fields: only the super admin changes these.
+    ...(session.isAdmin ? { model, monthly_conversation_quota: botQuota } : {}),
   };
+  // Free-trial and Starter bots always show "Powered by Botly".
+  if (!session.isAdmin && editable.org.plan !== "growth") patch.branding.show_powered_by = true;
   const { data: bot, error } = await db.from("bots").update(patch).eq("id", botId).select("org_id").single();
   if (error) return { error: error.message };
 
+  if (!session.isAdmin) {
+    revalidatePath(`/app/bots/${botId}`, "layout");
+    return { ok: true, message: "Saved. Changes apply to the next message." };
+  }
   const plan = text(form.get("plan"));
   const orgQuota = Number(text(form.get("org_quota")));
-  if ((plan === "starter" || plan === "growth") && Number.isInteger(orgQuota) && orgQuota >= 0) {
+  if ((plan === "trial" || plan === "starter" || plan === "growth") && Number.isInteger(orgQuota) && orgQuota >= 0) {
     const { error: e2 } = await db.from("organizations").update({ plan, monthly_conversation_quota: orgQuota }).eq("id", bot.org_id);
     if (e2) return { error: e2.message };
   }
@@ -180,12 +188,17 @@ export async function updateBotSettings(botId: string, _: ActionState, form: For
 
 /** §8: a bot can go live only after the prompt-injection evals pass. */
 export async function setBotStatus(botId: string, form: FormData) {
-  await requireAdmin();
+  const { session, bot: editable } = await requireBotEditor(botId);
   const live = form.get("status") === "live";
-  const db = await supabaseServer();
+  const db = supabaseAdmin();
   if (live) {
-    const { data: run } = await db.from("eval_runs").select("injection_passed").eq("bot_id", botId).order("created_at", { ascending: false }).limit(1).maybeSingle();
-    if (!run?.injection_passed) redirect(`/app/bots/${botId}?live=blocked`);
+    // Needs a passing prompt-injection check; run it now if the last one didn't pass.
+    const { data: run } = await db.from("eval_runs").select("injection_passed, created_at").eq("bot_id", botId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (!run?.injection_passed) {
+      const { goLiveCheck } = await import("@/lib/onboarding/pipeline");
+      const passed = await goLiveCheck(db, botId).catch(() => false);
+      if (!passed) redirect(`/app/bots/${botId}?live=blocked`);
+    }
   }
   await db.from("bots").update({ status: live ? "live" : "draft" }).eq("id", botId);
   revalidatePath(`/app/bots/${botId}`, "layout");
@@ -193,16 +206,16 @@ export async function setBotStatus(botId: string, form: FormData) {
 }
 
 export async function rotateTestToken(botId: string) {
-  await requireAdmin();
-  const db = await supabaseServer();
+  const { session, bot: editable } = await requireBotEditor(botId);
+  const db = supabaseAdmin();
   const token = "tt_" + crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
   await db.from("bots").update({ test_token: token }).eq("id", botId);
   revalidatePath(`/app/bots/${botId}`, "layout");
 }
 
 export async function applyToneSuggestion(botId: string) {
-  await requireAdmin();
-  const db = await supabaseServer();
+  const { session, bot: editable } = await requireBotEditor(botId);
+  const db = supabaseAdmin();
   const { data } = await db.from("bots").select("tone_suggestion").eq("id", botId).single();
   if (data?.tone_suggestion) await db.from("bots").update({ tone: data.tone_suggestion, tone_suggestion: null }).eq("id", botId);
   revalidatePath(`/app/bots/${botId}`, "layout");
@@ -218,11 +231,11 @@ const sourceSchema = z.object({
 });
 
 export async function saveSource(botId: string, sourceId: string | null, _: ActionState, form: FormData): Promise<ActionState> {
-  const session = await requireAdmin();
+  const { session, bot: editable } = await requireBotEditor(botId);
   const p = sourceSchema.safeParse(Object.fromEntries(form));
   if (!p.success) return { error: p.error.issues[0]?.message ?? "Check the form" };
   const row = { ...p.data, url: p.data.url || null, token_count: estimateTokens(p.data.content), updated_by: session.userId };
-  const db = await supabaseServer();
+  const db = supabaseAdmin();
   const res = sourceId ? await db.from("knowledge_sources").update(row).eq("id", sourceId).eq("bot_id", botId) : await db.from("knowledge_sources").insert({ ...row, bot_id: botId });
   if (res.error) return { error: res.error.message };
   after(() => afterKnowledgeChange(botId));
@@ -231,12 +244,12 @@ export async function saveSource(botId: string, sourceId: string | null, _: Acti
 }
 
 export async function bulkSources(botId: string, form: FormData) {
-  await requireAdmin();
+  const { session, bot: editable } = await requireBotEditor(botId);
   const ids = form.getAll("ids").map(String).filter((id) => uuid.safeParse(id).success);
   const action = text(form.get("action"));
   const back = text(form.get("back")) || `/app/bots/${botId}/knowledge`;
   if (ids.length) {
-    const db = await supabaseServer();
+    const db = supabaseAdmin();
     if (action === "delete") await db.from("knowledge_sources").delete().eq("bot_id", botId).in("id", ids);
     else if (["approved", "archived", "draft"].includes(action)) await db.from("knowledge_sources").update({ status: action }).eq("bot_id", botId).in("id", ids);
     after(() => afterKnowledgeChange(botId));
@@ -246,14 +259,14 @@ export async function bulkSources(botId: string, form: FormData) {
 }
 
 export async function importProducts(botId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  const session = await requireAdmin();
+  const { session, bot: editable } = await requireBotEditor(botId);
   const file = form.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Choose a CSV file" };
   if (file.size > 2_000_000) return { error: "CSV is too large (2 MB max)" };
   const { rows, errors } = parseProductCsv(await file.text());
   if (!rows.length) return { error: errors[0] ?? "No products found" };
   const status = form.get("approve") === "on" ? "approved" : "draft";
-  const db = await supabaseServer();
+  const db = supabaseAdmin();
   const { data: existing } = await db.from("knowledge_sources").select("id, title").eq("bot_id", botId).eq("type", "product").neq("status", "archived");
   const byTitle = new Map((existing ?? []).map((r) => [String(r.title).toLowerCase(), r.id as string]));
   let created = 0;
@@ -273,7 +286,7 @@ export async function importProducts(botId: string, _: ActionState, form: FormDa
 }
 
 export async function uploadDocument(botId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  const session = await requireAdmin();
+  const { session, bot: editable } = await requireBotEditor(botId);
   const file = form.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Choose a PDF or DOCX file" };
   if (file.size > 4_500_000) return { error: "File is too large (4.5 MB max)" };
@@ -297,7 +310,7 @@ export async function uploadDocument(botId: string, _: ActionState, form: FormDa
   }
   content = content.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, 60_000);
   if (content.length < 20) return { error: "No text found in the file (scanned PDFs need OCR first)." };
-  const db = await supabaseServer();
+  const db = supabaseAdmin();
   const { error } = await db.from("knowledge_sources").insert({ bot_id: botId, type: "file", title: file.name, content, status: "draft", token_count: estimateTokens(content), updated_by: session.userId });
   if (error) return { error: error.message };
   revalidatePath(`/app/bots/${botId}/knowledge`);

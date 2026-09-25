@@ -77,4 +77,6 @@ export interface ChatStore {
   updateLead(id: string, patch: Partial<LeadRow>): Promise<void>;
   mergeUnanswered(botId: string, conversationId: string | null, question: string, language: string | null): Promise<string>;
   logNotification(n: NotificationLog): Promise<void>;
+  /** Uses one AI reply from a free trial (atomic). 'ok' for paid plans. */
+  consumeReply(orgId: string): Promise<"ok" | "expired" | "limit" | "suspended">;
 }

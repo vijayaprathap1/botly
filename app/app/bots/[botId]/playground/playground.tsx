@@ -28,7 +28,7 @@ const LANG_TESTS = [
 
 const newVisitor = () => "play" + Math.random().toString(36).slice(2, 14);
 
-export function Playground(props: { botKey: string; testToken: string; testUrl: string; snippet: string; greeting: string }) {
+export function Playground(props: { botKey: string; testToken: string; testUrl: string; snippet: string; greeting: string; isAdmin?: boolean }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -180,7 +180,16 @@ export function Playground(props: { botKey: string; testToken: string; testUrl: 
             Session: p50 first token <b>{p50 != null ? `${p50} ms` : "—"}</b> over {firstTokens.length} replies · total ${totalCost.toFixed(4)}
           </p>
         </Card>
-        <Card title="Debug">
+        {props.isAdmin === false ? (
+          <Card title="Tips">
+            <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
+              <li>Ask what your customers ask. If an answer is wrong or missing, fix it in <b>Knowledge</b>. Changes apply to the next message.</li>
+              <li>Questions it can&apos;t answer appear in <b>Unanswered</b>, where you can answer them once.</li>
+              <li>Preview replies count toward your free-trial replies.</li>
+            </ul>
+          </Card>
+        ) : null}
+        <Card title="Debug" className={props.isAdmin === false ? "hidden" : undefined}>
           {!sel ? (
             <p className="text-sm text-slate-600">Send a message, then click a reply to inspect it.</p>
           ) : (

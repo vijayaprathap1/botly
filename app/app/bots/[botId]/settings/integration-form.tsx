@@ -13,7 +13,7 @@ export function IntegrationForm({ botId, plan, existing }: { botId: string; plan
   return (
     <Card title="Order lookup (Growth plan)">
       {plan !== "growth" ? (
-        <Notice tone="amber">This client is on Starter. Switch the plan to Growth above to enable order lookup and callback booking.</Notice>
+        <Notice tone="amber">Order lookup and callback booking are part of the Growth plan. Upgrade from Billing to turn them on.</Notice>
       ) : null}
       {existing ? (
         <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">

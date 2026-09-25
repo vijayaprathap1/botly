@@ -103,3 +103,26 @@ describe("phase 2 SQL", () => {
     await expect(as("authenticated", ADMIN, (c) => c.query("select credentials_encrypted from bot_integrations"))).rejects.toThrow(/permission denied/);
   });
 });
+
+describe("saas SQL", () => {
+  it("consume_reply counts trial replies atomically and stops at the limit / expiry / suspension", async () => {
+    const org = (await pool.query("insert into organizations (name, plan, trial_ends_at, trial_reply_limit) values ('Trial Co', 'trial', now() + interval '3 days', 2) returning id")).rows[0].id;
+    const r = [];
+    for (let i = 0; i < 3; i++) r.push((await pool.query("select consume_reply($1) r", [org])).rows[0].r);
+    expect(r).toEqual(["ok", "ok", "limit"]);
+    await pool.query("update organizations set trial_reply_limit = 10, trial_ends_at = now() - interval '1 minute' where id = $1", [org]);
+    expect((await pool.query("select consume_reply($1) r", [org])).rows[0].r).toBe("expired");
+    await pool.query("update organizations set plan = 'starter', suspended = true where id = $1", [org]);
+    expect((await pool.query("select consume_reply($1) r", [org])).rows[0].r).toBe("suspended");
+    await pool.query("update organizations set suspended = false where id = $1", [org]);
+    expect((await pool.query("select consume_reply($1) r", [org])).rows[0].r).toBe("ok");
+    // Browser roles can't call it.
+    await expect(as("authenticated", OWNER, (c) => c.query("select consume_reply($1)", [org]))).rejects.toThrow(/permission denied/);
+  });
+
+  it("customers can't read billing events or trial claims", async () => {
+    await pool.query("insert into trial_claims (email) values ('someone@x.in') on conflict do nothing");
+    const rows = await as("authenticated", OWNER, async (c) => (await c.query("select * from trial_claims")).rows);
+    expect(rows).toEqual([]);
+  });
+});

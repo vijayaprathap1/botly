@@ -1,11 +1,11 @@
 import { PageHeader } from "@/components/ui";
-import { requireAdmin } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { getBot } from "@/lib/dashboard";
 import { OnboardingWizard } from "./wizard";
 
 export default async function OnboardingPage({ params }: { params: Promise<{ botId: string }> }) {
-  await requireAdmin();
+  const session = await requireSession();
   const { botId } = await params;
   const bot = await getBot(botId);
   return (

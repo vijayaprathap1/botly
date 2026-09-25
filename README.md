@@ -75,6 +75,30 @@ Bot → Overview → **Client access** → enter their email → **Give access**
 4. "Can someone call me tomorrow evening?" opens a booking form (date + slot). It's saved as a `callback` lead and the owner is notified.
 5. Growth clients get a summary email every Monday at 09:00 IST.
 
+## Selling it as self-serve SaaS
+
+Anyone can now sign up at your site, build an assistant from their public profiles, try it free, and pay monthly.
+
+**Roles**
+- **Super admin** (you): every address in `ADMIN_EMAILS`. Sees `/app/admin`: MRR, active trials, trial→paid conversion, AI cost and estimated margin, and can extend a trial, set a plan for offline/done-for-you clients, or suspend an account. Also sees cost, model and eval details on every bot.
+- **Owner** (a customer): signs up with Google or email, or is invited by you. Manages only their own business: knowledge, settings, preview, conversations, leads, unanswered questions, reports and billing. Never sees model, cost, quotas or other customers.
+
+**Customer journey**
+1. Landing page `/` → **Start free** → `/login` (Google or email link).
+2. First sign-in goes to `/start`: business name and type, website, social profile links and pasted bios, contact details and hours.
+3. Botly reads up to 15 public pages (plus Shopify products), Claude writes a **business profile document**, FAQs and a policy summary (all approved automatically for self-serve), picks a greeting, suggested questions and tone, then runs the 4 prompt-injection safety checks. If they pass, the bot goes live.
+4. The customer lands on their Overview: trial meter, live preview, their business profile (edit/download), the install snippet and a Go live / Pause switch.
+5. Free trial: `TRIAL_DAYS` days and `TRIAL_REPLIES` AI replies (preview replies count), once per email. When it ends, visitors see the business's phone/WhatsApp/email instead of AI replies, and the owner sees "Choose a plan".
+6. `/app/billing` → Razorpay Checkout (UPI, cards, net banking) → subscription active → plan quota applies. Renewals, failures and cancellations arrive by webhook.
+
+**Why social profiles aren't scraped:** Instagram, Facebook, LinkedIn and Google Maps forbid automated reading of their pages, and Google's Places API terms don't allow storing its data. Customers paste their bios instead; the links are kept in their profile.
+
+**Setup for payments and sign-in**
+1. Run `supabase/migrations/0006_saas.sql` in the Supabase SQL Editor.
+2. **Google sign-in:** Google Cloud Console → APIs & Services → Credentials → OAuth client ID (Web). Authorised redirect URI: `https://<your-project>.supabase.co/auth/v1/callback`. Paste the client ID and secret in Supabase → Authentication → Sign In / Providers → Google, and enable it. Other providers (Microsoft, GitHub, Facebook, LinkedIn) work the same way; list them in `NEXT_PUBLIC_AUTH_PROVIDERS`.
+3. **Razorpay:** complete KYC, then Dashboard → Subscriptions → Plans: create "Botly Starter" (monthly, ₹2,999) and "Botly Growth" (monthly, ₹9,999). Put the plan ids, API keys and a webhook secret in the environment (see `.env.example`). Webhooks → add `https://YOUR_DOMAIN/api/billing/webhook` with events `subscription.activated`, `subscription.charged`, `subscription.pending`, `subscription.halted`, `subscription.cancelled`, `subscription.completed`. Test with Razorpay test keys first.
+4. Fill `BUSINESS_LEGAL_NAME`, `SUPPORT_EMAIL`, `GRIEVANCE_OFFICER` for the Terms and Privacy Policy pages (templates: have a lawyer review them).
+
 ## 5. Install the widget
 
 The whole install is one line. Put it just before `</body>`:

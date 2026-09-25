@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Badge, btn, Empty, PageHeader } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { botMetrics } from "@/lib/dashboard";
@@ -9,6 +10,7 @@ import type { BotWithOrg } from "@/lib/types";
 
 export default async function ClientsPage() {
   const session = await requireSession();
+  if (!session.isAdmin && session.orgIds.length === 0) redirect("/start");
   const db = await supabaseServer();
   const { data } = await db.from("bots").select("*, org:organizations(*)").order("created_at", { ascending: false });
   const bots = (data ?? []) as BotWithOrg[];

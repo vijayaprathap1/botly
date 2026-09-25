@@ -8,7 +8,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const nextParam = url.searchParams.get("next") ?? "/app";
-  const next = nextParam.startsWith("/app") ? nextParam : "/app";
+  const next = nextParam.startsWith("/app") || nextParam === "/start" ? nextParam : "/app";
   if (!code) return NextResponse.redirect(new URL("/login?error=1", url.origin));
 
   const sb = await supabaseServer();
@@ -26,5 +26,8 @@ export async function GET(req: Request) {
     const { data: existing } = await admin.from("memberships").select("id").eq("user_id", data.user.id).eq("role", "admin").maybeSingle();
     if (!existing) await admin.from("memberships").insert({ user_id: data.user.id, org_id: null, role: "admin" });
   }
+  // Brand-new customers (no workspace yet, not a super admin) go to sign-up onboarding.
+  const { data: rows } = await supabaseAdmin().from("memberships").select("role").eq("user_id", data.user.id).limit(1);
+  if (!rows?.length) return NextResponse.redirect(new URL("/start", url.origin));
   return NextResponse.redirect(new URL(next, url.origin));
 }

@@ -1,9 +1,9 @@
 import { PageHeader } from "@/components/ui";
-import { requireAdmin } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { SourceForm } from "../source-form";
 
 export default async function NewSourcePage({ params }: { params: Promise<{ botId: string }> }) {
-  await requireAdmin();
+  const session = await requireSession();
   const { botId } = await params;
   return (
     <>

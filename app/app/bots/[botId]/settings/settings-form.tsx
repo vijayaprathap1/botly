@@ -9,7 +9,7 @@ import { readableTextOn } from "@/widget/src/color";
 
 const DAY_LABEL = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday", sun: "Sunday" } as const;
 
-export function SettingsForm({ bot }: { bot: BotWithOrg }) {
+export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin?: boolean }) {
   const [state, action, actionPending] = useFormAction<ActionState>(updateBotSettings.bind(null, bot.id), null);
   const [color, setColor] = useState(bot.branding.primary_color);
   const [name, setName] = useState(bot.branding.assistant_name);
@@ -88,7 +88,7 @@ export function SettingsForm({ bot }: { bot: BotWithOrg }) {
               </select>
             </Field>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" name="show_powered_by" defaultChecked={bot.branding.show_powered_by} /> Show &quot;Powered by Botly&quot;
+              <input type="checkbox" name="show_powered_by" defaultChecked={bot.branding.show_powered_by} disabled={!isAdmin && bot.org.plan !== "growth"} /> Show &quot;Powered by Botly&quot;{!isAdmin && bot.org.plan !== "growth" ? " (can be hidden on Growth)" : ""}
             </label>
             <Field label="Privacy notice URL" htmlFor="privacy_url" hint="Linked in the widget footer. Leave empty to use Botly's default notice.">
               <input id="privacy_url" name="privacy_url" type="url" defaultValue={bot.privacy_url ?? ""} className={inputClass} />
@@ -130,10 +130,18 @@ export function SettingsForm({ bot }: { bot: BotWithOrg }) {
           </div>
         </Card>
 
-        <Card title="Plan, quota and model">
+        {!isAdmin ? (
+          <Card title="Assistant on or off">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="active" defaultChecked={bot.active} /> Active. Untick to hide the chat from your website straight away.
+            </label>
+          </Card>
+        ) : null}
+        <Card title="Plan, quota and model" className={isAdmin ? "" : "hidden"}>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Plan" htmlFor="plan">
               <select id="plan" name="plan" defaultValue={bot.org.plan} className={inputClass}>
+                <option value="trial">Free trial</option>
                 <option value="starter">Starter</option>
                 <option value="growth">Growth</option>
               </select>
@@ -148,7 +156,7 @@ export function SettingsForm({ bot }: { bot: BotWithOrg }) {
               <input id="model" name="model" defaultValue={bot.model} className={inputClass} />
             </Field>
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <input type="checkbox" name="active" defaultChecked={bot.active} /> Active. Untick to switch the widget off on the client&apos;s site (it disappears quietly).
+              <input type="checkbox" name="active" defaultChecked={bot.active} disabled={!isAdmin} /> Active. Untick to switch the widget off on the client&apos;s site (it disappears quietly).
             </label>
           </div>
         </Card>

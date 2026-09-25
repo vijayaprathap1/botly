@@ -1,6 +1,6 @@
 import type { BusinessHours } from "./hours";
 
-export type Plan = "starter" | "growth";
+export type Plan = "trial" | "starter" | "growth";
 export type Branding = {
   primary_color: string;
   avatar_url: string | null;
@@ -20,6 +20,19 @@ export type OrgRow = {
   timezone: string;
   retention_months: number;
   minutes_saved_per_conversation: number;
+  self_serve?: boolean;
+  trial_ends_at?: string | null;
+  trial_reply_limit?: number;
+  trial_replies_used?: number;
+  subscription_status?: "none" | "trialing" | "pending" | "active" | "past_due" | "halted" | "cancelled" | "expired";
+  current_period_end?: string | null;
+  cancel_at_period_end?: boolean;
+  suspended?: boolean;
+  website_url?: string | null;
+  social_links?: Record<string, string>;
+  profile_markdown?: string | null;
+  profile_updated_at?: string | null;
+  onboarding_status?: "pending" | "running" | "done" | "failed";
 };
 
 export type BotRow = {

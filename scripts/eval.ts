@@ -8,15 +8,13 @@
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { runChat } from "../lib/chat/engine";
-import { MemoryStore } from "../lib/chat/memory-store";
-import { buildKnowledgeBlock, type KnowledgeSource } from "../lib/knowledge";
-import { checkCase, percentile, type CaseResult, type TurnResult } from "../lib/eval/checks";
-import { fixtureToBot, loadEvalFile, type EvalCase } from "../lib/eval/fixture";
+import type { KnowledgeSource } from "../lib/knowledge";
+import { runCase } from "../lib/eval/run";
+import { percentile, type CaseResult } from "../lib/eval/checks";
+import { fixtureToBot, loadEvalFile } from "../lib/eval/fixture";
 import { AnthropicLlm } from "../lib/llm/anthropic";
 import { ScriptedLlm } from "../lib/llm/scripted";
 import type { LlmClient } from "../lib/llm/types";
-import { MemoryRateLimiter } from "../lib/security/rate-limit";
 import type { BotWithOrg } from "../lib/types";
 
 for (const f of [".env.local", ".env"]) {
@@ -52,29 +50,6 @@ function casesFileFor(botId: string): string {
     if (loadEvalFile(`evals/${f}`).fixture?.bot.id === botId) return `evals/${f}`;
   }
   return "evals/generic.yaml";
-}
-
-async function runCase(c: EvalCase, bot: BotWithOrg, knowledge: KnowledgeSource[], llm: LlmClient): Promise<CaseResult> {
-  const store = new MemoryStore();
-  store.addBot(structuredClone(bot), knowledge);
-  const deps = { store, llm, limiter: new MemoryRateLimiter(), notifiers: [] };
-  const turns: TurnResult[] = [];
-  let conversationId: string | null = null;
-  const messages = c.turns ?? [c.message ?? ""];
-  for (const message of messages) {
-    let text = "";
-    const out = await runChat(
-      deps,
-      { key: bot.public_key, visitorId: `eval_${c.id}`.slice(0, 60).replace(/[^A-Za-z0-9_-]/g, "_").padEnd(8, "_"), conversationId, message, pageTitle: c.page_title ?? "Home", pageUrl: c.page_url ?? bot.website_url ?? "https://example.com/", testToken: bot.test_token },
-      { origin: null, ip: null, debug: false },
-      (event, data) => {
-        if (event === "delta") text += (data as { text: string }).text;
-      },
-    );
-    conversationId = out.conversationId;
-    turns.push({ text, tools: out.toolCalls, firstTokenMs: out.firstTokenMs, latencyMs: out.latencyMs, costUsd: out.costUsd });
-  }
-  return checkCase(c, turns, buildKnowledgeBlock(knowledge, 1e9).text, [...store.leads.values()].map((l) => l.phone));
 }
 
 async function main() {

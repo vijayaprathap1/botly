@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
+import { loadEditableBot } from "@/lib/bot-access";
 import { toCsv } from "@/lib/csv";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -11,10 +12,11 @@ const q = z.object({ bot: z.string().uuid(), type: z.enum(["leads", "conversatio
 /** Admin export (P17): leads or full conversations with messages, as CSV or JSON. */
 export async function GET(req: Request) {
   const session = await getSession();
-  if (!session?.isAdmin) return new Response("Admins only", { status: 403 });
+  if (!session) return new Response("Sign in first", { status: 401 });
   const p = q.safeParse(Object.fromEntries(new URL(req.url).searchParams));
   if (!p.success) return new Response("Bad request", { status: 400 });
   const { bot, type, format } = p.data;
+  if (!(await loadEditableBot(session, bot))) return new Response("Not found", { status: 404 });
   const db = await supabaseServer();
   const stamp = new Date().toISOString().slice(0, 10);
 

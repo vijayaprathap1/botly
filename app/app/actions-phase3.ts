@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireBotEditor } from "@/lib/bot-access";
 import { requireAdmin } from "@/lib/auth";
 import { encryptJson } from "@/lib/crypto";
 import { makeProvider, normalizeStoreUrl, type IntegrationCreds } from "@/lib/orders";
@@ -11,7 +12,8 @@ const text = (v: FormDataEntryValue | null) => String(v ?? "").trim();
 
 /** Growth plan: connect Shopify or WooCommerce for order lookup. Credentials are tested, then encrypted. */
 export async function saveIntegration(botId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  await requireAdmin();
+  const { session, bot: editable } = await requireBotEditor(botId);
+  if (!session.isAdmin && editable.org.plan !== "growth") return { error: "Order lookup is part of the Growth plan. Upgrade in Billing." };
   const provider = text(form.get("provider"));
   if (provider !== "shopify" && provider !== "woocommerce") return { error: "Pick Shopify or WooCommerce" };
   const storeUrl = normalizeStoreUrl(text(form.get("store_url")));
@@ -48,7 +50,7 @@ export async function saveIntegration(botId: string, _: ActionState, form: FormD
 }
 
 export async function removeIntegration(botId: string) {
-  await requireAdmin();
+  const { session, bot: editable } = await requireBotEditor(botId);
   await supabaseAdmin().from("bot_integrations").delete().eq("bot_id", botId);
   revalidatePath(`/app/bots/${botId}/settings`);
 }

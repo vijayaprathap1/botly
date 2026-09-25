@@ -38,8 +38,12 @@ test("admin: sign in, review bot, edit knowledge and settings, playground, conve
     await page.getByText("Ananya Handlooms").first().click();
     await expect(page.locator("pre")).toContainText(`data-key="pk_ananya_demo_0001"`);
     await expect(page.getByText("/t/tt_ananya_demo_private_0001")).toBeVisible();
+    // No eval yet: going live runs the prompt-injection safety check first.
     await page.getByRole("button", { name: "Go live" }).click();
-    await expect(page.getByText("Can't go live yet")).toBeVisible(); // no eval run yet
+    await expect(page.getByRole("button", { name: "Move back to draft" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Last eval .*4\/4/)).toBeVisible();
+    await page.getByRole("button", { name: "Move back to draft" }).click();
+    await expect(page.getByRole("button", { name: "Go live" })).toBeVisible();
   });
 
   await test.step("knowledge: add an approved FAQ, it's used on the next message", async () => {
@@ -132,10 +136,17 @@ test("admin: sign in, review bot, edit knowledge and settings, playground, conve
   expect(errors).toEqual([]);
 });
 
-test("owner (client) sees only their own org; leads page fits a phone", async ({ browser }) => {
-  // Make an owner for Ananya directly (owner invites are Phase 2).
+test("a new user without a workspace is sent to sign-up onboarding, on a phone too", async ({ browser }) => {
   const page = await browser.newPage({ viewport: { width: 375, height: 740 } });
-  await signIn(page, "owner@ananya.test");
-  await expect(page.getByText("No bots yet")).toBeVisible(); // no membership yet → sees nothing
+  const before = fs.existsSync(LOG!) ? fs.readFileSync(LOG!, "utf8").length : 0;
+  await page.goto(`${APP}/login`);
+  await page.getByLabel("Email").fill("owner@ananya.test");
+  await page.getByRole("button", { name: "Email me a sign-in link" }).click();
+  await expect(page.getByRole("status")).toContainText("Check");
+  const line = fs.readFileSync(LOG!, "utf8").slice(before).trim().split("\n").filter((l) => l.startsWith("owner@ananya.test")).pop()!;
+  await page.goto(line.split(" ")[1]!);
+  await expect(page).toHaveURL(/\/start$/);
+  await expect(page.getByRole("heading", { name: "Set up your AI assistant" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   await page.close();
 });
