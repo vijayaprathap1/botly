@@ -55,7 +55,7 @@ export function PlanButtons({ orgId, plan, current, cancelling }: { orgId: strin
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       {current ? (
         cancelling ? (
-          <p className="text-sm text-slate-600">Cancelled; active until the end of this period.</p>
+          <p className="text-sm text-zinc-600">Cancelled; active until the end of this period.</p>
         ) : (
           <button
             className={btn.secondary}

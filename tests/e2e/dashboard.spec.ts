@@ -36,7 +36,7 @@ test("admin: sign in, review bot, edit knowledge and settings, playground, conve
 
   await test.step("overview shows snippet, test link and launch gate", async () => {
     await page.getByText("Ananya Handlooms").first().click();
-    await expect(page.locator("pre")).toContainText(`data-key="pk_ananya_demo_0001"`);
+    await expect(page.locator("pre code")).toContainText(`data-key="pk_ananya_demo_0001"`);
     await expect(page.getByText("/t/tt_ananya_demo_private_0001")).toBeVisible();
     // No eval yet: going live runs the prompt-injection safety check first.
     await page.getByRole("button", { name: "Go live" }).click();
@@ -47,7 +47,7 @@ test("admin: sign in, review bot, edit knowledge and settings, playground, conve
   });
 
   await test.step("knowledge: add an approved FAQ, it's used on the next message", async () => {
-    await page.getByRole("link", { name: "Knowledge" }).click();
+    await page.getByRole("link", { name: "Knowledge", exact: true }).click();
     await expect(page.getByText("tokens").first()).toBeVisible();
     await page.getByRole("link", { name: "Add", exact: true }).click();
     await page.getByLabel("Type").selectOption("policy");
@@ -67,7 +67,7 @@ test("admin: sign in, review bot, edit knowledge and settings, playground, conve
   });
 
   await test.step("settings: save greeting and see it in the widget config", async () => {
-    await page.getByRole("link", { name: "Settings" }).click();
+    await page.getByRole("link", { name: "Settings", exact: true }).click();
     await page.getByLabel("Greeting").fill("Vanakkam! Meera here. Ask me anything about our sarees.");
     await page.getByRole("button", { name: "Save settings" }).click();
     await expect(page.getByText("Saved. Changes apply to the next message.")).toBeVisible();
@@ -76,7 +76,7 @@ test("admin: sign in, review bot, edit knowledge and settings, playground, conve
   });
 
   await test.step("playground: language button streams a reply with debug info", async () => {
-    await page.getByRole("link", { name: "Playground" }).click();
+    await page.getByRole("link", { name: "Playground", exact: true }).click();
     await page.getByRole("button", { name: "Tamil" }).click();
     await expect(page.getByText(/ms first token/).first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("First token", { exact: true })).toBeVisible();
@@ -84,12 +84,12 @@ test("admin: sign in, review bot, edit knowledge and settings, playground, conve
   });
 
   await test.step("conversations: filters and transcript", async () => {
-    await page.getByRole("link", { name: "Conversations" }).click();
+    await page.getByRole("link", { name: "Conversations", exact: true }).click();
     await page.getByLabel("Include tests").check();
-    await page.getByRole("button", { name: "Filter" }).click();
+    await page.getByRole("button", { name: "Apply" }).click();
     await expect(page.getByText(/\d+ conversations/)).toBeVisible();
     await page.getByPlaceholder("Search messages").fill("gift wrap");
-    await page.getByRole("button", { name: "Filter" }).click();
+    await page.getByRole("button", { name: "Apply" }).click();
     await page.locator("ul li a").first().click();
     await expect(page.getByRole("heading", { name: "Transcript" })).toBeVisible();
     await expect(page.getByText("gift wrap?")).toBeVisible();

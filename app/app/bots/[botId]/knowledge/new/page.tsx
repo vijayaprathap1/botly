@@ -7,7 +7,7 @@ export default async function NewSourcePage({ params }: { params: Promise<{ botI
   const { botId } = await params;
   return (
     <>
-      <PageHeader title="Add knowledge" />
+      <PageHeader level={2} title="Add knowledge" />
       <SourceForm botId={botId} source={null} />
     </>
   );

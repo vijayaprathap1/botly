@@ -34,13 +34,13 @@ export default async function UnansweredPage({ params, searchParams }: { params:
 
   return (
     <div className="grid gap-4">
-      <PageHeader
+      <PageHeader level={2}
         title="Unanswered questions"
         sub={session.isAdmin ? "Questions the assistant couldn't answer, grouped when similar. Answer once and it's added to the knowledge." : "Questions the assistant couldn't answer. Suggest an answer and we'll add it."}
       />
       <div className="flex gap-1.5 text-sm">
         {["open", "answered", "ignored"].map((s) => (
-          <Link key={s} href={`${base}?status=${s}`} className={`rounded-full px-3 py-1 ${status === s ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+          <Link key={s} href={`${base}?status=${s}`} className={`rounded-full px-3 py-1 ${status === s ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"}`}>
             {s}
           </Link>
         ))}
@@ -53,7 +53,7 @@ export default async function UnansweredPage({ params, searchParams }: { params:
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-medium">{q.question}</p>
-                <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
                   <Badge tone={q.count > 2 ? "amber" : "gray"}>asked {q.count}×</Badge>
                   {q.language ? <Badge>{LANGUAGE_LABEL[q.language as Lang] ?? q.language}</Badge> : null}
                   last {fmtDateTime(q.last_asked_at, bot.org.timezone)}

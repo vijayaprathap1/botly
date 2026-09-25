@@ -45,40 +45,46 @@ export default async function ConversationsPage({ params, searchParams }: { para
   return (
     <div className="grid gap-4">
       <Card>
-        <form className="grid gap-2 sm:grid-cols-4 lg:grid-cols-8" action={base}>
-          <input name="q" defaultValue={sp.q ?? ""} placeholder="Search messages" className={`${inputClass} sm:col-span-2`} aria-label="Search messages" />
-          <input type="date" name="from" defaultValue={sp.from ?? ""} className={inputClass} aria-label="From date" />
-          <input type="date" name="to" defaultValue={sp.to ?? ""} className={inputClass} aria-label="To date" />
-          <select name="lang" defaultValue={sp.lang ?? ""} className={inputClass} aria-label="Language">
-            <option value="">Any language</option>
-            {(Object.keys(LANGUAGE_LABEL) as Lang[]).map((l) => (
-              <option key={l} value={l}>{LANGUAGE_LABEL[l]}</option>
-            ))}
-          </select>
-          <div className="flex flex-wrap items-center gap-3 text-sm sm:col-span-2 lg:col-span-2">
-            <label className="flex items-center gap-1"><input type="checkbox" name="lead" value="1" defaultChecked={sp.lead === "1"} /> Lead</label>
-            <label className="flex items-center gap-1"><input type="checkbox" name="handed" value="1" defaultChecked={sp.handed === "1"} /> Handed off</label>
-            <label className="flex items-center gap-1"><input type="checkbox" name="unanswered" value="1" defaultChecked={sp.unanswered === "1"} /> Unanswered</label>
-            <label className="flex items-center gap-1"><input type="checkbox" name="test" value="1" defaultChecked={sp.test === "1"} /> Include tests</label>
+        <form action={base} className="grid gap-3">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_150px_150px_170px_auto]">
+            <input name="q" defaultValue={sp.q ?? ""} placeholder="Search messages" className={`${inputClass} sm:col-span-2 lg:col-span-1`} aria-label="Search messages" />
+            <input type="date" name="from" defaultValue={sp.from ?? ""} className={inputClass} aria-label="From date" />
+            <input type="date" name="to" defaultValue={sp.to ?? ""} className={inputClass} aria-label="To date" />
+            <select name="lang" defaultValue={sp.lang ?? ""} className={inputClass} aria-label="Language">
+              <option value="">Any language</option>
+              {(Object.keys(LANGUAGE_LABEL) as Lang[]).map((l) => (
+                <option key={l} value={l}>{LANGUAGE_LABEL[l]}</option>
+              ))}
+            </select>
+            <button className={btn.primary}>Apply</button>
           </div>
-          <button className={btn.secondary}>Filter</button>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-2 text-[13px]">
+              {([["lead", "Has lead"], ["handed", "Handed off"], ["unanswered", "Unanswered"], ["test", "Include tests"]] as const).map(([name, label]) => (
+                <label key={name} className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-zinc-700 transition hover:border-zinc-300 has-[:checked]:border-brand-200 has-[:checked]:bg-brand-50 has-[:checked]:text-brand-800">
+                  <input type="checkbox" name={name} value="1" defaultChecked={sp[name] === "1"} className="h-3.5 w-3.5 accent-brand-600" />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-1">
+              <a className={btn.ghost} href={`/api/admin/export?bot=${bot.id}&type=conversations&format=csv`}>Export CSV</a>
+              <a className={btn.ghost} href={`/api/admin/export?bot=${bot.id}&type=conversations&format=json`}>Export JSON</a>
+            </div>
+          </div>
         </form>
-        <div className="mt-3 flex flex-wrap gap-2 text-sm">
-          <a className={btn.ghost} href={`/api/admin/export?bot=${bot.id}&type=conversations&format=csv`}>Export CSV</a>
-          <a className={btn.ghost} href={`/api/admin/export?bot=${bot.id}&type=conversations&format=json`}>Export JSON</a>
-        </div>
       </Card>
 
       {rows.length === 0 ? (
         <Empty title="No conversations match">Conversations appear here as soon as a visitor sends a message.</Empty>
       ) : (
         <Card>
-          <p className="mb-2 text-sm text-slate-600">{count ?? rows.length} conversations</p>
-          <ul className="divide-y divide-slate-100">
+          <p className="mb-2 text-sm text-zinc-600">{count ?? rows.length} conversations</p>
+          <ul className="divide-y divide-zinc-100">
             {rows.map((c) => (
               <li key={c.id}>
-                <Link href={`${base}/${c.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3 hover:bg-slate-50">
-                  <span className="w-28 flex-none text-sm tabular-nums text-slate-600">{fmtDateTime(c.last_message_at ?? c.created_at, bot.org.timezone)}</span>
+                <Link href={`${base}/${c.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3 hover:bg-zinc-50">
+                  <span className="w-28 flex-none text-sm tabular-nums text-zinc-600">{fmtDateTime(c.last_message_at ?? c.created_at, bot.org.timezone)}</span>
                   <span className="min-w-0 flex-1 truncate text-sm">{c.page_title || c.page_url || "—"}</span>
                   <span className="flex flex-wrap gap-1">
                     {c.language ? <Badge>{LANGUAGE_LABEL[c.language as Lang] ?? c.language}</Badge> : null}

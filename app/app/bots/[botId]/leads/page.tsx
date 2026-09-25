@@ -27,7 +27,7 @@ export default async function LeadsPage({ params, searchParams }: { params: Prom
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-1.5 text-sm">
         {[undefined, ...STATUSES].map((s) => (
-          <Link key={s ?? "all"} href={s ? `${base}?status=${s}` : base} className={`rounded-full px-3 py-1 ${sp.status === s ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+          <Link key={s ?? "all"} href={s ? `${base}?status=${s}` : base} className={`rounded-full px-3 py-1 ${sp.status === s ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"}`}>
             {s ?? "All"}
           </Link>
         ))}
@@ -49,10 +49,10 @@ export default async function LeadsPage({ params, searchParams }: { params: Prom
                   </div>
                   <div className="mt-0.5 text-sm">
                     <a className="underline" href={`tel:${l.phone}`}>{l.phone}</a>
-                    {l.email ? <span className="text-slate-600"> · {l.email}</span> : null}
+                    {l.email ? <span className="text-zinc-600"> · {l.email}</span> : null}
                   </div>
-                  {l.need ? <p className="mt-1 text-sm text-slate-700">{l.need}</p> : null}
-                  <p className="mt-1 text-xs text-slate-500">
+                  {l.need ? <p className="mt-1 text-sm text-zinc-700">{l.need}</p> : null}
+                  <p className="mt-1 text-xs text-zinc-500">
                     {fmtDateTime(l.created_at, bot.org.timezone)} · email {l.notified_email_at ? "sent" : "not sent"} · WhatsApp {l.notified_whatsapp_at ? "sent" : "pending"}
                     {l.conversation_id ? (
                       <>
@@ -68,7 +68,7 @@ export default async function LeadsPage({ params, searchParams }: { params: Prom
                   </a>
                   <form action={setLeadStatus.bind(null, bot.id)}>
                     <input type="hidden" name="leadId" value={l.id} />
-                    <AutoSubmitSelect name="status" defaultValue={l.status} aria-label={`Status for ${l.name}`} className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm">
+                    <AutoSubmitSelect name="status" defaultValue={l.status} aria-label={`Status for ${l.name}`} className="rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm">
                       {STATUSES.map((s) => (
                         <option key={s} value={s}>{s}</option>
                       ))}

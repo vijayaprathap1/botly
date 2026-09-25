@@ -56,12 +56,12 @@ export default async function KnowledgePage({ params, searchParams }: { params: 
             <span>
               <b className="tabular-nums">{fmtInt(approvedTokens)}</b> of {fmtInt(cap)} tokens
             </span>
-            <span className="text-slate-500">{pct}%</span>
+            <span className="text-zinc-500">{pct}%</span>
           </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-100">
             <div className={`h-full ${approvedTokens > cap ? "bg-red-500" : pct > 80 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${pct}%` }} />
           </div>
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-zinc-500">
             Only approved sources reach the assistant. Edits apply to the next message.
           </p>
           {retrieval ? (
@@ -77,7 +77,7 @@ export default async function KnowledgePage({ params, searchParams }: { params: 
         {bot.tone_suggestion ? (
           <Card title="Suggested tone of voice (from the website)">
             <p className="text-sm">{bot.tone_suggestion}</p>
-            <p className="mt-1 text-xs text-slate-500">Current: {bot.tone}</p>
+            <p className="mt-1 text-xs text-zinc-500">Current: {bot.tone}</p>
             <form action={applyToneSuggestion.bind(null, bot.id)} className="mt-3">
               <SubmitButton className={btn.secondary}>Use this tone</SubmitButton>
             </form>
@@ -87,7 +87,7 @@ export default async function KnowledgePage({ params, searchParams }: { params: 
             <Link href={`/app/bots/${bot.id}/knowledge/new`} className={btn.primary}>
               Add a source
             </Link>
-            <p className="mt-2 text-xs text-slate-500">FAQ, policy, product, note… or import below.</p>
+            <p className="mt-2 text-xs text-zinc-500">FAQ, policy, product, note… or import below.</p>
           </Card>
         )}
       </div>
@@ -108,16 +108,16 @@ export default async function KnowledgePage({ params, searchParams }: { params: 
         </div>
         <div className="mb-3 flex flex-wrap gap-1.5 text-sm">
           {[["active", "Active"], ["draft", "Drafts"], ["approved", "Approved"], ["archived", "Archived"], ["all", "All"]].map(([v, l]) => (
-            <Link key={v} href={filterHref("status", v)} className={`rounded-full px-2.5 py-1 ${status === v ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+            <Link key={v} href={filterHref("status", v)} className={`rounded-full px-2.5 py-1 ${status === v ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"}`}>
               {l}
             </Link>
           ))}
-          <span className="mx-1 text-slate-300">|</span>
-          <Link href={filterHref("type", undefined)} className={`rounded-full px-2.5 py-1 ${!sp.type ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+          <span className="mx-1 text-zinc-300">|</span>
+          <Link href={filterHref("type", undefined)} className={`rounded-full px-2.5 py-1 ${!sp.type ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"}`}>
             All types
           </Link>
           {TYPES.map((t) => (
-            <Link key={t} href={filterHref("type", t)} className={`rounded-full px-2.5 py-1 ${sp.type === t ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+            <Link key={t} href={filterHref("type", t)} className={`rounded-full px-2.5 py-1 ${sp.type === t ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"}`}>
               {t}
             </Link>
           ))}
@@ -128,9 +128,9 @@ export default async function KnowledgePage({ params, searchParams }: { params: 
         ) : (
           <form action={bulkSources.bind(null, bot.id)}>
             <input type="hidden" name="back" value={back} />
-            <div className="sticky top-14 z-10 -mx-4 mb-2 flex flex-wrap items-center gap-2 border-b border-slate-100 bg-white px-4 py-2 sm:-mx-5 sm:px-5">
+            <div className="sticky top-14 z-10 -mx-4 mb-2 flex flex-wrap items-center gap-2 border-b border-zinc-100 bg-white px-4 py-2 sm:-mx-5 sm:px-5">
               <SelectAll name="ids" />
-              <span className="text-sm text-slate-600">{sources.length} shown</span>
+              <span className="text-sm text-zinc-600">{sources.length} shown</span>
               <div className="ml-auto flex flex-wrap gap-2">
                 <SubmitButton name="action" value="approved" className={btn.primary} pendingText="…">Approve</SubmitButton>
                 <SubmitButton name="action" value="draft" className={btn.secondary} pendingText="…">Back to draft</SubmitButton>
@@ -138,7 +138,7 @@ export default async function KnowledgePage({ params, searchParams }: { params: 
                 <SubmitButton name="action" value="delete" className={btn.danger} pendingText="…">Delete</SubmitButton>
               </div>
             </div>
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-zinc-100">
               {sources.map((s) => (
                 <li key={s.id} className="flex gap-3 py-3">
                   <input type="checkbox" name="ids" value={s.id} aria-label={`Select ${s.title}`} className="mt-1 h-4 w-4 flex-none" />
@@ -150,8 +150,8 @@ export default async function KnowledgePage({ params, searchParams }: { params: 
                         {s.title || "(untitled)"}
                       </Link>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-sm text-slate-600">{s.content}</p>
-                    <p className="mt-1 text-xs text-slate-400">
+                    <p className="mt-1 line-clamp-2 text-sm text-zinc-600">{s.content}</p>
+                    <p className="mt-1 text-xs text-zinc-400">
                       {fmtInt(s.token_count)} tokens · updated {fmtDateTime(s.updated_at, bot.org.timezone)}
                       {s.url ? ` · ${s.url}` : ""}
                     </p>

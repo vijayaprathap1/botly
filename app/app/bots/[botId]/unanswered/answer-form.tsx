@@ -13,7 +13,7 @@ export function AnswerForm({ botId, q, isAdmin }: { botId: string; q: { id: stri
   return (
     <form onSubmit={action} className="mt-3 grid gap-2">
       {isAdmin ? (
-        <label className="text-xs text-slate-500">
+        <label className="text-xs text-zinc-500">
           Question as it will appear in the knowledge
           <input name="question" defaultValue={q.question} className={`${inputClass} mt-1`} />
         </label>

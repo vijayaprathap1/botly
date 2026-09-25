@@ -118,7 +118,7 @@ export function Playground(props: { botKey: string; testToken: string; testUrl: 
             </button>
           ))}
         </div>
-        <div ref={listRef} className="h-[28rem] space-y-3 overflow-y-auto rounded-lg bg-slate-50 p-3" aria-live="polite">
+        <div ref={listRef} className="h-[28rem] space-y-3 overflow-y-auto rounded-lg bg-zinc-50 p-3" aria-live="polite">
           <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-white px-3 py-2 text-[15px] shadow-sm">{props.greeting}</div>
           {msgs.map((m, i) =>
             m.role === "user" ? (
@@ -127,9 +127,9 @@ export function Playground(props: { botKey: string; testToken: string; testUrl: 
               </div>
             ) : m.role === "assistant" ? (
               <button key={i} onClick={() => setSelected(i)} className={`block max-w-[85%] rounded-2xl rounded-bl-sm bg-white px-3 py-2 text-left text-[15px] shadow-sm ${selected === i ? "ring-2 ring-brand-600" : ""}`}>
-                {m.text ? <MarkdownLite text={m.text} /> : <span className="text-slate-400">{busy ? "…" : "(no text)"}</span>}
+                {m.text ? <MarkdownLite text={m.text} /> : <span className="text-zinc-400">{busy ? "…" : "(no text)"}</span>}
                 {m.debug ? (
-                  <span className="mt-1 block text-[11px] text-slate-500">
+                  <span className="mt-1 block text-[11px] text-zinc-500">
                     {m.debug.firstTokenMs ?? "—"} ms first token · {m.debug.latencyMs} ms total · ${m.debug.costUsd.toFixed(5)}
                   </span>
                 ) : null}
@@ -148,7 +148,7 @@ export function Playground(props: { botKey: string; testToken: string; testUrl: 
         {chips.length ? (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {chips.map((c) => (
-              <button key={c} onClick={() => send(c)} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-sm hover:border-brand-600">
+              <button key={c} onClick={() => send(c)} className="rounded-full border border-zinc-300 bg-white px-3 py-1 text-sm hover:border-brand-600">
                 {c}
               </button>
             ))}
@@ -176,13 +176,13 @@ export function Playground(props: { botKey: string; testToken: string; testUrl: 
             <CopyButton text={props.testUrl} label="Copy private test link" />
             <CopyButton text={props.snippet} label="Copy install snippet" />
           </div>
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-zinc-500">
             Session: p50 first token <b>{p50 != null ? `${p50} ms` : "—"}</b> over {firstTokens.length} replies · total ${totalCost.toFixed(4)}
           </p>
         </Card>
         {props.isAdmin === false ? (
           <Card title="Tips">
-            <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
+            <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-700">
               <li>Ask what your customers ask. If an answer is wrong or missing, fix it in <b>Knowledge</b>. Changes apply to the next message.</li>
               <li>Questions it can&apos;t answer appear in <b>Unanswered</b>, where you can answer them once.</li>
               <li>Preview replies count toward your free-trial replies.</li>
@@ -191,7 +191,7 @@ export function Playground(props: { botKey: string; testToken: string; testUrl: 
         ) : null}
         <Card title="Debug" className={props.isAdmin === false ? "hidden" : undefined}>
           {!sel ? (
-            <p className="text-sm text-slate-600">Send a message, then click a reply to inspect it.</p>
+            <p className="text-sm text-zinc-600">Send a message, then click a reply to inspect it.</p>
           ) : (
             <div className="space-y-3 text-sm">
               <div className="flex flex-wrap gap-1.5">
@@ -201,21 +201,21 @@ export function Playground(props: { botKey: string; testToken: string; testUrl: 
                 <Badge>{sel.rounds} model call{sel.rounds === 1 ? "" : "s"}</Badge>
               </div>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 tabular-nums">
-                <dt className="text-slate-500">First token</dt>
+                <dt className="text-zinc-500">First token</dt>
                 <dd>{sel.firstTokenMs ?? "—"} ms</dd>
-                <dt className="text-slate-500">Total</dt>
+                <dt className="text-zinc-500">Total</dt>
                 <dd>{sel.latencyMs} ms</dd>
-                <dt className="text-slate-500">Input / output</dt>
+                <dt className="text-zinc-500">Input / output</dt>
                 <dd>
                   {sel.usage.input} / {sel.usage.output}
                 </dd>
-                <dt className="text-slate-500">Cache read / write</dt>
+                <dt className="text-zinc-500">Cache read / write</dt>
                 <dd>
                   {sel.usage.cacheRead} / {sel.usage.cacheWrite}
                 </dd>
-                <dt className="text-slate-500">Cost</dt>
+                <dt className="text-zinc-500">Cost</dt>
                 <dd>${sel.costUsd.toFixed(6)}</dd>
-                <dt className="text-slate-500">Knowledge</dt>
+                <dt className="text-zinc-500">Knowledge</dt>
                 <dd>
                   {sel.knowledge.included} sources · ~{sel.knowledge.tokens} tokens{sel.knowledge.excluded ? ` · ${sel.knowledge.excluded} left out (cap)` : ""}
                 </dd>
@@ -223,18 +223,18 @@ export function Playground(props: { botKey: string; testToken: string; testUrl: 
               {sel.toolCalls.length ? (
                 <div>
                   <div className="mb-1 font-medium">Tool calls</div>
-                  <pre className="max-h-56 overflow-auto rounded bg-slate-900 p-2 text-[12px] text-slate-100">{JSON.stringify(sel.toolCalls, null, 2)}</pre>
+                  <pre className="max-h-56 overflow-auto rounded bg-zinc-900 p-2 text-[12px] text-zinc-100">{JSON.stringify(sel.toolCalls, null, 2)}</pre>
                 </div>
               ) : null}
               {sel.facts.length ? (
                 <div>
                   <div className="mb-1 font-medium">Conversation facts sent</div>
-                  <ul className="list-disc pl-5 text-slate-700">{sel.facts.map((f, i) => <li key={i}>{f}</li>)}</ul>
+                  <ul className="list-disc pl-5 text-zinc-700">{sel.facts.map((f, i) => <li key={i}>{f}</li>)}</ul>
                 </div>
               ) : null}
               <details>
                 <summary className="cursor-pointer font-medium">Knowledge in the prompt ({sel.knowledge.titles.length})</summary>
-                <ul className="mt-1 max-h-48 list-disc overflow-auto pl-5 text-slate-700">{sel.knowledge.titles.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                <ul className="mt-1 max-h-48 list-disc overflow-auto pl-5 text-zinc-700">{sel.knowledge.titles.map((t, i) => <li key={i}>{t}</li>)}</ul>
               </details>
             </div>
           )}

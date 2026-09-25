@@ -32,7 +32,7 @@ export default async function BillingPage() {
               <span className="text-lg font-semibold">{current.name}</span>
               <Badge tone={org.subscription_status === "active" ? "green" : trial?.over || org.subscription_status === "halted" ? "red" : "blue"}>{statusLabel[org.subscription_status ?? "none"]}</Badge>
             </div>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-1 text-sm text-zinc-600">
               {trial
                 ? trial.over
                   ? "Your free trial has ended. Visitors see your contact details instead of AI replies until you choose a plan."
@@ -51,9 +51,9 @@ export default async function BillingPage() {
           <Card key={p.id}>
             <div className="flex items-baseline justify-between gap-2">
               <h2 className="text-lg font-semibold">{p.name}</h2>
-              <div><span className="text-2xl font-bold">{fmtInr(p.priceInr)}</span><span className="text-sm text-slate-500">/month</span></div>
+              <div><span className="text-2xl font-bold">{fmtInr(p.priceInr)}</span><span className="text-sm text-zinc-500">/month</span></div>
             </div>
-            <p className="mt-1 text-sm text-slate-600">{p.blurb}</p>
+            <p className="mt-1 text-sm text-zinc-600">{p.blurb}</p>
             <ul className="mt-3 space-y-1 text-sm">
               {p.features.map((f) => <li key={f}>✓ {f}</li>)}
             </ul>
@@ -63,7 +63,7 @@ export default async function BillingPage() {
           </Card>
         ))}
       </div>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-zinc-500">
         Payments by Razorpay (UPI, cards, net banking). Prices exclude 18% GST. Cancel any time; your plan runs until the end of the paid month.
         The free trial includes {TRIAL.replies} AI replies over {TRIAL.days} days, once per email address.
       </p>

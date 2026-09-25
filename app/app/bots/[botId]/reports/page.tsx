@@ -31,7 +31,7 @@ export default async function ReportsPage({ params, searchParams }: { params: Pr
 
   return (
     <div className="grid gap-4">
-      <PageHeader
+      <PageHeader level={2}
         title={`Monthly report · ${r.label}`}
         sub={bot.org.name}
         actions={
@@ -60,18 +60,18 @@ export default async function ReportsPage({ params, searchParams }: { params: Pr
                   {r.top_questions.map((q, i) => (
                     <li key={i} className="flex justify-between gap-3">
                       <span className="min-w-0 truncate" title={q.question}>{i + 1}. {q.question}</span>
-                      <span className="flex-none tabular-nums text-slate-600">{q.count}</span>
+                      <span className="flex-none tabular-nums text-zinc-600">{q.count}</span>
                     </li>
                   ))}
                 </ol>
-              ) : <p className="text-sm text-slate-600">No questions yet.</p>}
+              ) : <p className="text-sm text-zinc-600">No questions yet.</p>}
             </Card>
             <Card title="Languages">
               <ul className="space-y-2 text-sm">
                 {Object.entries(r.languages).sort((a, b) => b[1] - a[1]).map(([k, v]) => (
                   <li key={k}>
-                    <div className="flex justify-between"><span>{LANGUAGE_LABEL[k as Lang] ?? k}</span><span className="tabular-nums text-slate-600">{v} · {Math.round((v / langTotal) * 100)}%</span></div>
-                    <div className="mt-1 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-brand-600" style={{ width: `${(v / langTotal) * 100}%` }} /></div>
+                    <div className="flex justify-between"><span>{LANGUAGE_LABEL[k as Lang] ?? k}</span><span className="tabular-nums text-zinc-600">{v} · {Math.round((v / langTotal) * 100)}%</span></div>
+                    <div className="mt-1 h-2 rounded-full bg-zinc-100"><div className="h-2 rounded-full bg-brand-600" style={{ width: `${(v / langTotal) * 100}%` }} /></div>
                   </li>
                 ))}
               </ul>
@@ -85,8 +85,8 @@ export default async function ReportsPage({ params, searchParams }: { params: Pr
                 </div>
               ))}
             </div>
-            <div className="mt-1 flex justify-between text-[11px] text-slate-500"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
-            <p className="mt-2 text-xs text-slate-500">Hover a bar for its count. The CSV has every hour as a table.</p>
+            <div className="mt-1 flex justify-between text-[11px] text-zinc-500"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+            <p className="mt-2 text-xs text-zinc-500">Hover a bar for its count. The CSV has every hour as a table.</p>
           </Card>
         </>
       )}

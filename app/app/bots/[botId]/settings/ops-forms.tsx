@@ -23,7 +23,7 @@ export function OpsForms({ botId, orgId, minutes, retention }: { botId: string; 
       </Card>
       <Card title="Delete a visitor's data">
         <form onSubmit={delAction} className="grid gap-3">
-          <p className="text-sm text-slate-600">For deletion requests. Removes every conversation and lead linked to this phone number or visitor id. This can&apos;t be undone.</p>
+          <p className="text-sm text-zinc-600">For deletion requests. Removes every conversation and lead linked to this phone number or visitor id. This can&apos;t be undone.</p>
           <Field label="Phone number" htmlFor="del-phone">
             <input id="del-phone" name="phone" className={inputClass} placeholder="98765 43210" />
           </Field>

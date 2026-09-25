@@ -5,7 +5,7 @@ export const metadata: Metadata = { title: "Chat privacy notice", robots: { inde
 /** Default visitor privacy notice linked from the widget (each bot can link its own instead). */
 export default function PrivacyPage() {
   return (
-    <main className="mx-auto max-w-2xl px-4 py-10 text-[15px] leading-relaxed text-slate-800">
+    <main className="mx-auto max-w-2xl px-4 py-10 text-[15px] leading-relaxed text-zinc-800">
       <h1 className="text-2xl font-semibold">Chat assistant privacy notice</h1>
       <p className="mt-4">This chat assistant is run by the business whose website you are on, using Botly. This notice explains what happens to what you type.</p>
       <h2 className="mt-6 font-semibold">What we collect and why</h2>

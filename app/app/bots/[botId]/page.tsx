@@ -3,6 +3,8 @@ import { setBotStatus } from "@/app/app/actions";
 import { revokeOwner } from "@/app/app/actions-phase2";
 import { InviteForm } from "./client-access";
 import { CopyButton, SubmitButton } from "@/components/client";
+import { CodeBlock } from "@/components/code-block";
+import { Activity, Inbox, MessagesSquare, UserRound, Wallet } from "lucide-react";
 import { btn, Card, Notice, Stat } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { config } from "@/lib/config";
@@ -40,109 +42,112 @@ export default async function BotOverview({ params, searchParams }: { params: Pr
   const trial = trialState(bot.org);
   const plan = planDef(bot.org.plan);
 
+  const liveLabel = bot.allowed_origins.length ? bot.allowed_origins.join(", ") : "none yet";
   return (
-    <div className="grid gap-4">
-      {sp.welcome ? (
-        <Notice tone="green">
-          Your assistant is ready. Try it below, check your business profile, then add the one-line install code to your website.
-        </Notice>
-      ) : null}
+    <div className="grid gap-5">
+      {sp.welcome ? <Notice tone="green">Your assistant is ready. Try it below, check your business profile, then add the install code to your website.</Notice> : null}
       {sp.live === "blocked" ? (
         <Notice tone="amber">
           {session.isAdmin ? (
-            <>Can&apos;t go live yet: the prompt-injection safety checks didn&apos;t all pass. Check the eval results (<code>npm run eval -- --bot {bot.id}</code>).</>
+            <>Can&apos;t go live yet: the prompt-injection safety checks didn&apos;t all pass. See the eval results (<code className="font-mono text-[12px]">npm run eval -- --bot {bot.id}</code>).</>
           ) : (
             <>The safety check didn&apos;t pass yet, so the assistant stays in preview. Add more details in Knowledge and try again, or contact support.</>
           )}
         </Notice>
       ) : null}
-      {trial ? (
-        <div className={`rounded-xl border p-4 ${trial.over ? "border-red-200 bg-red-50" : "border-brand-100 bg-brand-50"}`}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm">
-              <b>{trial.over ? "Your free trial has ended." : "Free trial"}</b>{" "}
-              {trial.over
-                ? "Visitors now see your contact details instead of AI replies. Choose a plan to switch the assistant back on."
-                : `${trial.left} of ${trial.limit} AI replies left · ${trial.daysLeft} day${trial.daysLeft === 1 ? "" : "s"} left.`}
-            </div>
-            <Link href="/app/billing" className={btn.primary}>{trial.over ? "Choose a plan" : "Upgrade"}</Link>
-          </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
-            <div className={`h-full ${trial.over ? "bg-red-500" : "bg-brand-600"}`} style={{ width: `${Math.min(100, (trial.used / Math.max(1, trial.limit)) * 100)}%` }} />
-          </div>
-        </div>
-      ) : null}
-      {approved === 0 && session.isAdmin ? (
+      {approved === 0 ? (
         <Notice tone="amber">
-          No approved knowledge yet. The assistant will say &quot;I don&apos;t know&quot; to everything. <Link className="underline" href={`/app/bots/${bot.id}/onboarding`}>Start onboarding</Link>.
+          No approved knowledge yet, so the assistant will say it doesn&apos;t know. <Link className="font-medium underline" href={`/app/bots/${bot.id}/onboarding`}>Import your details</Link>.
         </Notice>
       ) : null}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Conversations" value={`${fmtInt(m.conversations)}`} hint={bot.org.plan === "trial" ? "this month" : `of ${fmtInt(m.quota)} this month · ${q.percent}%`} />
-        <Stat label="Leads" value={fmtInt(m.leads)} hint="this month" />
-        <Stat label="Unanswered" value={fmtInt(m.unanswered)} hint="open questions" />
-        {session.isAdmin ? <Stat label="Cost" value={fmtUsd(m.costUsd)} hint={`${fmtInt(m.messages)} messages · p50 first token ${p50 != null ? `${p50} ms` : "—"}`} /> : null}
+      {trial?.over ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50/70 px-5 py-4">
+          <div>
+            <p className="text-[14px] font-semibold text-red-900">Your free trial has ended.</p>
+            <p className="text-[13px] text-red-800">Visitors now see your contact details instead of AI replies. Choose a plan to switch answers back on.</p>
+          </div>
+          <Link href="/app/billing" className={btn.primary}>Choose a plan</Link>
+        </div>
+      ) : null}
+
+      <div className={`grid grid-cols-2 gap-3 ${session.isAdmin ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+        <Stat label="Conversations" icon={<MessagesSquare className="h-4 w-4" />} value={fmtInt(m.conversations)} hint={bot.org.plan === "trial" ? "this month" : `of ${fmtInt(m.quota)} this month · ${q.percent}%`} />
+        <Stat label="Leads" icon={<UserRound className="h-4 w-4" />} value={fmtInt(m.leads)} hint="this month" />
+        <Stat label="Unanswered" icon={<Inbox className="h-4 w-4" />} value={fmtInt(m.unanswered)} hint={m.unanswered ? <Link className="font-medium text-brand-700 hover:underline" href={`/app/bots/${bot.id}/unanswered`}>Review questions →</Link> : "nothing waiting"} />
+        {session.isAdmin ? <Stat label="AI cost" icon={<Wallet className="h-4 w-4" />} value={fmtUsd(m.costUsd)} hint={`${fmtInt(m.messages)} messages · p50 first token ${p50 != null ? `${p50} ms` : "—"}`} /> : null}
       </div>
 
       {!session.isAdmin ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card title="Try your assistant" actions={<a className="text-sm text-brand-700 underline" href={testUrl} target="_blank" rel="noreferrer">Open full screen</a>}>
-            <iframe title="Assistant preview" src={`/t/${bot.test_token}`} className="h-[520px] w-full rounded-lg border border-slate-200" />
-            <p className="mt-2 text-xs text-slate-500">Preview replies count toward your plan. Share the full-screen link with your team to test.</p>
+        <div className="grid gap-5 lg:grid-cols-2">
+          <Card title="Try your assistant" sub="Exactly what visitors see. Preview replies count toward your plan." actions={<a className={btn.ghost} href={testUrl} target="_blank" rel="noreferrer">Full screen ↗</a>}>
+            <iframe title="Assistant preview" src={`/t/${bot.test_token}`} className="h-[540px] w-full rounded-lg border border-zinc-200 bg-zinc-50" />
           </Card>
           <ProfileCard botId={bot.id} markdown={bot.org.profile_markdown ?? null} businessName={bot.org.name} status={bot.org.onboarding_status ?? "done"} />
         </div>
       ) : null}
 
-      <Card title="Install on the website">
-        <p className="mb-2 text-sm text-slate-600">Paste this one line before &lt;/body&gt; (Shopify: theme.liquid · WordPress: footer · Wix: Custom code → Body end).</p>
-        <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 text-[13px] text-slate-100">{snippet}</pre>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <CopyButton text={snippet} label="Copy install snippet" />
-          <span className="self-center text-xs text-slate-500">Allowed domains: {bot.allowed_origins.length ? bot.allowed_origins.join(", ") : "none yet (set them in Settings)"}</span>
-        </div>
+      <Card title="Install on your website" sub="Paste this one line just before </body>. Works on Shopify (theme.liquid), WordPress (footer), Wix (Custom code → Body end) and any other site.">
+        <CodeBlock code={snippet} />
+        <p className="mt-3 text-[12.5px] text-zinc-500">
+          Shows only on: <span className="font-medium text-zinc-700">{liveLabel}</span> · <Link className="text-brand-700 hover:underline" href={`/app/bots/${bot.id}/settings`}>change domains</Link>
+        </p>
       </Card>
 
       {!session.isAdmin ? (
-        <Card title={bot.status === "live" ? "Live on your website" : "Go live"}>
-          <p className="text-sm text-slate-700">
-            {bot.status === "live"
-              ? `The assistant answers visitors on ${bot.allowed_origins.length ? bot.allowed_origins.join(", ") : "your website (add your domain in Settings)"}. Plan: ${plan.name}${bot.org.plan !== "trial" ? ` (${fmtInr(plan.priceInr)}/month)` : ""}.`
-              : "Before going live we run safety checks: the assistant must refuse fake discounts and prompt tricks. It takes about 20 seconds."}
-          </p>
-          <form action={setBotStatus.bind(null, bot.id)} className="mt-3">
-            <input type="hidden" name="status" value={bot.status === "live" ? "draft" : "live"} />
-            <SubmitButton className={bot.status === "live" ? btn.secondary : btn.primary} pendingText={bot.status === "live" ? "Updating…" : "Running safety checks…"}>
-              {bot.status === "live" ? "Pause (preview only)" : "Run checks and go live"}
-            </SubmitButton>
-          </form>
-          {evalRun ? <p className="mt-2 text-xs text-slate-500">Last safety check {fmtDateTime(evalRun.created_at, bot.org.timezone)}: {evalRun.passed}/{evalRun.total} passed.</p> : null}
-        </Card>
-      ) : null}
-
-      {session.isAdmin ? (
-        <>
-          <Card title="Private test link">
-            <p className="mb-2 text-sm text-slate-600">Works before launch. Not indexed by search engines. Share it only with the client.</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <code className="max-w-full truncate rounded bg-slate-100 px-2 py-1 text-[13px]">{testUrl}</code>
-              <CopyButton text={testUrl} label="Copy test link" />
-              <a className={btn.secondary} href={testUrl} target="_blank" rel="noreferrer">
-                Open
-              </a>
-            </div>
-          </Card>
-          <Card title="Client access">
-            <p className="mb-3 text-sm text-slate-600">
-              Clients sign in with their email to see conversations, leads, unanswered questions and reports for their business only. They never see cost, model settings or other clients.
+        <Card title={bot.status === "live" ? "Live on your website" : "Go live"} sub={bot.status === "live" ? `Plan: ${plan.name}${bot.org.plan !== "trial" ? ` · ${fmtInr(plan.priceInr)}/month` : ""}` : undefined}>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p className="max-w-xl text-[13.5px] text-zinc-600">
+              {bot.status === "live"
+                ? `The assistant is answering visitors on ${liveLabel}. Pause it any time; your install code can stay in place.`
+                : "Before going live we run safety checks: the assistant must refuse fake discounts and prompt tricks. It takes about 20 seconds."}
             </p>
+            <form action={setBotStatus.bind(null, bot.id)}>
+              <input type="hidden" name="status" value={bot.status === "live" ? "draft" : "live"} />
+              <SubmitButton className={bot.status === "live" ? btn.secondary : btn.primary} pendingText={bot.status === "live" ? "Updating…" : "Running safety checks…"}>
+                {bot.status === "live" ? "Pause (preview only)" : "Run checks and go live"}
+              </SubmitButton>
+            </form>
+          </div>
+          {evalRun ? <p className="mt-3 flex items-center gap-1.5 text-[12px] text-zinc-500"><Activity className="h-3.5 w-3.5" />Last safety check {fmtDateTime(evalRun.created_at, bot.org.timezone)}: {evalRun.passed}/{evalRun.total} passed</p> : null}
+        </Card>
+      ) : (
+        <>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Card title="Private test link" sub="Works before launch and isn't indexed. Share it only with the client.">
+              <code className="block truncate rounded-md bg-zinc-100 px-2.5 py-1.5 font-mono text-[12px] text-zinc-700">{testUrl}</code>
+              <div className="mt-3 flex gap-2">
+                <CopyButton text={testUrl} label="Copy link" />
+                <a className={btn.secondary} href={testUrl} target="_blank" rel="noreferrer">Open ↗</a>
+              </div>
+            </Card>
+            <Card title="Launch" sub="Going live requires every prompt-injection check to pass.">
+              <p className="text-[13.5px] text-zinc-700">
+                {evalRun ? (
+                  <>
+                    Last eval {fmtDateTime(evalRun.created_at, bot.org.timezone)}: <b className="num">{evalRun.passed}/{evalRun.total}</b> passed ·{" "}
+                    {evalRun.injection_passed ? <span className="text-emerald-700">injection checks passed</span> : <span className="text-red-700">injection failures</span>}
+                    {evalRun.first_token_p50_ms ? ` · p50 ${evalRun.first_token_p50_ms} ms` : ""}
+                  </>
+                ) : (
+                  <>No eval yet. Going live runs the safety check automatically.</>
+                )}
+              </p>
+              <form action={setBotStatus.bind(null, bot.id)} className="mt-3">
+                <input type="hidden" name="status" value={bot.status === "live" ? "draft" : "live"} />
+                <SubmitButton className={bot.status === "live" ? btn.secondary : btn.primary} pendingText="Updating…">
+                  {bot.status === "live" ? "Move back to draft" : "Go live"}
+                </SubmitButton>
+              </form>
+            </Card>
+          </div>
+          <Card title="Client access" sub="Clients sign in with their email and see only their business: conversations, leads, unanswered questions and reports. Never cost, model settings or other clients.">
             <InviteForm botId={bot.id} orgId={bot.org_id} />
             {invites?.length ? (
-              <ul className="mt-3 divide-y divide-slate-100 text-sm">
+              <ul className="mt-4 divide-y divide-zinc-100 rounded-lg border border-zinc-200 text-[13.5px]">
                 {invites.map((i) => (
-                  <li key={i.id} className="flex items-center justify-between gap-2 py-2">
+                  <li key={i.id} className="flex items-center justify-between gap-2 px-3 py-2">
                     <span className="min-w-0 truncate">
-                      {i.email} <span className="text-xs text-slate-500">{i.accepted_at ? "· active" : "· invited, not signed in yet"}</span>
+                      {i.email} <span className="text-[12px] text-zinc-500">{i.accepted_at ? "· active" : "· invited"}</span>
                     </span>
                     <form action={revokeOwner.bind(null, bot.id)}>
                       <input type="hidden" name="inviteId" value={i.id} />
@@ -153,27 +158,8 @@ export default async function BotOverview({ params, searchParams }: { params: Pr
               </ul>
             ) : null}
           </Card>
-          <Card title="Launch">
-            <div className="text-sm text-slate-700">
-              {evalRun ? (
-                <p>
-                  Last eval {fmtDateTime(evalRun.created_at, bot.org.timezone)}: <b>{evalRun.passed}/{evalRun.total}</b> passed · injection{" "}
-                  {evalRun.injection_passed ? <span className="text-emerald-700">all passed</span> : <span className="text-red-700">failures</span>}
-                  {evalRun.first_token_p50_ms ? ` · first token p50 ${evalRun.first_token_p50_ms} ms` : ""}
-                </p>
-              ) : (
-                <p>No eval run yet. Run <code className="rounded bg-slate-100 px-1">npm run eval -- --bot {bot.id}</code> before going live.</p>
-              )}
-            </div>
-            <form action={setBotStatus.bind(null, bot.id)} className="mt-3">
-              <input type="hidden" name="status" value={bot.status === "live" ? "draft" : "live"} />
-              <SubmitButton className={bot.status === "live" ? btn.secondary : btn.primary} pendingText="Updating…">
-                {bot.status === "live" ? "Move back to draft" : "Go live"}
-              </SubmitButton>
-            </form>
-          </Card>
         </>
-      ) : null}
+      )}
     </div>
   );
 }

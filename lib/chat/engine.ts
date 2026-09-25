@@ -299,7 +299,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
       messages.push({ role: "user", content: results });
     }
   } catch (e) {
-    console.error("[chat] model call failed", e instanceof Error ? e.message : e);
+    console.error("[chat] model call failed", bot.id, e instanceof Error ? `${e.name}: ${e.message}` : e);
     emit("tool_card", { type: "fallback_contact", reason: "error", contact: bot.fallback_contact } satisfies ToolCard);
     emit("error", { code: "llm_error", message: "Sorry, I couldn't reply just now. You can reach the team directly." });
   }

@@ -10,7 +10,7 @@ export default async function OnboardingPage({ params }: { params: Promise<{ bot
   const bot = await getBot(botId);
   return (
     <>
-      <PageHeader
+      <PageHeader level={2}
         title="Onboarding"
         sub="Paste the website. Botly reads up to 40 pages (sitemap first, respecting robots.txt), pulls Shopify products, and drafts FAQs, a policy summary and a tone line. Everything stays a draft until you approve it."
       />

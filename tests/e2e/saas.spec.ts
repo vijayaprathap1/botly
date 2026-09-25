@@ -53,7 +53,7 @@ async function signIn(page: Page, email: string) {
 
 test("landing page sells: hero, pricing, start free", async ({ page }) => {
   await page.goto(APP);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("answers customers in their language");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("in your customers' language");
   await expect(page.locator("#pricing")).toContainText("₹2,999");
   await expect(page.locator("#pricing")).toContainText("₹9,999");
   await page.getByRole("link", { name: "Build my assistant free" }).first().click();
@@ -89,9 +89,9 @@ test("new user signs up, builds an assistant from website + social text, preview
 
   await expect(page.getByText("Your assistant is ready.")).toBeVisible();
   await expect(page.getByText(/Free trial/).first()).toBeVisible();
-  await expect(page.getByText(/50 of 50 AI replies left|4\d of 50 AI replies left/)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Your business profile" })).toBeVisible();
-  const snippet = await page.locator("pre").first().innerText();
+  await expect(page.getByText(/\d+ of 50 replies left/).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Business profile" })).toBeVisible();
+  const snippet = await page.locator("pre code").first().innerText();
   expect(snippet).toMatch(/data-key="pk_[a-z0-9]+"/);
   const botId = /\/app\/bots\/([0-9a-f-]+)/.exec(page.url())![1]!;
 
@@ -103,9 +103,9 @@ test("new user signs up, builds an assistant from website + social text, preview
   expect(runs[0].total).toBe(4);
 
   // Customer-level screens: knowledge, settings (no model/plan), preview, billing; no super admin.
-  await page.getByRole("link", { name: "Knowledge" }).click();
+  await page.getByRole("link", { name: "Knowledge", exact: true }).click();
   await expect(page.getByRole("link", { name: "Details from the owner" })).toBeVisible();
-  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByLabel("Model")).toBeHidden();
   await expect(page.getByRole("link", { name: "Super admin" })).toHaveCount(0);
   expect((await page.request.get(`${APP}/app/admin`, { maxRedirects: 0 })).status()).toBe(307);
@@ -121,7 +121,7 @@ test("new user signs up, builds an assistant from website + social text, preview
   expect(text).toContain('"type":"fallback_contact"');
   expect(text).toContain("trial_ended");
   await page.goto(`${APP}/app/bots/${botId}`);
-  await expect(page.getByText("Your free trial has ended.")).toBeVisible();
+  await expect(page.getByText("Your free trial has ended.").first()).toBeVisible();
 
   // Upgrade: Billing → Razorpay subscription → verified payment → Starter active.
   await page.goto(`${APP}/app/billing`);
@@ -176,5 +176,5 @@ test("one free trial per email", async ({ page }) => {
   await page.getByLabel("I own or represent this business", { exact: false }).check();
   await page.getByRole("button", { name: "Create my assistant" }).click();
   await expect(page).toHaveURL(/\/app\/bots\//, { timeout: 90_000 });
-  await expect(page.getByText("Your free trial has ended.")).toBeVisible();
+  await expect(page.getByText("Your free trial has ended.").first()).toBeVisible();
 });

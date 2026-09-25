@@ -13,7 +13,7 @@ export default async function EditSourcePage({ params }: { params: Promise<{ bot
   if (!data) notFound();
   return (
     <>
-      <PageHeader title="Edit knowledge" />
+      <PageHeader level={2} title="Edit knowledge" />
       <SourceForm botId={botId} source={data} />
     </>
   );

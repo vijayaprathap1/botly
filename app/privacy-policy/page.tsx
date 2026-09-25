@@ -9,9 +9,9 @@ export default function PrivacyPolicy() {
   const email = process.env.SUPPORT_EMAIL || "support@your-domain";
   return (
     <MarketingShell>
-      <main className="mx-auto max-w-3xl px-4 py-12 text-[15px] leading-relaxed text-slate-800">
+      <main className="mx-auto max-w-3xl px-4 py-12 text-[15px] leading-relaxed text-zinc-800">
         <h1 className="text-3xl font-bold">Privacy Policy</h1>
-        <p className="mt-2 text-sm text-slate-500">How {name} handles personal data of businesses that use Botly. For people chatting with an assistant on a business&apos;s website, see the <a className="underline" href="/privacy">chat privacy notice</a>.</p>
+        <p className="mt-2 text-sm text-zinc-500">How {name} handles personal data of businesses that use Botly. For people chatting with an assistant on a business&apos;s website, see the <a className="underline" href="/privacy">chat privacy notice</a>.</p>
         <h2 className="mt-8 text-lg font-semibold">What we collect</h2>
         <ul className="list-disc space-y-1 pl-5">
           <li>Account data: your email address and sign-in details from Google or other providers you choose.</li>

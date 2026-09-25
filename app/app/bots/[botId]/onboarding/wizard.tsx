@@ -76,15 +76,15 @@ export function OnboardingWizard({ botId, defaultUrl, maxPages }: { botId: strin
       </Card>
       <Card title="2. Progress">
         {events.length === 0 ? (
-          <p className="text-sm text-slate-600">Usually 1–3 minutes for 40 pages.</p>
+          <p className="text-sm text-zinc-600">Usually 1–3 minutes for 40 pages.</p>
         ) : (
           <>
-            <div className="mb-3 h-2 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+            <div className="mb-3 h-2 overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
               <div className={`h-full rounded-full ${last?.stage === "error" ? "bg-red-500" : "bg-brand-600"} transition-all`} style={{ width: `${pct}%` }} />
             </div>
             <ol ref={logRef} className="max-h-80 space-y-1 overflow-y-auto text-sm" aria-live="polite">
               {events.map((e, i) => (
-                <li key={i} className={e.stage === "error" ? "text-red-700" : e.stage === "skip" ? "text-slate-500" : "text-slate-800"}>
+                <li key={i} className={e.stage === "error" ? "text-red-700" : e.stage === "skip" ? "text-zinc-500" : "text-zinc-800"}>
                   {e.stage === "page" ? `Page ${e.count}: ` : ""}
                   {e.message}
                 </li>

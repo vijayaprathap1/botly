@@ -67,7 +67,7 @@ export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Primary colour" htmlFor="primary_color">
               <div className="flex gap-2">
-                <input type="color" aria-label="Pick colour" value={validColor} onChange={(e) => setColor(e.target.value)} className="h-10 w-12 rounded border border-slate-300" />
+                <input type="color" aria-label="Pick colour" value={validColor} onChange={(e) => setColor(e.target.value)} className="h-10 w-12 rounded border border-zinc-300" />
                 <input id="primary_color" name="primary_color" value={color} onChange={(e) => setColor(e.target.value)} className={inputClass} />
               </div>
             </Field>
@@ -100,11 +100,11 @@ export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin
           <div className="grid gap-4 sm:grid-cols-2">
             <fieldset className="sm:col-span-2">
               <legend className="mb-1 text-sm font-medium">Business hours ({bot.org.timezone})</legend>
-              <p className="mb-2 text-xs text-slate-500">e.g. 10:00-19:00 or 10:00-13:00, 16:00-20:00. Empty = closed.</p>
+              <p className="mb-2 text-xs text-zinc-500">e.g. 10:00-19:00 or 10:00-13:00, 16:00-20:00. Empty = closed.</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {DAYS.map((d) => (
                   <label key={d} className="flex items-center gap-2 text-sm">
-                    <span className="w-24 text-slate-600">{DAY_LABEL[d]}</span>
+                    <span className="w-24 text-zinc-600">{DAY_LABEL[d]}</span>
                     <input name={`hours_${d}`} defaultValue={(bot.business_hours[d] ?? []).map(([a, b]) => `${a}-${b}`).join(", ")} className={inputClass} />
                   </label>
                 ))}
@@ -168,14 +168,14 @@ export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin
 
       <div className="lg:sticky lg:top-20 lg:self-start">
         <Card title="Preview">
-          <div className={`relative h-96 overflow-hidden rounded-lg ${dark ? "bg-slate-800" : "bg-slate-100"}`}>
-            <div className={`absolute bottom-16 w-64 overflow-hidden rounded-xl shadow-lg ${position === "left" ? "left-3" : "right-3"} ${dark ? "bg-slate-900 text-white" : "bg-white text-slate-900"}`}>
+          <div className={`relative h-96 overflow-hidden rounded-lg ${dark ? "bg-zinc-800" : "bg-zinc-100"}`}>
+            <div className={`absolute bottom-16 w-64 overflow-hidden rounded-xl shadow-lg ${position === "left" ? "left-3" : "right-3"} ${dark ? "bg-zinc-900 text-white" : "bg-white text-zinc-900"}`}>
               <div className="px-3 py-2 text-sm font-semibold" style={{ background: validColor, color: readableTextOn(validColor) }}>
                 {name || "Assistant"} · {bot.org.name}
                 <div className="text-xs font-normal opacity-90">Replies instantly</div>
               </div>
               <div className="p-3 text-sm">
-                <div className={`rounded-2xl rounded-bl-sm px-3 py-2 ${dark ? "bg-slate-800" : "bg-slate-100"}`}>{greeting || "Hi!"}</div>
+                <div className={`rounded-2xl rounded-bl-sm px-3 py-2 ${dark ? "bg-zinc-800" : "bg-zinc-100"}`}>{greeting || "Hi!"}</div>
                 <div className="mt-2 ml-auto w-fit rounded-2xl rounded-br-sm px-3 py-2" style={{ background: validColor, color: readableTextOn(validColor) }}>
                   Is COD available?
                 </div>

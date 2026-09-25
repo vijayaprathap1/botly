@@ -55,16 +55,16 @@ export function StartForm({ email }: { email: string }) {
     const pages = events.filter((e) => e.stage === "page").length;
     const last = events[events.length - 1];
     return (
-      <Card title="Building your assistant">
-        <p className="text-sm text-slate-600">Reading your pages, writing FAQs and your business profile, then running safety checks. Keep this tab open.</p>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Progress">
+      <Card title="Step 2 of 2 · Building your assistant">
+        <p className="text-sm text-zinc-600">Reading your pages, writing FAQs and your business profile, then running safety checks. Keep this tab open.</p>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-label="Progress">
           <div className="h-full rounded-full bg-brand-600 transition-all" style={{ width: `${last?.stage === "done" ? 100 : last?.stage === "checking" || last?.stage === "live" ? 90 : last?.stage === "drafting" || last?.stage === "drafted" ? 70 : Math.min(60, 10 + pages * 4)}%` }} />
         </div>
         <ol className="mt-3 max-h-64 space-y-1 overflow-y-auto text-sm" aria-live="polite">
           {events.filter((e) => e.stage !== "page").map((e, i) => (
-            <li key={i} className={e.stage === "error" ? "text-red-700" : e.stage === "skip" ? "text-slate-500" : ""}>{e.message}</li>
+            <li key={i} className={e.stage === "error" ? "text-red-700" : e.stage === "skip" ? "text-zinc-500" : ""}>{e.message}</li>
           ))}
-          {pages ? <li className="text-slate-500">Read {pages} page{pages === 1 ? "" : "s"}…</li> : null}
+          {pages ? <li className="text-zinc-500">Read {pages} page{pages === 1 ? "" : "s"}…</li> : null}
         </ol>
       </Card>
     );
@@ -94,7 +94,7 @@ export function StartForm({ email }: { email: string }) {
       </Card>
 
       <Card title="2. Social and Google profiles (optional)">
-        <p className="mb-3 text-sm text-slate-600">
+        <p className="mb-3 text-sm text-zinc-600">
           Instagram, Facebook, LinkedIn and Google don&apos;t allow other apps to read their pages automatically, so paste your bio or &quot;About&quot; text below. We&apos;ll use it and link your profiles.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -137,7 +137,7 @@ export function StartForm({ email }: { email: string }) {
       </label>
       {state?.error && !state.field ? <Notice tone="red">{state.error}</Notice> : state?.field === "consent" ? <Notice tone="red">{state.error}</Notice> : null}
       <div>
-        <button className={btn.primary} disabled={pending}>{pending ? "Creating…" : "Create my assistant"}</button>
+        <button className={`${btn.primary} h-11 px-5 text-[14.5px]`} disabled={pending}>{pending ? "Creating…" : "Create my assistant"}</button>
       </div>
     </form>
   );

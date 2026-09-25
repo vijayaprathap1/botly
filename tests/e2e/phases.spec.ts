@@ -54,7 +54,7 @@ async function signIn(page: Page, email: string) {
   await expect(page.getByRole("status")).toContainText("Check");
   const line = fs.readFileSync(LOG!, "utf8").slice(before).trim().split("\n").filter((l) => l.startsWith(email)).pop()!;
   await page.goto(line.split(" ")[1]!);
-  await expect(page).toHaveURL(/\/app$/);
+  await expect(page).toHaveURL(/\/app(\/bots\/[0-9a-f-]+)?$/);
 }
 const panel = (p: Page) => p.locator("#botly-widget .panel");
 const say = async (p: Page, text: string) => {
@@ -148,11 +148,11 @@ test("client access: owner sees only their business, no cost, can suggest answer
 
   const owner = await browser.newPage({ viewport: { width: 375, height: 800 } });
   await signIn(owner, "owner3@ananya.test");
-  await expect(owner.getByRole("heading", { name: "Your assistants" })).toBeVisible();
-  await expect(owner.getByText("Ananya Handlooms").first()).toBeVisible();
+  // A client with one assistant lands straight on it; no cost, no other clients.
+  await expect(owner).toHaveURL(new RegExp(`/app/bots/${BOT}$`));
+  await expect(owner.getByRole("heading", { level: 1, name: "Ananya Handlooms" })).toBeVisible();
   await expect(owner.getByText("Meenakshi Silks")).toHaveCount(0);
-  await expect(owner.getByText("Cost")).toHaveCount(0);
-  await owner.getByText("Ananya Handlooms").first().click();
+  await expect(owner.getByText("AI cost")).toHaveCount(0);
   // Clients edit their own assistant, but never platform settings (model, plan, quota).
   await owner.goto(`${APP}/app/bots/${BOT}/settings`);
   await expect(owner.getByLabel("Greeting")).toBeVisible();

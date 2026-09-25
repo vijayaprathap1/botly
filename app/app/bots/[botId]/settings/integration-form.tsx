@@ -18,7 +18,7 @@ export function IntegrationForm({ botId, plan, existing }: { botId: string; plan
       {existing ? (
         <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
           <Badge tone={existing.status === "ok" ? "green" : "red"}>{existing.provider} {existing.status}</Badge>
-          <span className="truncate text-slate-600">{existing.store_url}</span>
+          <span className="truncate text-zinc-600">{existing.store_url}</span>
           <form action={removeIntegration.bind(null, botId)}>
             <SubmitButton className={btn.ghost} pendingText="…">Disconnect</SubmitButton>
           </form>
@@ -57,7 +57,7 @@ export function IntegrationForm({ botId, plan, existing }: { botId: string; plan
           </div>
         </div>
       </form>
-      <p className="mt-3 text-xs text-slate-500">
+      <p className="mt-3 text-xs text-zinc-500">
         Visitors only see status, courier, tracking link and expected date, and only after giving the order number plus the phone or email used on that order. Addresses and payment details are never shown.
       </p>
     </Card>

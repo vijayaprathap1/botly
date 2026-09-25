@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AutoSubmitSelect } from "@/components/client";
-import { Badge, Card, PageHeader, Stat } from "@/components/ui";
+import { Badge, btn, Card, PageHeader, Stat } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { fmtDate, fmtInt, fmtUsd } from "@/lib/format";
 import { fmtInr, plans, trialState } from "@/lib/plans";
@@ -64,41 +64,41 @@ export default async function SuperAdminPage({ searchParams }: { searchParams: P
       </div>
       <Card>
         <form className="flex flex-wrap gap-2" action="/app/admin">
-          <input name="q" defaultValue={sp.q ?? ""} placeholder="Search business or email" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-          <select name="filter" defaultValue={sp.filter ?? ""} className="rounded-lg border border-slate-300 px-2 py-2 text-sm" aria-label="Filter">
+          <input name="q" defaultValue={sp.q ?? ""} placeholder="Search business or email" className="min-w-0 flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+          <select name="filter" defaultValue={sp.filter ?? ""} className="rounded-lg border border-zinc-300 px-2 py-2 text-sm" aria-label="Filter">
             <option value="">All</option>
             <option value="paying">Paying</option>
             <option value="trial">Trials</option>
             <option value="suspended">Suspended</option>
           </select>
-          <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm">Filter</button>
+          <button className={btn.secondary}>Filter</button>
         </form>
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[860px] text-left text-sm">
-            <thead className="text-xs uppercase text-slate-500">
-              <tr><th className="py-2">Business</th><th>Plan</th><th>Status</th><th>Trial / renewal</th><th className="text-right">Conv. (month)</th><th className="text-right">AI cost</th><th>Joined</th><th>Actions</th></tr>
+        <div className="-mx-5 mt-4 overflow-x-auto border-t border-zinc-100">
+          <table className="w-full min-w-[920px] text-left text-[13.5px] [&_td]:px-3 [&_td]:py-3 [&_td:first-child]:pl-5 [&_td:last-child]:pr-5 [&_th]:px-3 [&_th]:py-2.5 [&_th:first-child]:pl-5 [&_th:last-child]:pr-5">
+            <thead className="bg-zinc-50/80 text-[11.5px] font-medium uppercase tracking-wide text-zinc-500">
+              <tr><th>Business</th><th>Plan</th><th>Status</th><th>Trial / renewal</th><th className="text-right">Conv. (month)</th><th className="text-right">AI cost</th><th className="whitespace-nowrap">Joined</th><th className="text-right">Actions</th></tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-zinc-100">
               {list.map((o) => {
                 const t = trialState(o);
                 const u = orgUsage(o.id);
                 const firstBot = botsByOrg.get(o.id)?.[0];
                 return (
-                  <tr key={o.id} className="align-top">
-                    <td className="py-2 pr-2">
+                  <tr key={o.id} className="align-middle transition hover:bg-zinc-50/60">
+                    <td>
                       {firstBot ? <Link className="font-medium hover:underline" href={`/app/bots/${firstBot}`}>{o.name}</Link> : <span className="font-medium">{o.name}</span>}
-                      <div className="text-xs text-slate-500">{o.billing_email ?? "—"} {o.self_serve ? "· self-serve" : "· done-for-you"}</div>
+                      <div className="text-xs text-zinc-500">{o.billing_email ?? "—"} {o.self_serve ? "· self-serve" : "· done-for-you"}</div>
                     </td>
                     <td><Badge tone={o.plan === "growth" ? "green" : o.plan === "starter" ? "blue" : "gray"}>{P[o.plan].name}</Badge></td>
-                    <td>{o.suspended ? <Badge tone="red">suspended</Badge> : <span className="text-xs">{o.subscription_status}</span>}</td>
-                    <td className="text-xs">{t ? (t.over ? "ended" : `${t.left}/${t.limit} replies · ${t.daysLeft}d`) : o.current_period_end ? `renews ${fmtDate(o.current_period_end, o.timezone)}` : "—"}</td>
-                    <td className="text-right tabular-nums">{fmtInt(u.conv)}</td>
-                    <td className="text-right tabular-nums">{fmtUsd(u.cost)}</td>
-                    <td className="text-xs">{fmtDate(o.created_at, o.timezone)}</td>
-                    <td>
+                    <td>{o.suspended ? <Badge tone="red" dot>suspended</Badge> : <Badge tone={o.subscription_status === "active" ? "green" : o.subscription_status === "trialing" ? "blue" : ["past_due", "halted", "expired"].includes(o.subscription_status) ? "amber" : "gray"} dot>{o.subscription_status.replace("_", " ")}</Badge>}</td>
+                    <td className="whitespace-nowrap text-[12.5px] text-zinc-600">{t ? (t.over ? "ended" : `${t.left}/${t.limit} replies · ${t.daysLeft}d`) : o.current_period_end ? `renews ${fmtDate(o.current_period_end, o.timezone)}` : "—"}</td>
+                    <td className="num text-right">{fmtInt(u.conv)}</td>
+                    <td className="num whitespace-nowrap text-right">{fmtUsd(u.cost)}</td>
+                    <td className="whitespace-nowrap text-[12.5px] text-zinc-600">{fmtDate(o.created_at, o.timezone)}</td>
+                    <td className="text-right">
                       <form action={adminOrgAction}>
                         <input type="hidden" name="orgId" value={o.id} />
-                        <AutoSubmitSelect name="action" defaultValue="" aria-label={`Actions for ${o.name}`} className="rounded border border-slate-300 px-1 py-1 text-xs">
+                        <AutoSubmitSelect name="action" defaultValue="" aria-label={`Actions for ${o.name}`} className="h-8 w-40 rounded-md border border-zinc-200 bg-white px-2 text-[12.5px] text-zinc-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10">
                           <option value="" disabled>Choose…</option>
                           <option value="extend">Extend trial (+7 days, +50 replies)</option>
                           <option value="starter">Set Starter (paid offline)</option>
@@ -116,8 +116,8 @@ export default async function SuperAdminPage({ searchParams }: { searchParams: P
       </Card>
       <Card title="Latest billing events">
         {events?.length ? (
-          <ul className="text-sm">{events.map((e, i) => <li key={i}>{e.event} · {fmtDate(e.created_at, "Asia/Kolkata")}</li>)}</ul>
-        ) : <p className="text-sm text-slate-600">None yet. They appear once the Razorpay webhook is set up.</p>}
+          <ul className="divide-y divide-zinc-100 text-[13.5px]">{events.map((e, i) => <li key={i} className="flex items-center justify-between py-2"><code className="font-mono text-[12.5px] text-zinc-800">{e.event}</code><span className="text-[12.5px] text-zinc-500">{fmtDate(e.created_at, "Asia/Kolkata")}</span></li>)}</ul>
+        ) : <p className="text-sm text-zinc-600">None yet. They appear once the Razorpay webhook is set up.</p>}
       </Card>
     </div>
   );

@@ -20,7 +20,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ botId
       <IntegrationForm botId={bot.id} plan={bot.org.plan} existing={integration} />
       <OpsForms botId={bot.id} orgId={bot.org_id} minutes={Number(bot.org.minutes_saved_per_conversation)} retention={bot.org.retention_months} />
       <Card title="Private test link">
-        <p className="mb-2 text-sm text-slate-600">If the test link leaked, make a new one. The old link stops working immediately.</p>
+        <p className="mb-2 text-sm text-zinc-600">If the test link leaked, make a new one. The old link stops working immediately.</p>
         <form action={rotateTestToken.bind(null, bot.id)}>
           <SubmitButton className={btn.danger} pendingText="Rotating…">Make a new test link</SubmitButton>
         </form>
