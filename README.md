@@ -1,6 +1,6 @@
 # Botly
 
-**An AI support assistant for Indian small businesses, installed with one line of code.** Botly reads a business's website, drafts its FAQs and policies, then answers visitors 24/7 in English, Tamil, Hindi, Hinglish or Tanglish. It only answers from approved knowledge and hands leads to the owner by email and WhatsApp.
+**An AI support assistant for Indian small businesses, installed with one line of code.** Botly reads a business's website, drafts its FAQs and policies, then answers visitors 24/7 in English, Tamil, Hindi, English . It only answers from approved knowledge and hands leads to the owner by email and WhatsApp.
 
 **Live:** [botly-rosy.vercel.app](https://botly-rosy.vercel.app/)
 
@@ -19,7 +19,7 @@
 
 ## Features
 
-- **Multilingual replies.** The bot answers in the visitor's language and script. A server-side detector labels Tamil and Devanagari scripts, plus Hinglish and Tanglish written in English letters, for reports and evals.
+- **Multilingual replies.** The bot answers in the visitor's language and script. A server-side detector labels Tamil and Devanagari scripts, plus English and Tanglish written in English letters, for reports and evals.
 - **Tool-using assistant.** Capture a lead, hand off to a human, request a callback, look up an order, flag unanswered questions and suggest follow-ups.
 - **Order lookup.** Connects to Shopify (Admin GraphQL) and WooCommerce (REST). The customer is verified by email or phone first, and only status, carrier, tracking link and ETA are shared.
 - **Leads and notifications.** A lead pipeline with CSV export. Owners are notified by email (Resend) and WhatsApp Cloud API, with retries and a delivery log.
