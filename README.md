@@ -1,121 +1,95 @@
 # Botly
 
-AI-powered customer support chatbot widget for Indian businesses. Responds in English, Hindi, Tamil, and Hinglish—24/7.
+**An AI support assistant for Indian small businesses, installed with one line of code.** Botly reads a business's website, drafts its FAQs and policies, then answers visitors 24/7 in English, Tamil, Hindi, Hinglish or Tanglish. It only answers from approved knowledge and hands leads to the owner by email and WhatsApp.
 
-## 🎯 What It Does
+**Live:** [botly-rosy.vercel.app](https://botly-rosy.vercel.app/)
 
-Botly is a conversational AI assistant for e-commerce and service businesses. It learns from your website and social profiles, then answers customer questions about products, prices, delivery, returns, and orders in real-time.
+---
 
-**Live Demo:** [botly-rosy.vercel.app](https://botly-rosy.vercel.app/)
+## How it works
 
-## ✨ Key Features
+1. **Onboard from a URL.** Botly crawls the site (respecting `robots.txt` and sitemaps, with Shopify-aware extraction). Claude drafts FAQs, policies and a tone guide, with progress streamed live to the dashboard.
+2. **Review the knowledge.** The owner edits, approves or archives each entry, or imports CSV, PDF and DOCX files. Only approved knowledge reaches the bot.
+3. **Test before going live.** A private playground shows tokens, latency, cost and tool calls for every reply. A bot can only go live after it passes its eval suite, including the prompt-injection cases.
+4. **Install.** One script tag on any site (Shopify, WordPress, Wix, Webflow or plain HTML):
 
-- 🤖 **AI-Powered Responses** - Trained on your business data, not hallucinations
-- 🌐 **Multi-Language Support** - English, Hindi, Tamil, Hinglish (with language detection)
-- 📱 **Easy Integration** - Single line of code for Shopify, WordPress, WooCommerce, Wix, Webflow, or HTML sites
-- 📦 **Order Tracking** - Real-time Shopify/WooCommerce order status lookups
-- 💬 **Lead Capture** - Automatic WhatsApp/email notifications for customer inquiries
-- 🔄 **Continuous Learning** - Learns from unanswered questions to improve responses
-- ⏰ **24/7 Availability** - No downtime, always responding to customers
+   ```html
+   <script src="https://YOUR_APP_URL/widget.js" data-key="BOT_PUBLIC_KEY" async></script>
+   ```
 
-## 🎯 Problems It Solves
+## Features
 
-| Problem | Solution |
-|---------|----------|
-| Limited customer support hours | 24/7 AI assistant handling inquiries |
-| Language barriers for Indian market | Support in 4 Indian languages + English |
-| Lost leads due to slow response | Instant responses + lead capture via WhatsApp/email |
-| Manual order status inquiries | Automated Shopify/WooCommerce integration |
-| Knowledge gaps in customer interactions | Self-improving from unanswered questions |
+- **Multilingual replies.** The bot answers in the visitor's language and script. A server-side detector labels Tamil and Devanagari scripts, plus Hinglish and Tanglish written in English letters, for reports and evals.
+- **Tool-using assistant.** Capture a lead, hand off to a human, request a callback, look up an order, flag unanswered questions and suggest follow-ups.
+- **Order lookup.** Connects to Shopify (Admin GraphQL) and WooCommerce (REST). The customer is verified by email or phone first, and only status, carrier, tracking link and ETA are shared.
+- **Leads and notifications.** A lead pipeline with CSV export. Owners are notified by email (Resend) and WhatsApp Cloud API, with retries and a delivery log.
+- **Unanswered-questions inbox.** Near-duplicate questions are merged, and answering one turns it into approved knowledge in a single step.
+- **Owner dashboard.** Conversations, transcripts, leads, business hours, branding, allowed domains, quotas and weekly reports.
+- **Self-serve SaaS.** OAuth sign-in, a 14-day trial, and Razorpay subscriptions in INR with webhook-driven plan changes.
 
-## 🛠️ Tech Stack
+## Engineering highlights
 
-### Frontend
-- **React** - UI and component architecture
-- **TypeScript** - Type-safe code
-- **Tailwind CSS** - Responsive styling
-- **Chat Widget** - Embeddable chatbot interface
+- **Streaming chat.** Replies stream over Server-Sent Events. The widget sends JSON as `text/plain` to skip the CORS preflight, saving a round trip on every message.
+- **Prompt caching by design.** The system prompt is split into a cached block (rules and knowledge) and a small dynamic block (time, page, visitor). Changing context then doesn't break Anthropic's prefix cache.
+- **Scales past the context window.** Small knowledge bases go into the prompt whole. Above a 25k-token cap, Botly switches to hybrid retrieval: pgvector embeddings (Voyage, multilingual) plus Postgres full-text and trigram search, merged with reciprocal-rank fusion. Policies are always pinned in the prompt.
+- **Tenant isolation in the database.** Supabase Postgres has row-level security on every table and no anonymous policies. Cost and token columns are hidden from owner roles at the grant level, not just in the UI.
+- **Security.** Public endpoints check the bot's key and allowed origin. Rate limits are applied per visitor and per bot. Store credentials are encrypted with AES-256-GCM, and Razorpay webhooks are HMAC-verified.
+- **Privacy operations.** Nightly data retention runs on Vercel Cron, and a single call can delete all of one visitor's data.
+- **Framework-free widget.** Written in TypeScript and bundled with esbuild into a small `widget.js`, with no framework dependencies on the customer's site.
+- **Eval harness.** YAML test cases (grounding, language, prompt injection) run against the real prompt, with results recorded per bot.
 
-### Backend
-- **Node.js** - Server runtime
-- **LLM Integration** - AI model for responses
-- **Language Detection** - Automatic language identification
-- **API Layer** - Integrations with e-commerce platforms
+## Tech stack
 
-### Integrations
-- **Shopify API** - Order tracking + storefront integration
-- **WooCommerce API** - Order status lookups
-- **WhatsApp API** - Lead notifications
-- **Email Service** - Customer inquiry routing
-- **Website Embeds** - Universal HTML/JavaScript widget
+| Layer | Tools |
+|---|---|
+| App | Next.js 16 (App Router, Server Actions), React 19, TypeScript, Tailwind CSS 4 |
+| AI | Anthropic Claude (Haiku 4.5 by default, set per bot), tool use, prompt caching |
+| Data | Supabase (Postgres, Auth, RLS), pgvector, Voyage embeddings |
+| Integrations | Shopify, WooCommerce, Razorpay, Resend, WhatsApp Cloud API |
+| Validation | Zod |
+| Testing | Vitest (unit and DB/RLS), Playwright (e2e), custom LLM eval runner |
+| Hosting | Vercel (including Cron) |
 
-## 🚀 Getting Started
+## Project structure
 
-### Prerequisites
-- Node.js 18+
-- API keys for your e-commerce platform (Shopify/WooCommerce)
+```
+app/            Next.js routes: marketing, dashboard (/app), public widget API, billing, cron
+lib/chat/       Chat engine: prompt build, tool loop, streaming, history
+lib/retrieval/  Chunking, embeddings, hybrid retriever, index sync
+lib/crawler/    robots.txt, sitemap, extraction, Shopify
+lib/orders/     Shopify and WooCommerce order providers
+lib/notify/     Email and WhatsApp notifiers with retry dispatch
+widget/src/     Embeddable widget (framework-free TS, built with esbuild)
+supabase/       SQL migrations (schema, functions, RLS) and demo seed
+evals/          LLM eval suites
+tests/          unit / db / e2e
+```
 
-### Installation
+## Running locally
+
+Requires Node.js 20+, and either a Supabase project or a local Postgres.
 
 ```bash
-# Clone repository
 git clone https://github.com/vijayaprathap1/botly.git
 cd botly
-
-# Install dependencies
 npm install
+cp .env.example .env.local      # every variable is documented inline
 
-# Set up environment variables
-cp .env.example .env.local
-
-# Start development server
-npm run dev
+npm run db:reset:local          # local Postgres: Supabase shim + migrations + demo seed
+npm run dev                     # builds the widget, checks env, starts Next.js
 ```
 
-### Quick Setup for Your Store
+Other scripts:
 
-```html
-<!-- Add this single line to your website -->
-<script src="https://botly.vercel.app/widget.js" data-store-id="YOUR_STORE_ID"></script>
+```bash
+npm test            # unit tests
+npm run test:db     # database and RLS tests
+npm run test:e2e    # Playwright end-to-end tests
+npm run eval        # run the LLM eval suites
+npm run typecheck
 ```
 
-## 📊 Impact
+## Author
 
-- **Reduces support ticket volume** by 40-60%
-- **Increases customer satisfaction** through instant responses
-- **Captures leads** automatically via WhatsApp/email
-- **Supports 4 languages** (English, Hindi, Tamil, Hinglish)
-- **Works with major platforms** - Shopify, WooCommerce, WordPress, Wix, Webflow
-
-## 🔒 Data & Privacy
-
-- No customer data is stored long-term
-- Business data is encrypted
-- GDPR and India data protection compliant
-- Customers can opt-out anytime
-
-## 💰 Pricing
-
-- **Free** - 14-day trial (no credit card)
-- **Starter** - Basic multi-language support
-- **Pro** - Advanced integrations + lead routing
-- **Enterprise** - Custom features + SLA
-
-## 👨‍💻 Author
-
-**Vijaya Prathap** - Full-Stack Engineer & Founder
-- 🌐 [LinkedIn](https://linkedin.com/in/vjprathap)
-- 💼 [GitHub](https://github.com/vijayaprathap1)
-- 📧 [Email](mailto:pvijayaprathap1@gmail.com)
-
-## 🎯 Target Market
-
-Botly is designed for:
-- **E-commerce stores** (Shopify, WooCommerce, Wix)
-- **Service businesses** (consulting, coaching, support)
-- **Indian market** (multi-language support for India)
-- **Businesses needing 24/7 support** without hiring support staff
-
-## 🙏 Acknowledgments
-
-Built to solve real customer support challenges for Indian e-commerce businesses. Special focus on language accessibility and ease of integration.
+**Vijayaprathap P**, Senior Full-Stack Engineer
+[LinkedIn](https://linkedin.com/in/vjprathap) · [GitHub](https://github.com/vijayaprathap1) · [Email](mailto:pvijayaprathap1@gmail.com)
