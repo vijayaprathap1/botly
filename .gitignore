@@ -13,5 +13,5 @@ public/widget.js
 public/widget.js.map
 .local-db
 .env.local-stack
-
+.test.html
 .vercel
