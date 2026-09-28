@@ -1,3 +1,4 @@
+import { llmKeyName, llmKeyPresent } from "../lib/llm/provider";
 /**
  * Eval runner (§9).
  *   npm run eval -- --bot <bot-id>                 real bot from Supabase, real Claude; records eval_runs (gates "go live")
@@ -13,6 +14,8 @@ import { runCase } from "../lib/eval/run";
 import { percentile, type CaseResult } from "../lib/eval/checks";
 import { fixtureToBot, loadEvalFile } from "../lib/eval/fixture";
 import { AnthropicLlm } from "../lib/llm/anthropic";
+import { OpenAiCompatLlm } from "../lib/llm/openai-compat";
+import { llmProvider } from "../lib/llm/provider";
 import { ScriptedLlm } from "../lib/llm/scripted";
 import type { LlmClient } from "../lib/llm/types";
 import type { BotWithOrg } from "../lib/types";
@@ -60,8 +63,8 @@ async function main() {
     process.exit(2);
   }
   const scripted = flag("scripted");
-  if (!scripted && !process.env.ANTHROPIC_API_KEY) {
-    console.error("ANTHROPIC_API_KEY is not set (use --scripted to self-test the harness without it).");
+  if (!scripted && !llmKeyPresent()) {
+    console.error(`${llmKeyName()} is not set (use --scripted to self-test the harness without it).`);
     process.exit(2);
   }
   let bot: BotWithOrg;
@@ -78,7 +81,7 @@ async function main() {
   }
   let cases = loadEvalFile(casesPath).cases;
   if (arg("only")) cases = cases.filter((c) => c.id.startsWith(arg("only")!));
-  const llm: LlmClient = scripted ? new ScriptedLlm(1) : new AnthropicLlm();
+  const llm: LlmClient = scripted ? new ScriptedLlm(1) : llmProvider() === "openai" ? new OpenAiCompatLlm() : new AnthropicLlm();
   console.log(`Eval: ${bot.org.name} / ${bot.name} · model ${bot.model} · ${knowledge.length} approved sources · ${cases.length} cases from ${casesPath}${scripted ? " · SCRIPTED (harness test only)" : ""}\n`);
 
   const concurrency = Number(arg("concurrency") ?? 4);

@@ -32,6 +32,38 @@ If something is missing, `npm run check` says exactly what and where to get it, 
 
 Open http://localhost:3000, sign in with an address listed in `ADMIN_EMAILS`. The first sign-in makes you the platform admin.
 
+### Free LLM for testing
+
+Botly can run on a free OpenAI-compatible API instead of Claude while you test. Put two lines in
+`.env.local` (and in Vercel → Settings → Environment Variables, then redeploy):
+
+| Provider | `LLM_PROVIDER=` | Get the key | Free tier (check current limits) |
+|---|---|---|---|
+| **Google Gemini** (recommended) | `gemini` | https://aistudio.google.com/apikey | Best Tamil/Hindi, large token allowance, no card. Free tier may train on data |
+| Cerebras (fastest) | `cerebras` | https://cloud.cerebras.ai | Trial credit (30 days), ~1M tokens/day, 5 req/min |
+| Mistral | `mistral` | https://console.mistral.ai/api-keys | "Experiment" plan, generous monthly tokens, needs phone verification, may train on data |
+| Groq | `groq` | https://console.groq.com/keys | Very fast, ~1,000 req/day but ~8k tokens/min: small knowledge bases only |
+| GitHub Models | `github` | https://github.com/settings/personal-access-tokens (fine-grained, "Models: read") | ~150 req/day, ~8k input tokens per request |
+| OpenRouter | `openrouter` + `LLM_MODEL=<id>:free` | https://openrouter.ai/keys | ~50 req/day (1,000 after a $10 top-up) |
+| NVIDIA | `nvidia` | https://build.nvidia.com | Shared queue; big models (Llama 3.3 70B) often time out |
+
+Put the key in `LLM_API_KEY`. NVIDIA models that respond quickly (try in this order): `qwen/qwen3-next-80b-a3b-instruct` (default),
+`openai/gpt-oss-120b` (add `LLM_REASONING_EFFORT=low`), `openai/gpt-oss-20b`, `nvidia/nemotron-3.5-lightning-30b-a3b`.
+Avoid 70B+ dense models and "thinking" variants on the free queue.
+
+Optional: `LLM_MODEL` to pick another model (confirm the exact id in the provider's console),
+`LLM_REASONING_EFFORT=off|low|medium` for thinking models (Gemini and Groq presets use `low`),
+`LLM_TIMEOUT_MS` (default 25000) before a slow reply gives up and shows the contact card.
+
+Then run `npm run llm:check`. It tests streaming, tool calling ("I don't know" reporting) and a Tamil reply, with timings.
+
+What changes with a free tier:
+- Replies stream the same way, and every tool works (leads, handoff, unanswered, follow-ups). Cost shows $0.
+- No Claude prompt caching, and free tiers are rate-limited, so replies can be slower than Claude's ~2 seconds.
+- Other models may follow the grounding and language rules less reliably, and the go-live safety check may fail more often.
+- Free tiers are for testing. Gemini's free tier may use prompts to improve Google's products, so don't send real customer
+  conversations through it. Switch back with `LLM_PROVIDER=anthropic` (or a paid key) before you sell.
+
 ## 2. Deploy to Vercel
 
 1. Push this repo to GitHub and import it in Vercel (framework: Next.js; the default `npm run build` also builds the widget).
@@ -137,7 +169,7 @@ npm run eval -- --fixture evals/ananya-handlooms.yaml   # 34 eval cases against 
 npm run eval -- --bot <bot-id>                          # same, against a bot in Supabase; records the result
 ```
 
-The eval needs `ANTHROPIC_API_KEY`. `--scripted` runs the harness with a fake model to check the plumbing; its scores mean nothing.
+The eval needs the active provider's key (`ANTHROPIC_API_KEY`, or `LLM_API_KEY` with `LLM_PROVIDER=nvidia`). `--scripted` runs the harness with a fake model to check the plumbing; its scores mean nothing.
 
 **Database and end-to-end tests without Supabase.** A local test harness runs the real app against plain Postgres + PostgREST, with a minimal auth stand-in that writes magic links to a file and a fake Resend that records emails. It is for automated tests only; use the Supabase CLI for day-to-day local development.
 

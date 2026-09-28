@@ -1,3 +1,5 @@
+import { resolveModel } from "./llm/provider";
+
 /** Server-side configuration read from the environment (never sent to the browser). */
 export type ModelPricing = { input: number; output: number; cache_write: number; cache_read: number };
 
@@ -27,7 +29,7 @@ export const config = {
     return (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
   },
   get defaultModel() {
-    return process.env.ANTHROPIC_DEFAULT_MODEL || "claude-haiku-4-5";
+    return resolveModel(null);
   },
   get knowledgeTokenCap() {
     return int("KNOWLEDGE_TOKEN_CAP", 25_000);

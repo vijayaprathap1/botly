@@ -1,7 +1,9 @@
 export const dynamic = "force-dynamic";
 
 import { AppShell } from "@/components/app-shell";
-import { checkAnthropicLive } from "@/lib/ai-check";
+import { checkLlmLive } from "@/lib/ai-check";
+import { AI_KEY_NAMES } from "@/lib/env-check";
+import { llmKeyName } from "@/lib/llm/provider";
 import { requireSession } from "@/lib/auth";
 import { featureProblems } from "@/lib/env-check";
 import { planDef, trialState } from "@/lib/plans";
@@ -16,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const myOrg = !session.isAdmin ? bots.find((b) => session.orgIds.includes(b.org.id))?.org : undefined;
   const trial = myOrg ? trialState(myOrg) : null;
   // Super admin: surface a broken AI key immediately (live check, cached 5 minutes).
-  const ai = session.isAdmin && process.env.BOTLY_TEST_SCRIPTED_LLM !== "1" ? await checkAnthropicLive() : null;
+  const ai = session.isAdmin && process.env.BOTLY_TEST_SCRIPTED_LLM !== "1" ? await checkLlmLive() : null;
   const problems = session.isAdmin ? featureProblems() : [];
 
   return (
@@ -30,13 +32,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     >
       {ai && !ai.ok ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] text-red-900" role="alert">
-          <b>AI replies are failing.</b> Claude returned: <span className="font-mono text-[12.5px]">{ai.error}</span>. Visitors see your contact details instead of answers. Fix
-          ANTHROPIC_API_KEY in your hosting settings (a key created inside a workspace, with credit) and redeploy.
+          <b>AI replies are failing.</b> {ai.provider} returned: <span className="font-mono text-[12.5px]">{ai.error}</span>. Visitors see your contact details instead of answers. Fix
+          {" "}{llmKeyName()} (and the model name, if set) in your hosting settings and redeploy.
         </div>
       ) : null}
       {problems.map((p) => (
         <div key={p.name} className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-[13px] text-amber-900">
-          <b>{p.name}</b> {p.problem}: {p.name === "ANTHROPIC_API_KEY" ? "the assistant can't reply" : "lead emails won't be sent"}. {p.fix}.
+          <b>{p.name}</b> {p.problem}: {AI_KEY_NAMES.includes(p.name) ? "the assistant can't reply" : "lead emails won't be sent"}. {p.fix}.
         </div>
       ))}
       {children}

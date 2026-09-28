@@ -1,5 +1,6 @@
-import { blockingProblems, featureProblems } from "@/lib/env-check";
-import { checkAnthropicLive } from "@/lib/ai-check";
+import { providerLabel, resolveModel } from "@/lib/llm/provider";
+import { AI_KEY_NAMES, blockingProblems, featureProblems } from "@/lib/env-check";
+import { checkLlmLive } from "@/lib/ai-check";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -19,8 +20,9 @@ export async function GET(req: Request) {
     }
   }
   const features = featureProblems().map((p) => p.name);
-  // ?deep=1 also makes a real 1-token call to Claude and reports Anthropic's error text.
-  const deep = new URL(req.url).searchParams.get("deep") === "1" ? await checkAnthropicLive() : null;
-  const ok = envOk && dbOk && !features.includes("ANTHROPIC_API_KEY") && (deep ? deep.ok : true);
-  return Response.json({ ok, config: envOk, database: dbOk, ai: !features.includes("ANTHROPIC_API_KEY"), email: !features.includes("RESEND_API_KEY"), ...(deep ? { ai_live: deep.ok, ai_error: deep.error } : {}) }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
+  // ?deep=1 also makes a real 1-token call to the configured LLM and reports its error text.
+  const deep = new URL(req.url).searchParams.get("deep") === "1" ? await checkLlmLive() : null;
+  const aiOk = !features.some((f) => AI_KEY_NAMES.includes(f));
+  const ok = envOk && dbOk && aiOk && (deep ? deep.ok : true);
+  return Response.json({ ok, config: envOk, database: dbOk, ai: aiOk, ai_provider: providerLabel(), email: !features.includes("RESEND_API_KEY"), ...(deep ? { ai_live: deep.ok, ai_error: deep.error, ai_model: resolveModel(null) } : {}) }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }

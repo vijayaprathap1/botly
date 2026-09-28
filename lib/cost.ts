@@ -19,7 +19,10 @@ export function pricingFor(model: string, table = pricingTable()): { pricing: Mo
   // Dated snapshots like claude-haiku-4-5-20251001 use their alias price.
   const alias = Object.keys(table).find((k) => model.startsWith(k));
   if (alias) return { pricing: table[alias]!, known: true };
-  return { pricing: table["claude-haiku-4-5"] ?? { input: 1, output: 5, cache_write: 1.25, cache_read: 0.1 }, known: false };
+  // Unknown Claude ids are priced like Haiku (safe side). Other providers' models (e.g. the
+  // free NVIDIA endpoint) cost 0 unless priced in LLM_PRICING_JSON.
+  if (model.startsWith("claude")) return { pricing: table["claude-haiku-4-5"] ?? { input: 1, output: 5, cache_write: 1.25, cache_read: 0.1 }, known: false };
+  return { pricing: { input: 0, output: 0, cache_write: 0, cache_read: 0 }, known: false };
 }
 
 /** USD cost of one API usage record. `input` excludes cached tokens, as in the Anthropic usage object. */

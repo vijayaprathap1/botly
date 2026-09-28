@@ -1,4 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { openAiForcedToolCall } from "../llm/openai-compat";
+import { llmKeyName, llmKeyPresent, llmProvider, resolveModel } from "../llm/provider";
+import type { ToolDef } from "../llm/types";
 import { DRAFT_TOOL, ONBOARDING_SYSTEM } from "../prompts/onboarding";
 import { estimateTokens } from "../tokens";
 
@@ -13,7 +16,7 @@ export type Drafts = {
   usage: { input: number; output: number };
 };
 
-/** Asks Claude to draft FAQ pairs, a policy summary and a tone line from crawled text. */
+/** Asks the LLM to draft FAQ pairs, a policy summary and a tone line from crawled text. */
 export async function draftKnowledge(args: {
   businessName: string;
   pages: { title: string; url: string; text: string }[];
@@ -23,8 +26,10 @@ export async function draftKnowledge(args: {
   model: string;
   budgetTokens?: number;
 }): Promise<Drafts> {
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set");
-  const budget = args.budgetTokens ?? 60_000;
+  if (!llmKeyPresent()) throw new Error(`${llmKeyName()} is not set`);
+  const openai = llmProvider() === "openai";
+  // Free/open endpoints are slower on huge prompts; keep their input smaller.
+  const budget = args.budgetTokens ?? (openai ? 24_000 : 60_000);
   const parts: string[] = [];
   let used = 0;
   // Policy-like pages first: they carry the facts shoppers ask about most.
@@ -42,19 +47,29 @@ export async function draftKnowledge(args: {
   const productSample = args.products.slice(0, 40).map((p) => `- ${p.title}: ${p.content.split("\n").slice(0, 3).join("; ")}`).join("\n");
   if (productSample) parts.push(`<products>\n${productSample}\n</products>`);
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 180_000, maxRetries: 1 });
-  const res = await client.messages.create({
-    model: args.model,
-    max_tokens: 8000,
-    system: ONBOARDING_SYSTEM,
-    tools: [DRAFT_TOOL as unknown as Anthropic.Tool],
-    tool_choice: { type: "tool", name: "save_drafts" },
-    messages: [{ role: "user", content: `Business: ${args.businessName}\n\n${parts.join("\n\n")}\n\nDraft the knowledge now with save_drafts.` }],
-  });
-  const block = res.content.find((b) => b.type === "tool_use");
-  // (ownerNotes are treated like pages: facts the assistant may use.)
-  if (!block || block.type !== "tool_use") throw new Error("The model did not return drafts");
-  const input = block.input as Omit<Drafts, "usage">;
+  const userText = `Business: ${args.businessName}\n\n${parts.join("\n\n")}\n\nDraft the knowledge now with save_drafts.`;
+  let input: Omit<Drafts, "usage">;
+  let usage: Drafts["usage"];
+  if (openai) {
+    const r = await openAiForcedToolCall({ model: resolveModel(args.model), system: ONBOARDING_SYSTEM, user: userText, tool: DRAFT_TOOL as unknown as ToolDef, maxTokens: 4096 });
+    input = r.input as Omit<Drafts, "usage">;
+    usage = r.usage;
+  } else {
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 180_000, maxRetries: 1 });
+    const res = await client.messages.create({
+      model: args.model,
+      max_tokens: 8000,
+      system: ONBOARDING_SYSTEM,
+      tools: [DRAFT_TOOL as unknown as Anthropic.Tool],
+      tool_choice: { type: "tool", name: "save_drafts" },
+      messages: [{ role: "user", content: userText }],
+    });
+    const block = res.content.find((b) => b.type === "tool_use");
+    // (ownerNotes are treated like pages: facts the assistant may use.)
+    if (!block || block.type !== "tool_use") throw new Error("The model did not return drafts");
+    input = block.input as Omit<Drafts, "usage">;
+    usage = { input: res.usage.input_tokens, output: res.usage.output_tokens };
+  }
   return {
     faqs: Array.isArray(input.faqs) ? input.faqs.filter((f) => f?.question && f?.answer).slice(0, 40) : [],
     policy: input.policy,
@@ -63,7 +78,7 @@ export async function draftKnowledge(args: {
     business_type: typeof input.business_type === "string" ? input.business_type.slice(0, 60) : undefined,
     greeting: typeof input.greeting === "string" ? input.greeting.slice(0, 300) : undefined,
     suggested_questions: Array.isArray(input.suggested_questions) ? input.suggested_questions.filter((q) => typeof q === "string" && q.trim()).slice(0, 3).map((q) => q.slice(0, 120)) : undefined,
-    usage: { input: res.usage.input_tokens, output: res.usage.output_tokens },
+    usage,
   };
 }
 

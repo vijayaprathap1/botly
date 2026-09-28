@@ -16,7 +16,8 @@
     "eval": "tsx scripts/eval.ts",
     "db:reset:local": "bash scripts/local-db.sh",
     "seed:gen": "tsx scripts/gen-seed.ts",
-    "check": "tsx scripts/check.ts"
+    "check": "tsx scripts/check.ts",
+    "llm:check": "tsx scripts/llm-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

@@ -1,3 +1,4 @@
+import { resolveModel } from "../llm/provider";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { z } from "zod";
@@ -79,7 +80,7 @@ export function fixtureToBot(f: Fixture): { bot: BotWithOrg; knowledge: Knowledg
     active: true,
     status: f.bot.status,
     allowed_origins: f.bot.allowed_origins,
-    model: process.env.ANTHROPIC_DEFAULT_MODEL || "claude-haiku-4-5",
+    model: resolveModel(null),
     tone: f.bot.tone,
     tone_suggestion: null,
     languages: ["en", "ta", "hi"],

@@ -29,7 +29,13 @@ export function checkEnv(env: Record<string, string | undefined> = process.env):
   need("NEXT_PUBLIC_SUPABASE_URL", "Supabase → Project Settings → API → Project URL (looks like https://abcdefghijklmnop.supabase.co)");
   need("NEXT_PUBLIC_SUPABASE_ANON_KEY", "Supabase → Project Settings → API keys → anon / publishable key");
   need("SUPABASE_SERVICE_ROLE_KEY", "Supabase → Project Settings → API keys → service_role / secret key (keep it server-only)");
-  need("ANTHROPIC_API_KEY", "console.anthropic.com → API Keys (starts with sk-ant-)");
+  const openaiCompat = ["nvidia", "gemini", "groq", "cerebras", "mistral", "github", "openrouter", "openai", "openai-compatible"].includes(v("LLM_PROVIDER").trim().toLowerCase());
+  if (openaiCompat) {
+    if (["LLM_API_KEY", "NVIDIA_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY", "GITHUB_TOKEN", "OPENROUTER_API_KEY"].every((k) => PLACEHOLDER.test(v(k))))
+      out.push({ name: "LLM_API_KEY", problem: v("LLM_API_KEY") ? "still a placeholder" : "missing", fix: "Gemini: aistudio.google.com/apikey · Groq: console.groq.com/keys · Cerebras: cloud.cerebras.ai · Mistral: console.mistral.ai/api-keys · GitHub: github.com/settings/personal-access-tokens · OpenRouter: openrouter.ai/keys" });
+    if (v("LLM_PROVIDER").trim().toLowerCase() === "openrouter" && !v("LLM_MODEL").trim())
+      out.push({ name: "LLM_API_KEY", problem: "OpenRouter needs a model", fix: "Set LLM_MODEL to a free model id from openrouter.ai/models?max_price=0 (ends in :free)" });
+  } else need("ANTHROPIC_API_KEY", "console.anthropic.com → API Keys (starts with sk-ant-), or set LLM_PROVIDER=nvidia with LLM_API_KEY");
   need("NEXT_PUBLIC_APP_URL", "http://localhost:3000 locally, your https domain in production");
   need("ADMIN_EMAILS", "the email address you sign in with");
 
@@ -50,7 +56,7 @@ export function checkEnv(env: Record<string, string | undefined> = process.env):
     else if (!service.startsWith("sb_secret_") && role !== "service_role") out.push({ name: "SUPABASE_SERVICE_ROLE_KEY", problem: "doesn't look like a Supabase service key", fix: "Copy the service_role (eyJ…) or secret (sb_secret_…) key" });
   }
   const ak = v("ANTHROPIC_API_KEY");
-  if (ak && !PLACEHOLDER.test(ak) && !/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(ak)) out.push({ name: "ANTHROPIC_API_KEY", problem: "doesn't look like an Anthropic key", fix: "It starts with sk-ant- and is ~100 characters" });
+  if (!openaiCompat && ak && !PLACEHOLDER.test(ak) && !/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(ak)) out.push({ name: "ANTHROPIC_API_KEY", problem: "doesn't look like an Anthropic key", fix: "It starts with sk-ant- and is ~100 characters" });
   const rk = v("RESEND_API_KEY");
   if (rk && !/^re_[A-Za-z0-9_]{10,}$/.test(rk)) out.push({ name: "RESEND_API_KEY", problem: "placeholder or malformed (optional)", fix: "resend.com → API Keys, or delete the line to run without lead emails" });
   const app = v("NEXT_PUBLIC_APP_URL");
@@ -58,7 +64,9 @@ export function checkEnv(env: Record<string, string | undefined> = process.env):
   return out;
 }
 
-const NON_BLOCKING = new Set(["RESEND_API_KEY", "ANTHROPIC_API_KEY"]);
+const NON_BLOCKING = new Set(["RESEND_API_KEY", "ANTHROPIC_API_KEY", "LLM_API_KEY"]);
+/** Env problems that mean the assistant can't reply. */
+export const AI_KEY_NAMES = ["ANTHROPIC_API_KEY", "LLM_API_KEY"];
 
 /** Problems that stop the dashboard and database from working (Supabase + URLs). */
 export const blockingProblems = (env?: Record<string, string | undefined>) => checkEnv(env).filter((p) => !NON_BLOCKING.has(p.name));

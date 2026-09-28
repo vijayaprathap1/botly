@@ -6,6 +6,8 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { checkEnv } from "../lib/env-check";
+import { openAiPing } from "../lib/llm/openai-compat";
+import { llmProvider, openaiCompat, providerLabel } from "../lib/llm/provider";
 
 for (const f of [".env.local", ".env"]) {
   if (!existsSync(f)) continue;
@@ -120,7 +122,15 @@ async function main() {
     }
   }
 
-  if (!bad_.includes("ANTHROPIC_API_KEY")) {
+  if (llmProvider() === "openai" && !bad_.includes("LLM_API_KEY")) {
+    const err = await openAiPing();
+    if (!err) ok(`${providerLabel()} works (model ${openaiCompat.model()})`);
+    else {
+      bad(`${providerLabel()} call failed: ${err}`, "Check LLM_API_KEY, LLM_MODEL and LLM_BASE_URL. Run `npm run llm:check` for a full tool-calling test.");
+      failures++;
+    }
+  }
+  if (llmProvider() === "anthropic" && !bad_.includes("ANTHROPIC_API_KEY")) {
     try {
       const r = await fetch("https://api.anthropic.com/v1/models?limit=1", {
         headers: { "x-api-key": process.env.ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01" },

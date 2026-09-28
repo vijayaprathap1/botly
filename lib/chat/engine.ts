@@ -6,6 +6,7 @@ import type { Retriever } from "../retrieval/retriever";
 import { toCard, verifyCustomer, type OrderProvider, type OrderStatusCard } from "../orders/types";
 import { detectLanguage } from "../language";
 import type { LlmClient, LlmMessage, TextPart, ToolResultPart, ToolUsePart } from "../llm/types";
+import { resolveModel } from "../llm/provider";
 import { dispatchNotice } from "../notify/dispatch";
 import type { Notifier } from "../notify/types";
 import { buildSystemPrompt } from "../prompts/assistant";
@@ -167,7 +168,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     language: outcome.language,
   });
   const knowledge = buildKnowledgeBlock(sources, config.knowledgeTokenCap);
-  const model = bot.model || config.defaultModel;
+  const model = resolveModel(bot.model || config.defaultModel);
 
   // Retrieval mode (P1 knowledge too big for one prompt): pinned policies + chunks for this question.
   let approvedKnowledgeText = knowledge.text;
