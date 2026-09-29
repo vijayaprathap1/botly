@@ -1,3 +1,5 @@
+import { stripTextToolCalls } from "@/lib/llm/text-tool-filter";
+import { ALL_TOOL_NAMES as TOOL_NAMES } from "@/lib/chat/tools";
 import { resolveAccess } from "@/lib/chat/access";
 import { SupabaseStore } from "@/lib/chat/supabase-store";
 import { json, preflight } from "@/lib/http";
@@ -41,7 +43,7 @@ async function handle(req: Request) {
     status: conv.status,
     hasLead: Boolean(conv.lead_id),
     messages: rows
-      .filter((m) => m.content.trim())
-      .map((m) => ({ role: m.role, content: m.content, at: m.created_at })),
+      .map((m) => ({ role: m.role, content: m.role === "assistant" ? stripTextToolCalls(m.content, TOOL_NAMES) : m.content, at: m.created_at }))
+      .filter((m) => m.content.trim()),
   });
 }

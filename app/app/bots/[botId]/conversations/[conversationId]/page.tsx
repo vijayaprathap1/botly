@@ -1,3 +1,5 @@
+import { stripTextToolCalls } from "@/lib/llm/text-tool-filter";
+import { ALL_TOOL_NAMES } from "@/lib/chat/tools";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MarkdownLite } from "@/components/markdown";
@@ -43,7 +45,7 @@ export default async function TranscriptPage({ params }: { params: Promise<{ bot
               ) : (
                 <>
                   <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-[15px] ${m.role === "user" ? "whitespace-pre-wrap rounded-br-sm bg-brand-600 text-white" : "rounded-bl-sm bg-zinc-100"}`}>
-                    {m.role === "assistant" ? (m.content ? <MarkdownLite text={m.content} /> : <i className="text-zinc-500">(no text)</i>) : m.content}
+                    {m.role === "assistant" ? (stripTextToolCalls(m.content, ALL_TOOL_NAMES) ? <MarkdownLite text={stripTextToolCalls(m.content, ALL_TOOL_NAMES)} /> : <i className="text-zinc-500">(no text)</i>) : m.content}
                   </div>
                   <div className="mt-0.5 px-1 text-[11px] text-zinc-500">
                     {fmtDateTime(m.created_at, tz)}

@@ -6,6 +6,7 @@
  */
 import type { LlmClient, LlmMessage, LlmRequest, LlmTurn, TextPart, ToolDef, ToolUsePart } from "./types";
 import { openaiCompat } from "./provider";
+import { parseTextToolCalls, TextToolFilter } from "./text-tool-filter";
 
 type OaiToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
 type OaiMessage =
@@ -66,29 +67,10 @@ function parseArgs(s: string): Record<string, unknown> {
  * and the raw JSON never reaches the visitor.
  */
 export function salvageTextToolCalls(text: string, toolNames: string[]): ToolUsePart[] | null {
-  let s = text.trim().replace(/^<\|python_tag\|>/, "").replace(/<\|eom_id\|>|<\|eot_id\|>$/g, "").trim();
-  s = s.replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim();
-  if (!s.startsWith("{") && !s.startsWith("[")) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(s);
-  } catch {
-    // "{...}; {...}" — several calls separated by semicolons or newlines
-    try {
-      parsed = JSON.parse(`[${s.replace(/}\s*[;\n]\s*{/g, "},{")}]`);
-    } catch {
-      return null;
-    }
-  }
-  const list = Array.isArray(parsed) ? parsed : [parsed];
-  const calls: ToolUsePart[] = [];
-  for (const item of list) {
-    if (!item || typeof item !== "object") return null;
-    const o = item as { name?: unknown; parameters?: unknown; arguments?: unknown };
-    if (typeof o.name !== "string" || !toolNames.includes(o.name)) return null;
-    const args = o.parameters ?? o.arguments ?? {};
-    calls.push({ type: "tool_use", id: `call_${crypto.randomUUID().slice(0, 12)}`, name: o.name, input: typeof args === "string" ? parseArgs(args) : (args as Record<string, unknown>) });
-  }
+  const t = text.trim();
+  // Only when the whole text is tool calls (used for non-streamed replies).
+  if (!/^(<\|python_tag\|>|```|\{|\[)/.test(t) && !toolNames.some((n) => t.startsWith(n))) return null;
+  const calls = parseTextToolCalls(t, toolNames);
   return calls.length ? calls : null;
 }
 
@@ -195,31 +177,19 @@ export class OpenAiCompatLlm implements LlmClient {
     if (!res.body) throw new Error("LLM API returned no stream");
 
     let text = "";
-    // Text that might be a tool call written as JSON is held back until we know.
-    let held = "";
-    let decided: "text" | "hold" | null = null;
     let firstTokenMs: number | null = null;
     let finish: string | null = null;
     const calls = new Map<number, { id: string; name: string; args: string }>();
     const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-
-    const emit = (t: string) => {
+    // Tool calls some models write as text are caught here and never shown.
+    const filter = new TextToolFilter(toolNames, (t) => {
       if (!t) return;
       if (firstTokenMs === null) firstTokenMs = Date.now() - started;
       onText(t);
-    };
+    });
     const onDelta = (t: string) => {
       text += t;
-      if (decided === "text") return emit(t);
-      held += t;
-      const lead = held.trimStart();
-      if (!lead) return;
-      if (/^(\{|\[|<\|python_tag\|>|```)/.test(lead) && toolNames.length) decided = "hold";
-      else {
-        decided = "text";
-        emit(held);
-        held = "";
-      }
+      filter.push(t);
     };
 
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -273,15 +243,10 @@ export class OpenAiCompatLlm implements LlmClient {
       .sort(([a], [b]) => a - b)
       .filter(([, c]) => c.name)
       .map(([, c]) => ({ type: "tool_use", id: c.id || `call_${crypto.randomUUID().slice(0, 12)}`, name: c.name, input: parseArgs(c.args) }));
-
-    let visibleText = text;
-    if (decided === "hold") {
-      const salvaged = toolUses.length ? null : salvageTextToolCalls(held, toolNames);
-      if (salvaged) {
-        toolUses = salvaged;
-        visibleText = text.slice(0, text.length - held.length);
-      } else emit(held);
-    }
+    const filtered = filter.end();
+    const visibleText = filtered.text;
+    // Structured calls win; text-written calls are used only when there are none (no duplicates).
+    if (!toolUses.length) toolUses = filtered.toolUses;
 
     const content: (TextPart | ToolUsePart)[] = [];
     if (visibleText.trim()) content.push({ type: "text", text: visibleText });

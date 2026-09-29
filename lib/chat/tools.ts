@@ -101,3 +101,6 @@ export function toolsForPlan(plan: Plan): ToolDef[] {
   const base = [TOOL_CAPTURE_LEAD, TOOL_HANDOFF, TOOL_REPORT_UNANSWERED, TOOL_SUGGEST_FOLLOWUPS];
   return plan === "growth" ? [...base, TOOL_LOOKUP_ORDER, TOOL_REQUEST_CALLBACK] : base;
 }
+
+/** Every tool name (used to strip tool calls a model wrote as text). */
+export const ALL_TOOL_NAMES = [TOOL_CAPTURE_LEAD, TOOL_HANDOFF, TOOL_REPORT_UNANSWERED, TOOL_SUGGEST_FOLLOWUPS, TOOL_LOOKUP_ORDER, TOOL_REQUEST_CALLBACK].map((t) => t.name);

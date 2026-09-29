@@ -24,6 +24,8 @@ const ICON_CHAT =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>';
 const ICON_CLOSE =
   '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const ICON_PERSON =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="8" r="4"/></svg>';
 const ICON_SEND =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
 
@@ -66,6 +68,8 @@ export class BotlyWidget {
   private input!: HTMLTextAreaElement;
   private sendBtn!: HTMLButtonElement;
   private counter!: HTMLDivElement;
+  private statusEl!: HTMLSpanElement;
+  private statusText = "";
   private nudgeEl: HTMLElement | null = null;
   private isOpen = false;
   private busy = false;
@@ -139,7 +143,13 @@ export class BotlyWidget {
     this.applyTheme();
     this.media.addEventListener?.("change", () => this.applyTheme());
 
-    this.launcher = h("button", { class: "launcher", type: "button", "aria-label": `Chat with ${this.cfg.assistantName}`, "aria-expanded": "false" }, icon(ICON_CHAT));
+    this.launcher = h(
+      "button",
+      { class: "launcher intro", type: "button", "aria-label": `Chat with ${this.cfg.assistantName}`, "aria-expanded": "false" },
+      h("span", { class: "li li-chat" }, icon(ICON_CHAT)),
+      h("span", { class: "li li-close" }, icon(ICON_CLOSE)),
+    );
+    window.setTimeout(() => this.launcher.classList.remove("intro"), 6000);
     this.launcher.addEventListener("click", () => (this.isOpen ? this.close() : this.open()));
     if (!this.opts.fullscreen) this.wrap.appendChild(this.launcher);
 
@@ -236,6 +246,7 @@ export class BotlyWidget {
   private buildPanel() {
     const c = this.cfg;
     const avatar = h("div", { class: "avatar", "aria-hidden": "true" });
+    const avatarWrap = h("div", { class: "avatar-wrap" }, avatar, c.isOpen ? h("i", { class: "online", "aria-hidden": "true" }) : null);
     if (c.avatarUrl && /^https:\/\//.test(c.avatarUrl)) avatar.append(h("img", { src: c.avatarUrl, alt: "" }));
     else avatar.textContent = (c.assistantName || "A").trim().charAt(0).toUpperCase();
 
@@ -245,12 +256,12 @@ export class BotlyWidget {
     const head = h(
       "div",
       { class: "head" },
-      avatar,
+      avatarWrap,
       h(
         "div",
         { class: "who" },
-        h("b", { id: titleId, text: `${c.assistantName} · ${c.business}` }),
-        h("span", { text: c.isOpen ? "Replies instantly" : "We're offline, I can still help" }),
+        h("b", { id: titleId, text: c.assistantName || "Assistant" }),
+        (this.statusEl = h("span", { class: "status", text: (this.statusText = `${c.business} · ${c.isOpen ? "Replies instantly" : "We're offline, I can still help"}`) })),
       ),
       closeBtn,
     );
@@ -270,14 +281,14 @@ export class BotlyWidget {
     this.input.addEventListener("input", () => this.onInput());
     this.sendBtn.addEventListener("click", () => this.submit());
 
-    const human = h("button", { class: "human", type: "button", text: "Talk to a person" });
+    const human = h("button", { class: "human", type: "button" }, icon(ICON_PERSON), h("span", { text: "Talk to a person" }));
     human.addEventListener("click", () => this.talkToPerson());
 
     const meta = h("div", { class: "meta" });
     if (c.showPoweredBy) meta.append(h("span", { text: "Powered by Botly" }));
     meta.append(h("a", { href: c.privacyUrl, target: "_blank", rel: "noopener noreferrer", text: "Privacy" }));
 
-    const foot = h("div", { class: "foot" }, human, h("div", { class: "composer" }, this.input, this.sendBtn), this.counter, meta);
+    const foot = h("div", { class: "foot" }, h("div", { class: "actions" }, human), h("div", { class: "composer" }, this.input, this.sendBtn), this.counter, meta);
 
     this.panel = h("div", { class: "panel", role: "dialog", "aria-modal": this.opts.fullscreen ? "false" : "true", "aria-labelledby": titleId }, head, this.list, this.chips, foot);
     this.panel.addEventListener("keydown", (e) => this.onPanelKey(e));
@@ -314,6 +325,14 @@ export class BotlyWidget {
     }
   }
 
+  private setBusy(busy: boolean) {
+    this.busy = busy;
+    this.panel?.classList.toggle("busy", busy);
+    if (this.statusEl) this.statusEl.textContent = busy ? "Typing" : this.statusText;
+    this.statusEl?.classList.toggle("is-typing", busy);
+    this.onInput();
+  }
+
   private onInput() {
     const el = this.input;
     el.style.height = "auto";
@@ -325,8 +344,9 @@ export class BotlyWidget {
 
   private renderChips(questions: string[]) {
     this.chips.replaceChildren();
-    for (const q of questions.slice(0, 4)) {
+    for (const [i, q] of questions.slice(0, 4).entries()) {
       const b = h("button", { class: "chip", type: "button", text: q });
+      b.style.animationDelay = `${i * 60}ms`;
       b.addEventListener("click", () => this.send(q));
       this.chips.append(b);
     }
@@ -369,7 +389,7 @@ export class BotlyWidget {
   }
 
   private addTyping() {
-    const row = h("div", { class: "row bot", "aria-label": "Assistant is typing" }, h("div", { class: "bubble typing" }, h("i"), h("i"), h("i")));
+    const row = h("div", { class: "row bot typing-row", role: "status", "aria-label": `${this.cfg.assistantName || "Assistant"} is typing` }, h("div", { class: "bubble typing" }, h("i"), h("i"), h("i")));
     this.list.append(row);
     this.scroll();
     return row;
@@ -410,8 +430,7 @@ export class BotlyWidget {
     text = text.slice(0, MAX_LEN).trim();
     if (!text || this.busy) return;
     if (!this.isOpen) this.open();
-    this.busy = true;
-    this.onInput();
+    this.setBusy(true);
     this.hadUserMessage = true;
     this.chips.replaceChildren();
     const userRow = existingRow ?? this.addUser(text);
@@ -424,13 +443,16 @@ export class BotlyWidget {
     const paint = () => {
       raf = 0;
       if (!bot) return;
-      bot.bubble.replaceChildren(renderBlocks(parseMarkdownLite(full), document));
+      // While streaming, close an unfinished **bold** so raw asterisks never flash.
+      const shown = (full.match(/\*\*/g)?.length ?? 0) % 2 ? full.replace(/\s+$/, "") + "**" : full;
+      bot.bubble.replaceChildren(renderBlocks(parseMarkdownLite(shown), document));
       this.scroll();
     };
     const ensureBot = () => {
       if (!bot) {
         typing.remove();
         bot = this.addBot("", new Date());
+        bot.bubble.classList.add("streaming");
       }
       return bot;
     };
@@ -454,9 +476,12 @@ export class BotlyWidget {
               this.saved.conversationId = data.conversationId;
               this.persist();
             } else if (event === "delta") {
-              ensureBot();
-              full += data.text;
-              if (!raf) raf = requestAnimationFrame(paint);
+              full += data.text ?? "";
+              // Don't open a bubble for whitespace alone (it would leave an empty gap).
+              if (bot || full.trim()) {
+                ensureBot();
+                if (!raf) raf = requestAnimationFrame(paint);
+              }
             } else if (event === "tool_card") {
               typing.remove();
               this.addCard(data as Card);
@@ -483,8 +508,12 @@ export class BotlyWidget {
       typing.remove();
       if (raf) cancelAnimationFrame(raf);
       paint();
-      this.busy = false;
-      this.onInput();
+      const b = bot as { row: HTMLElement; bubble: HTMLElement } | null;
+      if (b) {
+        b.bubble.classList.remove("streaming");
+        if (!full.trim()) b.row.remove();
+      }
+      this.setBusy(false);
     }
     if (failed && !full) {
       const retry = h("button", { class: "retry", type: "button", text: "Couldn't send. Retry" });
