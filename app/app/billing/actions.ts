@@ -25,12 +25,10 @@ export async function startCheckout(orgId: string, planId: "starter" | "growth")
   if (!rzpPlan) return { error: `The ${def.name} plan isn't configured yet. Please contact support.` };
   if (org.subscription_status === "active" && org.razorpay_plan_id === rzpPlan) return { error: `You're already on ${def.name}.` };
   try {
-    // Switching plans: cancel the old subscription at the end of its paid period.
-    if (org.razorpay_subscription_id && org.subscription_status === "active") {
-      await cancelSubscription(org.razorpay_subscription_id, true).catch(() => {});
-    }
-    const sub = await createSubscription({ planId: rzpPlan, orgId, email: org.billing_email ?? session.email });
-    await supabaseAdmin().from("organizations").update({ razorpay_subscription_id: sub.id, subscription_status: org.subscription_status === "active" ? "active" : "pending" }).eq("id", orgId);
+    // Nothing changes on our side until Razorpay confirms payment (verify route or webhook):
+    // a closed checkout must never cancel or replace the plan the customer already has.
+    const current = org.subscription_status === "active" && org.razorpay_subscription_id ? org.razorpay_subscription_id : undefined;
+    const sub = await createSubscription({ planId: rzpPlan, orgId, email: org.billing_email ?? session.email, replaces: current });
     return { subscriptionId: sub.id, keyId: process.env.RAZORPAY_KEY_ID!, email: org.billing_email ?? session.email, name: org.name, plan: def.name };
   } catch (e) {
     console.error("[billing] checkout", e instanceof Error ? e.message : e);

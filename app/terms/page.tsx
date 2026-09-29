@@ -21,7 +21,7 @@ export default function Terms() {
         <h2 className="mt-6 text-lg font-semibold">3. Free trial</h2>
         <p>New accounts get a free trial of {TRIAL.days} days including {TRIAL.replies} AI replies, once per email address. When the trial ends, the assistant shows your contact details instead of AI replies until you choose a paid plan.</p>
         <h2 className="mt-6 text-lg font-semibold">4. Plans, payment and cancellation</h2>
-        <p>Paid plans are billed monthly in advance through Razorpay, plus applicable GST. Plans renew automatically until cancelled. You can cancel any time from Billing; your plan stays active until the end of the paid period. Fees already paid are not refunded except where required by law. Monthly conversation limits apply per plan; when reached, the assistant shows your contact details until the next month or an upgrade.</p>
+        <p>Paid plans are billed monthly in advance through Razorpay, plus applicable GST. Plans renew automatically until cancelled. You can cancel any time from Billing; your plan stays active until the end of the paid period. Refunds follow our <a className="underline" href="/refund-policy">Refund and Cancellation Policy</a>. Monthly conversation limits apply per plan; when reached, the assistant shows your contact details until the next month or an upgrade.</p>
         <h2 className="mt-6 text-lg font-semibold">5. Data</h2>
         <p>Conversations and leads are stored to provide the service and are visible to you and to us for support. See the Privacy Policy. You can export your data and ask us to delete a visitor&apos;s data at any time.</p>
         <h2 className="mt-6 text-lg font-semibold">6. Availability and liability</h2>

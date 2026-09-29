@@ -38,12 +38,28 @@ export type RzpSubscription = {
   notes?: Record<string, string>;
 };
 
-export function createSubscription(args: { planId: string; orgId: string; email: string | null }) {
+/**
+ * `replaces` = the subscription this one takes over from when a paying customer switches
+ * plans. It is only cancelled once the new one is paid (see activateSubscription).
+ */
+export function createSubscription(args: { planId: string; orgId: string; email: string | null; replaces?: string }) {
   return call<RzpSubscription>("/subscriptions", {
     method: "POST",
-    body: { plan_id: args.planId, total_count: 120, quantity: 1, customer_notify: 1, notes: { org_id: args.orgId, email: args.email ?? "" } },
+    body: {
+      plan_id: args.planId,
+      total_count: 120,
+      quantity: 1,
+      customer_notify: 1,
+      notes: { org_id: args.orgId, email: args.email ?? "", replaces: args.replaces ?? "" },
+    },
   });
 }
+
+export type RzpPlan = { id: string; period: string; interval: number; item: { name: string; amount: number; currency: string } };
+export const fetchPlan = (id: string) => call<RzpPlan>(`/plans/${encodeURIComponent(id)}`);
+
+/** "test" or "live" from the key id, for setup messages. */
+export const razorpayMode = () => (process.env.RAZORPAY_KEY_ID?.startsWith("rzp_live_") ? "live" : "test");
 
 export const fetchSubscription = (id: string) => call<RzpSubscription>(`/subscriptions/${encodeURIComponent(id)}`);
 

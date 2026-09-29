@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { plans } from "../plans";
 import type { Plan } from "../types";
-import type { RzpSubscription } from "./razorpay";
+import { cancelSubscription, type RzpSubscription } from "./razorpay";
 
 /** Maps a Razorpay plan id back to our plan. */
 export function planForRazorpayPlan(planId: string): Plan | null {
@@ -44,5 +44,21 @@ export async function applySubscription(db: SupabaseClient, orgId: string, sub: 
         cancel_at_period_end: false,
       })
       .eq("id", orgId);
+  }
+}
+
+export const isPaidActive = (sub: RzpSubscription) => (sub.status === "active" || sub.status === "authenticated") && Boolean(planForRazorpayPlan(sub.plan_id));
+
+/**
+ * A newly paid subscription becomes the workspace's subscription. If it replaces an
+ * earlier one (plan switch), that one is cancelled now, so the customer is never billed
+ * for both. Only called after the payment signature or webhook signature is verified.
+ */
+export async function activateSubscription(db: SupabaseClient, orgId: string, sub: RzpSubscription): Promise<void> {
+  const { data: org } = await db.from("organizations").select("razorpay_subscription_id").eq("id", orgId).maybeSingle();
+  const previous = [sub.notes?.replaces, org?.razorpay_subscription_id].filter((id): id is string => Boolean(id) && id !== sub.id);
+  await applySubscription(db, orgId, sub);
+  for (const id of new Set(previous)) {
+    await cancelSubscription(id, false).catch((e) => console.warn("[billing] couldn't cancel replaced subscription", id, e instanceof Error ? e.message : e));
   }
 }

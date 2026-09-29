@@ -9,6 +9,11 @@ const good = {
   ANTHROPIC_API_KEY: "sk-ant-api03-" + "a".repeat(80),
   NEXT_PUBLIC_APP_URL: "http://localhost:3000",
   ADMIN_EMAILS: "me@example.com",
+  RAZORPAY_KEY_ID: "rzp_test_AbC123",
+  RAZORPAY_KEY_SECRET: "secret",
+  RAZORPAY_PLAN_STARTER: "plan_Starter1",
+  RAZORPAY_PLAN_GROWTH: "plan_Growth1",
+  RAZORPAY_WEBHOOK_SECRET: "hook",
 };
 
 describe("env check", () => {
@@ -37,5 +42,15 @@ describe("env check", () => {
   it("Resend placeholder is reported but not blocking", () => {
     expect(checkEnv({ ...good, RESEND_API_KEY: "re_..." })).toHaveLength(1);
     expect(blockingProblems({ ...good, RESEND_API_KEY: "re_..." })).toHaveLength(0);
+  });
+  it("payments: not set up, partly set up and malformed ids are feature problems", () => {
+    const none = { ...good, RAZORPAY_KEY_ID: "", RAZORPAY_KEY_SECRET: "", RAZORPAY_PLAN_STARTER: "", RAZORPAY_PLAN_GROWTH: "", RAZORPAY_WEBHOOK_SECRET: "" };
+    expect(featureProblems(none).map((p) => p.problem)).toEqual(["not set up"]);
+    expect(blockingProblems(none)).toHaveLength(0);
+    expect(featureProblems({ ...good, RAZORPAY_WEBHOOK_SECRET: "" })[0]!.problem).toBe("missing RAZORPAY_WEBHOOK_SECRET");
+    expect(featureProblems({ ...good, RAZORPAY_KEY_ID: "key_123", RAZORPAY_PLAN_GROWTH: "Growth" }).map((p) => p.problem)).toEqual([
+      "RAZORPAY_KEY_ID doesn't look like a Razorpay key id",
+      "RAZORPAY_PLAN_GROWTH isn't a plan id",
+    ]);
   });
 });

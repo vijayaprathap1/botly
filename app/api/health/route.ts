@@ -24,5 +24,5 @@ export async function GET(req: Request) {
   const deep = new URL(req.url).searchParams.get("deep") === "1" ? await checkLlmLive() : null;
   const aiOk = !features.some((f) => AI_KEY_NAMES.includes(f));
   const ok = envOk && dbOk && aiOk && (deep ? deep.ok : true);
-  return Response.json({ ok, config: envOk, database: dbOk, ai: aiOk, ai_provider: providerLabel(), email: !features.includes("RESEND_API_KEY"), ...(deep ? { ai_live: deep.ok, ai_error: deep.error, ai_model: resolveModel(null) } : {}) }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
+  return Response.json({ ok, config: envOk, database: dbOk, ai: aiOk, ai_provider: providerLabel(), email: !features.includes("RESEND_API_KEY"), payments: !features.includes("RAZORPAY"), ...(deep ? { ai_live: deep.ok, ai_error: deep.error, ai_model: resolveModel(null) } : {}) }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }

@@ -13,6 +13,8 @@ test.describe.configure({ mode: "serial" });
 
 let rzp: http.Server;
 const subs = new Map<string, { id: string; plan_id: string; status: string; current_start: number; current_end: number; notes: Record<string, string> }>();
+const cancelled: string[] = [];
+const lastSub = () => [...subs.keys()].pop()!;
 test.beforeAll(async () => {
   rzp = http.createServer((req, res) => {
     let b = "";
@@ -24,6 +26,11 @@ test.beforeAll(async () => {
         const s = { id: `sub_${Date.now()}`, plan_id: body.plan_id, status: "created", current_start: 0, current_end: 0, notes: body.notes };
         subs.set(s.id, s);
         return void res.end(JSON.stringify(s));
+      }
+      const c = /^\/v1\/subscriptions\/([^/]+)\/cancel$/.exec(req.url!);
+      if (req.method === "POST" && c && subs.has(c[1]!)) {
+        cancelled.push(c[1]!);
+        return void res.end(JSON.stringify({ ...subs.get(c[1]!)!, status: "cancelled" }));
       }
       const m = /^\/v1\/subscriptions\/([^/]+)$/.exec(req.url!);
       if (m && subs.has(m[1]!)) {
@@ -128,9 +135,13 @@ test("new user signs up, builds an assistant from website + social text, preview
   await expect(page.getByRole("heading", { name: "Plan and billing" })).toBeVisible();
   const { startCheckout } = { startCheckout: null }; void startCheckout;
   // Checkout.js can't load offline; exercise the server steps the button performs.
+  const before = subs.size;
   await page.getByRole("button", { name: "Choose Starter" }).click();
-  await expect.poll(async () => (await pool.query("select razorpay_subscription_id from organizations where id = $1", [bots[0].org_id])).rows[0].razorpay_subscription_id).toMatch(/^sub_/);
-  const subId = (await pool.query("select razorpay_subscription_id from organizations where id = $1", [bots[0].org_id])).rows[0].razorpay_subscription_id as string;
+  await expect.poll(() => subs.size).toBe(before + 1);
+  const subId = lastSub();
+  expect(subs.get(subId)!.notes.org_id).toBe(bots[0].org_id);
+  // Opening checkout alone changes nothing on our side.
+  expect((await pool.query("select plan from organizations where id = $1", [bots[0].org_id])).rows[0].plan).toBe("trial");
   const sig = createHmac("sha256", "local_rzp_secret").update(`pay_test_1|${subId}`).digest("hex");
   const bad = await page.request.post(`${APP}/api/billing/verify`, { data: { orgId: bots[0].org_id, razorpay_payment_id: "pay_test_1", razorpay_subscription_id: subId, razorpay_signature: "0".repeat(64) } });
   expect(bad.status()).toBe(400);
@@ -144,8 +155,27 @@ test("new user signs up, builds an assistant from website + social text, preview
   });
   expect(await again.text()).not.toContain("trial_ended");
 
+  // Plan switch: opening Growth checkout keeps Starter; paying for Growth cancels Starter.
+  await page.goto(`${APP}/app/billing`);
+  await page.getByRole("button", { name: "Choose Growth" }).click();
+  await expect.poll(() => subs.size).toBe(before + 2);
+  const growthId = lastSub();
+  expect(subs.get(growthId)!.notes.replaces).toBe(subId);
+  const mid = (await pool.query("select plan, razorpay_subscription_id from organizations where id = $1", [bots[0].org_id])).rows[0];
+  expect(mid).toEqual({ plan: "starter", razorpay_subscription_id: subId });
+  expect(cancelled).not.toContain(subId);
+  const gsig = createHmac("sha256", "local_rzp_secret").update(`pay_test_2|${growthId}`).digest("hex");
+  const gok = await page.request.post(`${APP}/api/billing/verify`, { data: { orgId: bots[0].org_id, razorpay_payment_id: "pay_test_2", razorpay_subscription_id: growthId, razorpay_signature: gsig } });
+  expect((await gok.json()).ok).toBe(true);
+  expect((await pool.query("select plan, razorpay_subscription_id from organizations where id = $1", [bots[0].org_id])).rows[0]).toEqual({ plan: "growth", razorpay_subscription_id: growthId });
+  expect(cancelled).toContain(subId);
+  // Late events for the replaced subscription are ignored.
+  const oldEvt = JSON.stringify({ event: "subscription.cancelled", payload: { subscription: { entity: { id: subId, plan_id: "plan_starter_test", status: "cancelled", current_start: 1, current_end: 2, notes: { org_id: bots[0].org_id } } } } });
+  await page.request.post(`${APP}/api/billing/webhook`, { headers: { "Content-Type": "application/json", "x-razorpay-signature": createHmac("sha256", "local_hook_secret").update(oldEvt).digest("hex"), "x-razorpay-event-id": "evt_old_cancel" }, data: oldEvt });
+  expect((await pool.query("select plan from organizations where id = $1", [bots[0].org_id])).rows[0].plan).toBe("growth");
+
   // Webhook: bad signature refused; a halted subscription stops the service; duplicates ignored.
-  const halted = JSON.stringify({ event: "subscription.halted", payload: { subscription: { entity: { id: subId, plan_id: "plan_starter_test", status: "halted", current_start: 1, current_end: 2, notes: { org_id: bots[0].org_id } } } } });
+  const halted = JSON.stringify({ event: "subscription.halted", payload: { subscription: { entity: { id: growthId, plan_id: "plan_growth_test", status: "halted", current_start: 1, current_end: 2, notes: { org_id: bots[0].org_id } } } } });
   expect((await page.request.post(`${APP}/api/billing/webhook`, { headers: { "Content-Type": "application/json", "x-razorpay-signature": "nope" }, data: halted })).status()).toBe(400);
   const hsig = createHmac("sha256", "local_hook_secret").update(halted).digest("hex");
   const w1 = await page.request.post(`${APP}/api/billing/webhook`, { headers: { "Content-Type": "application/json", "x-razorpay-signature": hsig, "x-razorpay-event-id": "evt_halt_1" }, data: halted });

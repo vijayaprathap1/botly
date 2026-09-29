@@ -38,7 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       ) : null}
       {problems.map((p) => (
         <div key={p.name} className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-[13px] text-amber-900">
-          <b>{p.name}</b> {p.problem}: {AI_KEY_NAMES.includes(p.name) ? "the assistant can't reply" : "lead emails won't be sent"}. {p.fix}.
+          <b>{p.name === "RAZORPAY" ? "Payments" : p.name}</b> {p.problem}: {AI_KEY_NAMES.includes(p.name) ? "the assistant can't reply" : p.name === "RAZORPAY" ? "customers can't upgrade" : "lead emails won't be sent"}. {p.fix}.
         </div>
       ))}
       {children}

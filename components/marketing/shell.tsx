@@ -36,7 +36,8 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
             <ul className="mt-3 space-y-2 text-zinc-500">
               <li><Link className="hover:text-zinc-900" href="/terms">Terms</Link></li>
               <li><Link className="hover:text-zinc-900" href="/privacy-policy">Privacy</Link></li>
-              {process.env.SUPPORT_EMAIL ? <li><a className="hover:text-zinc-900" href={`mailto:${process.env.SUPPORT_EMAIL}`}>{process.env.SUPPORT_EMAIL}</a></li> : null}
+              <li><Link className="hover:text-zinc-900" href="/refund-policy">Refunds &amp; cancellation</Link></li>
+              <li><Link className="hover:text-zinc-900" href="/contact">Contact</Link></li>
             </ul>
           </div>
         </div>

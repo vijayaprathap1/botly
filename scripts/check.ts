@@ -6,6 +6,8 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { checkEnv } from "../lib/env-check";
+import { fetchPlan, razorpayConfigured, razorpayMode } from "../lib/billing/razorpay";
+import { plans } from "../lib/plans";
 import { openAiPing } from "../lib/llm/openai-compat";
 import { llmProvider, openaiCompat, providerLabel } from "../lib/llm/provider";
 
@@ -121,6 +123,33 @@ async function main() {
       /* already reported above */
     }
   }
+
+  if (razorpayConfigured()) {
+    const mode = razorpayMode();
+    for (const p of [plans().starter, plans().growth]) {
+      const id = process.env[p.razorpayPlanEnv!];
+      if (!id) continue;
+      try {
+        const rp = await fetchPlan(id);
+        const rupees = rp.item.amount / 100;
+        const problems = [
+          rp.period !== "monthly" || rp.interval !== 1 ? `billed every ${rp.interval} ${rp.period}, expected monthly` : "",
+          rp.item.currency !== "INR" ? `currency ${rp.item.currency}, expected INR` : "",
+          rupees !== p.priceInr ? `₹${rupees} in Razorpay but the website shows ₹${p.priceInr} (set PRICE_${p.id.toUpperCase()}_INR=${rupees} or fix the plan)` : "",
+        ].filter(Boolean);
+        if (problems.length) {
+          bad(`Razorpay ${p.name} plan (${mode}): ${problems.join("; ")}`);
+          failures++;
+        } else ok(`Razorpay ${p.name} plan found (${mode} mode, ₹${rupees}/month)`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        bad(`Razorpay ${p.name} plan ${id}: ${msg}`, /401/.test(msg) ? "Key id/secret wrong, or test and live keys mixed up" : "Plan ids differ between test and live mode: copy it from the same mode as your keys");
+        failures++;
+      }
+    }
+    if (!process.env.RAZORPAY_WEBHOOK_SECRET) warn("RAZORPAY_WEBHOOK_SECRET is not set: renewals and failed payments won't reach Botly");
+    else ok(`Razorpay webhook secret set. Webhook URL: ${(process.env.NEXT_PUBLIC_APP_URL ?? "https://YOUR_DOMAIN").replace(/\/+$/, "")}/api/billing/webhook`);
+  } else warn("Razorpay not set up: customers can't upgrade yet (README → Payments)");
 
   if (llmProvider() === "openai" && !bad_.includes("LLM_API_KEY")) {
     const err = await openAiPing();

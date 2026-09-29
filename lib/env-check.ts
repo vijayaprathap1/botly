@@ -59,12 +59,23 @@ export function checkEnv(env: Record<string, string | undefined> = process.env):
   if (!openaiCompat && ak && !PLACEHOLDER.test(ak) && !/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(ak)) out.push({ name: "ANTHROPIC_API_KEY", problem: "doesn't look like an Anthropic key", fix: "It starts with sk-ant- and is ~100 characters" });
   const rk = v("RESEND_API_KEY");
   if (rk && !/^re_[A-Za-z0-9_]{10,}$/.test(rk)) out.push({ name: "RESEND_API_KEY", problem: "placeholder or malformed (optional)", fix: "resend.com → API Keys, or delete the line to run without lead emails" });
+  // Payments (optional until you sell): all four together, and test/live keys not mixed up.
+  const rzp = ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_PLAN_STARTER", "RAZORPAY_PLAN_GROWTH", "RAZORPAY_WEBHOOK_SECRET"];
+  const rzpSet = rzp.filter((k) => !PLACEHOLDER.test(v(k)));
+  if (rzpSet.length === 0) out.push({ name: "RAZORPAY", problem: "not set up", fix: "Customers can't pay yet. README → Payments (Razorpay)" });
+  else if (rzpSet.length < rzp.length) out.push({ name: "RAZORPAY", problem: `missing ${rzp.filter((k) => !rzpSet.includes(k)).join(", ")}`, fix: "README → Payments (Razorpay)" });
+  const kid = v("RAZORPAY_KEY_ID");
+  if (kid && !PLACEHOLDER.test(kid) && !/^rzp_(test|live)_[A-Za-z0-9]+$/.test(kid)) out.push({ name: "RAZORPAY", problem: "RAZORPAY_KEY_ID doesn't look like a Razorpay key id", fix: "It starts with rzp_test_ or rzp_live_" });
+  for (const k of ["RAZORPAY_PLAN_STARTER", "RAZORPAY_PLAN_GROWTH"]) {
+    const pv = v(k);
+    if (pv && !PLACEHOLDER.test(pv) && !/^plan_[A-Za-z0-9_]+$/.test(pv)) out.push({ name: "RAZORPAY", problem: `${k} isn't a plan id`, fix: "Copy the id that starts with plan_ from Subscriptions → Plans" });
+  }
   const app = v("NEXT_PUBLIC_APP_URL");
   if (app && !/^https?:\/\/[^/]+$/.test(app.replace(/\/+$/, ""))) out.push({ name: "NEXT_PUBLIC_APP_URL", problem: "not a bare URL", fix: "e.g. http://localhost:3000" });
   return out;
 }
 
-const NON_BLOCKING = new Set(["RESEND_API_KEY", "ANTHROPIC_API_KEY", "LLM_API_KEY"]);
+const NON_BLOCKING = new Set(["RESEND_API_KEY", "ANTHROPIC_API_KEY", "LLM_API_KEY", "RAZORPAY"]);
 /** Env problems that mean the assistant can't reply. */
 export const AI_KEY_NAMES = ["ANTHROPIC_API_KEY", "LLM_API_KEY"];
 
