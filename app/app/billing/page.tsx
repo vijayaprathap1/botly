@@ -5,6 +5,7 @@ import { fmtDate } from "@/lib/format";
 import { fmtInr, paidPlans, planDef, TRIAL, trialState } from "@/lib/plans";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { OrgRow } from "@/lib/types";
+import { BillingDetailsForm } from "./details-form";
 import { PlanButtons } from "./plan-buttons";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,10 @@ export default async function BillingPage() {
   if (!session.orgIds.length) redirect(session.isAdmin ? "/app/admin" : "/start");
   const orgId = session.orgIds[0]!;
   const { data } = await supabaseAdmin().from("organizations").select("*").eq("id", orgId).single();
-  const org = data as OrgRow & { razorpay_subscription_id: string | null };
+  const org = data as OrgRow;
+  // Clients you set up and bill yourself (plan set in Super admin, no Razorpay subscription).
+  const invoiced = org.plan !== "trial" && !org.razorpay_subscription_id;
+  const support = process.env.SUPPORT_EMAIL;
   const trial = trialState(org);
   const current = planDef(org.plan);
   const statusLabel: Record<string, string> = {
@@ -30,14 +34,16 @@ export default async function BillingPage() {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-lg font-semibold">{current.name}</span>
-              <Badge tone={org.subscription_status === "active" ? "green" : trial?.over || org.subscription_status === "halted" ? "red" : "blue"}>{statusLabel[org.subscription_status ?? "none"]}</Badge>
+              <Badge tone={invoiced || org.subscription_status === "active" ? "green" : trial?.over || org.subscription_status === "halted" ? "red" : "blue"}>{invoiced ? "Billed by invoice" : statusLabel[org.subscription_status ?? "none"]}</Badge>
             </div>
             <p className="mt-1 text-sm text-zinc-600">
               {trial
                 ? trial.over
                   ? "Your free trial has ended. Visitors see your contact details instead of AI replies until you choose a plan."
                   : `${trial.left} of ${trial.limit} AI replies and ${trial.daysLeft} days left in your free trial.`
-                : org.cancel_at_period_end
+                : invoiced
+                  ? `${fmtInr(current.priceInr)}/month + GST, billed by invoice. To change your plan, contact us${support ? ` at ${support}` : ""}.`
+                  : org.cancel_at_period_end
                   ? `Cancelled. Your plan stays active until ${org.current_period_end ? fmtDate(org.current_period_end, org.timezone) : "the end of this billing period"}.`
                   : org.current_period_end
                     ? `Renews on ${fmtDate(org.current_period_end, org.timezone)} · ${fmtInr(current.priceInr)}/month + GST.`
@@ -58,11 +64,22 @@ export default async function BillingPage() {
               {p.features.map((f) => <li key={f}>✓ {f}</li>)}
             </ul>
             <div className="mt-4">
-              <PlanButtons orgId={orgId} plan={p.id as "starter" | "growth"} current={org.plan === p.id && org.subscription_status === "active"} cancelling={Boolean(org.cancel_at_period_end)} />
+              {invoiced ? (
+                org.plan === p.id ? (
+                  <Badge tone="green">Your current plan</Badge>
+                ) : support ? (
+                  <a className="text-[13.5px] font-medium text-brand-700 underline underline-offset-4" href={`mailto:${support}?subject=${encodeURIComponent(`Switch ${org.name} to ${p.name}`)}`}>Ask to switch to {p.name}</a>
+                ) : null
+              ) : (
+                <PlanButtons orgId={orgId} plan={p.id as "starter" | "growth"} current={org.plan === p.id && org.subscription_status === "active"} cancelling={Boolean(org.cancel_at_period_end)} />
+              )}
             </div>
           </Card>
         ))}
       </div>
+      <Card title="Billing details" sub="Printed on your invoices. Add your GSTIN to claim input tax credit.">
+        <BillingDetailsForm orgId={orgId} billingName={org.billing_name ?? null} gstin={org.gstin ?? null} email={org.billing_email ?? session.email ?? null} />
+      </Card>
       <p className="text-xs text-zinc-500">
         Payments by Razorpay (UPI, cards, net banking). Prices exclude 18% GST. Cancel any time; your plan runs until the end of the paid month.
         The free trial includes {TRIAL.replies} AI replies over {TRIAL.days} days, once per email address.

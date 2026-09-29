@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   description: "An AI assistant trained on your website and social profiles. Answers customers in English, Tamil and Hindi, 24/7, and sends you leads on WhatsApp and email. One line to install.",
   robots: { index: true, follow: true },
   openGraph: { title: "Botly · AI customer support for Indian businesses", description: "Trained on your business. Answers in English, Tamil and Hindi. Leads to WhatsApp.", type: "website" },
+  twitter: { card: "summary_large_image" },
 };
 
 const STEPS = [

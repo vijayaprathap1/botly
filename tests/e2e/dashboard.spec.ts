@@ -116,7 +116,7 @@ test("admin: sign in, review bot, edit knowledge and settings, playground, conve
     await page.getByLabel("Website").fill("http://localhost:4173/site");
     await page.getByRole("button", { name: "Create and continue" }).click();
     await expect(page).toHaveURL(/\/onboarding$/);
-    await page.getByLabel("Draft FAQs, policy summary and tone with Claude").uncheck(); // needs ANTHROPIC_API_KEY
+    await page.getByLabel("Draft FAQs, policy summary and tone with AI").uncheck(); // needs ANTHROPIC_API_KEY
     await page.getByRole("button", { name: "Start" }).click();
     await expect(page.getByText("Done. Review and approve the drafts in Knowledge.")).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText("robots.txt found and respected")).toBeVisible();

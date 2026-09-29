@@ -7,6 +7,8 @@ import { fmtInt, fmtUsd } from "@/lib/format";
 import { quotaState } from "@/lib/quota";
 import { supabaseServer } from "@/lib/supabase/server";
 import type { BotWithOrg } from "@/lib/types";
+import { providerLabel } from "@/lib/llm/provider";
+import { trialState } from "@/lib/plans";
 
 export default async function ClientsPage() {
   const session = await requireSession();
@@ -22,7 +24,7 @@ export default async function ClientsPage() {
     <>
       <PageHeader
         title={session.isAdmin ? "Clients and bots" : "Your assistants"}
-        sub={session.isAdmin ? "This month, per bot. Cost is what Anthropic charges you." : undefined}
+        sub={session.isAdmin ? `This month, per bot. Cost is what ${providerLabel()} charges you (free tiers show $0).` : undefined}
         actions={session.isAdmin ? <Link href="/app/orgs/new" className={btn.primary}>New client</Link> : null}
       />
       {bots.length === 0 ? (
@@ -32,6 +34,7 @@ export default async function ClientsPage() {
           {bots.map((b) => {
             const m = metrics.get(b.id)!;
             const q = quotaState(m.conversations, m.quota);
+            const trial = trialState(b.org);
             return (
               <Link key={b.id} href={`/app/bots/${b.id}`} className="block rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-brand-600">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -46,12 +49,21 @@ export default async function ClientsPage() {
                   </div>
                 </div>
                 <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-5">
-                  <div>
-                    <dt className="text-zinc-500">Conversations</dt>
-                    <dd className={`font-medium tabular-nums ${q.state === "exceeded" ? "text-red-700" : q.state === "warning" ? "text-amber-700" : ""}`}>
-                      {fmtInt(m.conversations)} / {fmtInt(m.quota)}
-                    </dd>
-                  </div>
+                  {trial ? (
+                    <div>
+                      <dt className="text-zinc-500">Trial replies</dt>
+                      <dd className={`font-medium tabular-nums ${trial.over ? "text-red-700" : trial.left <= trial.limit * 0.2 ? "text-amber-700" : ""}`}>
+                        {fmtInt(trial.used)} of {fmtInt(trial.limit)}
+                      </dd>
+                    </div>
+                  ) : (
+                    <div>
+                      <dt className="text-zinc-500">Conversations</dt>
+                      <dd className={`font-medium tabular-nums ${q.state === "exceeded" ? "text-red-700" : q.state === "warning" ? "text-amber-700" : ""}`}>
+                        {fmtInt(m.conversations)} / {fmtInt(m.quota)}
+                      </dd>
+                    </div>
+                  )}
                   <div>
                     <dt className="text-zinc-500">Leads</dt>
                     <dd className="font-medium tabular-nums">{fmtInt(m.leads)}</dd>

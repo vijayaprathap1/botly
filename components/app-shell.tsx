@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   BarChart3, BookOpen, Bot, CreditCard, Crown, Download, Gauge, Inbox, LayoutGrid, LogOut, Menu, MessagesSquare,
-  Settings, Sparkles, UserRound, X,
+  Plus, Settings, Sparkles, UserRound, X,
 } from "lucide-react";
 import { Logo } from "./ui";
 
@@ -75,7 +75,7 @@ export function AppShell(p: ShellProps) {
           <div>
             <div className="mb-1.5 flex items-center gap-2 px-2">
               <span className="flex h-5 w-5 flex-none items-center justify-center rounded bg-brand-600 text-[10px] font-bold text-white">{(current?.business ?? "B").slice(0, 1).toUpperCase()}</span>
-              <span className="truncate text-[12px] font-semibold text-zinc-900">{current?.business ?? "Assistant"}</span>
+              <span className="truncate text-[12px] font-semibold text-zinc-900">{!p.isAdmin && p.bots.length > 1 ? current?.name ?? "Assistant" : current?.business ?? "Assistant"}</span>
             </div>
             <div className="space-y-0.5">
               {botNav.map((n) => <NavItem key={n.href} href={n.href} icon={n.icon} label={n.label} active={is(n.href, n.exact)} onClick={close} />)}
@@ -86,6 +86,7 @@ export function AppShell(p: ShellProps) {
           <div className="space-y-0.5">
             <div className="mb-1.5 px-2 text-[11px] font-medium uppercase tracking-wider text-zinc-400">Account</div>
             <NavItem href="/app/billing" icon={CreditCard} label="Plan & billing" active={is("/app/billing")} onClick={close} />
+            {!p.isAdmin ? <NavItem href="/app/assistants/new" icon={Plus} label="Add assistant" active={is("/app/assistants/new")} onClick={close} /> : null}
           </div>
         ) : null}
       </nav>
@@ -133,7 +134,7 @@ export function AppShell(p: ShellProps) {
         <Logo />
         {current ? <span className="ml-auto max-w-[45%] truncate text-[13px] text-zinc-500">{current.business}</span> : null}
       </header>
-      <main className="mx-auto w-full max-w-[1120px] px-4 py-6 sm:px-6 lg:px-10 lg:py-9">{p.children}</main>
+      <main className="mx-auto w-full min-w-0 max-w-[1120px] px-4 py-6 sm:px-6 lg:px-10 lg:py-9">{p.children}</main>
     </div>
   );
 }

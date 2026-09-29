@@ -36,6 +36,12 @@ export class ScriptedLlm implements LlmClient {
     }
 
     const userText = typeof last.content === "string" ? last.content : last.content.map((p) => ("text" in p ? p.text : "")).join(" ");
+    // Business profile request (profile-actions.ts): a short Markdown document from the knowledge.
+    if (req.system.some((b) => b.text.includes("business profile document in Markdown"))) {
+      const name = /Business name: (.+)/.exec(userText)?.[1]?.trim() ?? "Business";
+      const fact = /<knowledge>\s*([\s\S]*?)<\/knowledge>/.exec(userText)?.[1]?.split("\n").map((l) => l.trim()).find((l) => l.length > 20 && !l.startsWith("<")) ?? "Details from the knowledge.";
+      return this.say(`# ${name}\n\n## About\n- ${fact.slice(0, 160)}`, onText, started, usage);
+    }
     const lower = userText.toLowerCase();
     const tool = (name: string, input: Record<string, unknown>): ToolUsePart => ({ type: "tool_use", id: `toolu_${Math.random().toString(36).slice(2)}`, name, input });
 

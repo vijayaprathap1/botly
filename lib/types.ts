@@ -33,6 +33,12 @@ export type OrgRow = {
   profile_markdown?: string | null;
   profile_updated_at?: string | null;
   onboarding_status?: "pending" | "running" | "done" | "failed";
+  billing_email?: string | null;
+  billing_name?: string | null;
+  gstin?: string | null;
+  razorpay_subscription_id?: string | null;
+  trial_emails?: Record<string, string>;
+  created_by?: string | null;
 };
 
 export type BotRow = {

@@ -7,6 +7,7 @@ import { toCard, verifyCustomer, type OrderProvider, type OrderStatusCard } from
 import { detectLanguage } from "../language";
 import type { LlmClient, LlmMessage, TextPart, ToolResultPart, ToolUsePart } from "../llm/types";
 import { resolveModel } from "../llm/provider";
+import { reportError } from "../alerts";
 import { dispatchNotice } from "../notify/dispatch";
 import type { Notifier } from "../notify/types";
 import { buildSystemPrompt } from "../prompts/assistant";
@@ -301,6 +302,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     }
   } catch (e) {
     console.error("[chat] model call failed", bot.id, e instanceof Error ? `${e.name}: ${e.message}` : e);
+    outcome.jobs.push(() => reportError("AI replies failing", e, { bot: bot.name, business: bot.org.name, model }).then(() => undefined));
     emit("tool_card", { type: "fallback_contact", reason: "error", contact: bot.fallback_contact } satisfies ToolCard);
     emit("error", { code: "llm_error", message: "Sorry, I couldn't reply just now. You can reach the team directly." });
   }

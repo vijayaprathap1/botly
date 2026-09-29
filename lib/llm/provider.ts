@@ -14,17 +14,18 @@ export type Provider = "anthropic" | "openai";
  * Presets for OpenAI-compatible providers with a free tier. LLM_BASE_URL / LLM_MODEL
  * override them. Model ids change: confirm the current id in the provider's console.
  */
-const PRESETS: Record<string, { baseUrl: string; model: string; label: string; reasoningEffort?: string; fallbacks?: string[] }> = {
+/** requestTokens = the most one request may carry (input + output) on that provider's free tier. */
+const PRESETS: Record<string, { baseUrl: string; model: string; label: string; reasoningEffort?: string; fallbacks?: string[]; requestTokens?: number }> = {
   // Small-active-parameter MoE: fast on the shared free queue, strong multilingual (Tamil/Hindi), tool calling.
   nvidia: { baseUrl: "https://integrate.api.nvidia.com/v1", model: "qwen/qwen3-next-80b-a3b-instruct", label: "NVIDIA" },
   gemini: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-3.5-flash", label: "Google Gemini", reasoningEffort: "low", fallbacks: ["gemini-3.5-flash-lite", "gemini-3.8-flash"] },
-  groq: { baseUrl: "https://api.groq.com/openai/v1", model: "openai/gpt-oss-120b", label: "Groq", reasoningEffort: "low", fallbacks: ["openai/gpt-oss-20b"] },
+  groq: { baseUrl: "https://api.groq.com/openai/v1", model: "openai/gpt-oss-120b", label: "Groq", reasoningEffort: "low", fallbacks: ["openai/gpt-oss-20b"], requestTokens: 7500 },
   // Fastest (wafer-scale). Free trial credit; pick any model in their catalog.
   cerebras: { baseUrl: "https://api.cerebras.ai/v1", model: "gpt-oss-120b", label: "Cerebras", reasoningEffort: "low" },
   // Free "Experiment" plan (may train on data). Small = fast, tool calling, multilingual.
   mistral: { baseUrl: "https://api.mistral.ai/v1", model: "mistral-small-latest", label: "Mistral" },
   // Free with a GitHub account (fine-grained token with "Models: read"). Small per-request limits.
-  github: { baseUrl: "https://models.github.ai/inference", model: "openai/gpt-4.1-mini", label: "GitHub Models" },
+  github: { baseUrl: "https://models.github.ai/inference", model: "openai/gpt-4.1-mini", label: "GitHub Models", requestTokens: 8000 },
   // OpenRouter has no safe default: set LLM_MODEL to a model id ending in ":free".
   openrouter: { baseUrl: "https://openrouter.ai/api/v1", model: "", label: "OpenRouter" },
 };
@@ -91,4 +92,25 @@ export function providerLabel(): string {
   if (llmProvider() === "anthropic") return "Anthropic";
   const url = openaiCompat.baseUrl();
   return Object.values(PRESETS).find((p) => url === p.baseUrl)?.label ?? "OpenAI-compatible API";
+}
+
+/** The company that processes conversations, for privacy notices ("an AI model from …"). */
+export function aiProcessorName(): string {
+  const label = providerLabel();
+  if (label === "Google Gemini") return "Google (Gemini)";
+  if (label === "GitHub Models") return "GitHub (Microsoft)";
+  return label === "OpenAI-compatible API" ? "our AI provider" : label;
+}
+
+/**
+ * Largest request (input + output tokens) the active provider accepts, or null when it
+ * is large enough not to matter. LLM_REQUEST_TOKEN_LIMIT overrides (0 = no limit).
+ */
+export function requestTokenLimit(): number | null {
+  const raw = process.env.LLM_REQUEST_TOKEN_LIMIT;
+  if (raw !== undefined && raw.trim() !== "") {
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+  }
+  return llmProvider() === "openai" ? (preset()?.requestTokens ?? null) : null;
 }

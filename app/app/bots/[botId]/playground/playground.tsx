@@ -176,9 +176,11 @@ export function Playground(props: { botKey: string; testToken: string; testUrl: 
             <CopyButton text={props.testUrl} label="Copy private test link" />
             <CopyButton text={props.snippet} label="Copy install snippet" />
           </div>
-          <p className="mt-2 text-xs text-zinc-500">
-            Session: p50 first token <b>{p50 != null ? `${p50} ms` : "—"}</b> over {firstTokens.length} replies · total ${totalCost.toFixed(4)}
-          </p>
+          {props.isAdmin ? (
+            <p className="mt-2 text-xs text-zinc-500">
+              Session: p50 first token <b>{p50 != null ? `${p50} ms` : "—"}</b> over {firstTokens.length} replies · total ${totalCost.toFixed(4)}
+            </p>
+          ) : null}
         </Card>
         {props.isAdmin === false ? (
           <Card title="Tips">

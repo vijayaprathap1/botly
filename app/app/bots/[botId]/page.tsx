@@ -82,7 +82,7 @@ export default async function BotOverview({ params, searchParams }: { params: Pr
           <Card title="Try your assistant" sub="Exactly what visitors see. Preview replies count toward your plan." actions={<a className={btn.ghost} href={testUrl} target="_blank" rel="noreferrer">Full screen ↗</a>}>
             <iframe title="Assistant preview" src={`/t/${bot.test_token}`} className="h-[540px] w-full rounded-lg border border-zinc-200 bg-zinc-50" />
           </Card>
-          <ProfileCard botId={bot.id} markdown={bot.org.profile_markdown ?? null} businessName={bot.org.name} status={bot.org.onboarding_status ?? "done"} />
+          <ProfileCard botId={bot.id} markdown={bot.org.profile_markdown ?? null} businessName={bot.org.name} status={bot.org.onboarding_status ?? "done"} approved={approved ?? 0} />
         </div>
       ) : null}
 

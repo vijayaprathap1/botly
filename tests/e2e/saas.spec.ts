@@ -40,7 +40,12 @@ test.beforeAll(async () => {
       res.writeHead(404).end("{}");
     });
   });
-  await new Promise<void>((r) => rzp.listen(54360, r));
+  // Desktop and mobile projects run in parallel workers: only one can own the port.
+  // The payment steps run on desktop only, so a second listener is simply skipped.
+  await new Promise<void>((r) => {
+    rzp.once("error", () => r());
+    rzp.listen(54360, r);
+  });
 });
 test.afterAll(async () => {
   rzp.close();

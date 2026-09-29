@@ -39,6 +39,18 @@ export default async function ConversationsPage({ params, searchParams }: { para
     id: string; created_at: string; last_message_at: string | null; language: string | null; status: string; message_count: number;
     page_title: string | null; page_url: string | null; is_test: boolean; had_unanswered: boolean; lead: { name: string; phone: string } | null;
   }>;
+  // First visitor question per conversation: what owners scan for.
+  const first = new Map<string, string>();
+  if (rows.length) {
+    const { data: firstMsgs } = await db
+      .from("messages")
+      .select("conversation_id, content, created_at")
+      .in("conversation_id", rows.map((r) => r.id))
+      .eq("role", "user")
+      .order("created_at", { ascending: true })
+      .limit(rows.length * 20);
+    for (const m of (firstMsgs ?? []) as { conversation_id: string; content: string }[]) if (!first.has(m.conversation_id)) first.set(m.conversation_id, m.content);
+  }
   const base = `/app/bots/${bot.id}/conversations`;
   const qs = (extra: Partial<SP>) => new URLSearchParams(Object.entries({ ...sp, ...extra }).filter(([, v]) => v) as [string, string][]).toString();
 
@@ -85,7 +97,10 @@ export default async function ConversationsPage({ params, searchParams }: { para
               <li key={c.id}>
                 <Link href={`${base}/${c.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3 hover:bg-zinc-50">
                   <span className="w-28 flex-none text-sm tabular-nums text-zinc-600">{fmtDateTime(c.last_message_at ?? c.created_at, bot.org.timezone)}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm">{c.page_title || c.page_url || "—"}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-medium text-zinc-900">{first.get(c.id) ?? (c.lead ? "Asked to talk to a person" : "No message")}</span>
+                    <span className="block truncate text-[12px] text-zinc-500">{c.page_title || c.page_url || "—"}</span>
+                  </span>
                   <span className="flex flex-wrap gap-1">
                     {c.language ? <Badge>{LANGUAGE_LABEL[c.language as Lang] ?? c.language}</Badge> : null}
                     {c.lead ? <Badge tone="green">lead: {c.lead.name}</Badge> : null}

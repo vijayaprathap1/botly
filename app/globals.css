@@ -101,3 +101,11 @@ input[type="file"]::file-selector-button:hover {
   background: var(--color-zinc-50);
   border-color: var(--color-zinc-300);
 }
+
+/* Grid cells may shrink below their content (long code lines, wide tables scroll
+   inside their own card instead of widening the page on phones). */
+@layer base {
+  .grid > * {
+    min-width: 0;
+  }
+}

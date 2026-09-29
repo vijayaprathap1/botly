@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { MarketingShell } from "@/components/marketing/shell";
+import { aiProcessorName } from "@/lib/llm/provider";
 
 export const metadata: Metadata = { title: "Privacy Policy · Botly", robots: { index: true, follow: true } };
 
@@ -22,7 +23,7 @@ export default function PrivacyPolicy() {
         <h2 className="mt-6 text-lg font-semibold">Why we use it</h2>
         <p>To provide and improve the service, bill you, keep it secure, and contact you about your account. We don&apos;t sell personal data.</p>
         <h2 className="mt-6 text-lg font-semibold">Who processes it</h2>
-        <p>Supabase (database and sign-in), Vercel (hosting), Anthropic (generating AI replies), Resend (email), Meta WhatsApp (lead alerts, if enabled) and Razorpay (payments). Data may be processed outside India by these providers.</p>
+        <p>Supabase (database and sign-in), Vercel (hosting), {aiProcessorName()} (generating AI replies), Resend (email), Meta WhatsApp (lead alerts, if enabled) and Razorpay (payments). Data may be processed outside India by these providers.</p>
         <h2 className="mt-6 text-lg font-semibold">How long we keep it</h2>
         <p>Conversations and leads are kept for 12 months by default (you can shorten this). Account data is kept while your account is open and deleted within 90 days of closure, except records we must keep by law.</p>
         <h2 className="mt-6 text-lg font-semibold">Your rights</h2>

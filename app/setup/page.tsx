@@ -33,7 +33,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
       ) : (
         <p className="mt-2 text-zinc-600">Settings look right. Run <code className="rounded bg-zinc-100 px-1">npm run check</code> to test the connections, or go to <a className="underline" href="/app">the dashboard</a>.</p>
       )}
-      <p className="mt-6 text-sm text-zinc-500">Tip: <code className="rounded bg-zinc-100 px-1">npm run check</code> also verifies the database migrations, row-level security, and your Anthropic and Resend keys.</p>
+      <p className="mt-6 text-sm text-zinc-500">Tip: <code className="rounded bg-zinc-100 px-1">npm run check</code> also verifies the database migrations, row-level security, and your AI provider and Resend keys.</p>
     </main>
   );
 }

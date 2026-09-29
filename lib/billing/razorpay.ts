@@ -42,7 +42,7 @@ export type RzpSubscription = {
  * `replaces` = the subscription this one takes over from when a paying customer switches
  * plans. It is only cancelled once the new one is paid (see activateSubscription).
  */
-export function createSubscription(args: { planId: string; orgId: string; email: string | null; replaces?: string }) {
+export function createSubscription(args: { planId: string; orgId: string; email: string | null; replaces?: string; gstin?: string; billingName?: string }) {
   return call<RzpSubscription>("/subscriptions", {
     method: "POST",
     body: {
@@ -50,7 +50,7 @@ export function createSubscription(args: { planId: string; orgId: string; email:
       total_count: 120,
       quantity: 1,
       customer_notify: 1,
-      notes: { org_id: args.orgId, email: args.email ?? "", replaces: args.replaces ?? "" },
+      notes: { org_id: args.orgId, email: args.email ?? "", replaces: args.replaces ?? "", gstin: args.gstin ?? "", billing_name: args.billingName ?? "" },
     },
   });
 }

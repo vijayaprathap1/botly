@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Download, FileText, PenLine } from "lucide-react";
 import { btn, Card } from "@/components/ui";
+import { WriteProfileButton } from "./profile-write";
 
 /** Minimal, safe Markdown → React for the business profile (headings, bullets, paragraphs). */
 function ProfileDoc({ markdown }: { markdown: string }) {
@@ -25,7 +26,7 @@ function ProfileDoc({ markdown }: { markdown: string }) {
 }
 
 /** The business profile document compiled at sign-up (stored on the organization and as knowledge). */
-export function ProfileCard({ botId, markdown, businessName, status }: { botId: string; markdown: string | null; businessName: string; status: string }) {
+export function ProfileCard({ botId, markdown, businessName, status, approved = 0 }: { botId: string; markdown: string | null; businessName: string; status: string; approved?: number }) {
   const download = markdown ? `data:text/markdown;charset=utf-8,${encodeURIComponent(markdown)}` : null;
   return (
     <Card
@@ -48,10 +49,17 @@ export function ProfileCard({ botId, markdown, businessName, status }: { botId: 
           {status === "running" || status === "pending" ? (
             <p className="mt-2 text-[13.5px] text-zinc-600">Being written… refresh in a minute.</p>
           ) : (
-            <>
-              <p className="mt-2 max-w-xs text-[13.5px] text-zinc-600">No profile yet. Import your website or add details so the assistant has facts to answer from.</p>
-              <Link className={`${btn.secondary} mt-3`} href={`/app/bots/${botId}/onboarding`}>Import details</Link>
-            </>
+            approved > 0 ? (
+              <>
+                <p className="mt-2 max-w-xs text-[13.5px] text-zinc-600">No profile yet. Your assistant already has {approved} approved facts: turn them into a one-page profile you can check and share.</p>
+                <WriteProfileButton botId={botId} />
+              </>
+            ) : (
+              <>
+                <p className="mt-2 max-w-xs text-[13.5px] text-zinc-600">No profile yet. Import your website or add details so the assistant has facts to answer from.</p>
+                <Link className={`${btn.secondary} mt-3`} href={`/app/bots/${botId}/onboarding`}>Import details</Link>
+              </>
+            )
           )}
         </div>
       )}

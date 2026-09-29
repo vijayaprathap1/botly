@@ -1,4 +1,4 @@
-import { resolveModel } from "./llm/provider";
+import { requestTokenLimit, resolveModel } from "./llm/provider";
 
 /** Server-side configuration read from the environment (never sent to the browser). */
 export type ModelPricing = { input: number; output: number; cache_write: number; cache_read: number };
@@ -32,7 +32,10 @@ export const config = {
     return resolveModel(null);
   },
   get knowledgeTokenCap() {
-    return int("KNOWLEDGE_TOKEN_CAP", 25_000);
+    // Small free tiers (e.g. Groq ~8k tokens a minute) can't take 25k of knowledge per
+    // message: leave room for the prompt, history and the reply.
+    const limit = requestTokenLimit();
+    return int("KNOWLEDGE_TOKEN_CAP", limit ? Math.max(2_000, limit - 3_500) : 25_000);
   },
   get visitorLimitPer10Min() {
     return int("RATE_LIMIT_VISITOR_PER_10MIN", 20);

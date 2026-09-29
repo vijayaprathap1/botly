@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { setLeadStatus } from "@/app/app/actions";
 import { AutoSubmitSelect } from "@/components/client";
-import { Badge, btn, Card, Empty } from "@/components/ui";
+import { Badge, btn, Card, Empty, inputClass } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { getBot } from "@/lib/dashboard";
 import { fmtDateTime } from "@/lib/format";
@@ -11,7 +11,7 @@ import { whatsappLink } from "@/lib/validation/phone";
 
 const STATUSES = ["new", "contacted", "won", "lost"] as const;
 
-export default async function LeadsPage({ params, searchParams }: { params: Promise<{ botId: string }>; searchParams: Promise<{ status?: string }> }) {
+export default async function LeadsPage({ params, searchParams }: { params: Promise<{ botId: string }>; searchParams: Promise<{ status?: string; q?: string; from?: string; to?: string }> }) {
   const { botId } = await params;
   const sp = await searchParams;
   await requireSession();
@@ -19,6 +19,11 @@ export default async function LeadsPage({ params, searchParams }: { params: Prom
   const db = await supabaseServer();
   let q = db.from("leads").select("*").eq("bot_id", bot.id);
   if (sp.status && (STATUSES as readonly string[]).includes(sp.status)) q = q.eq("status", sp.status);
+  const day = /^\d{4}-\d{2}-\d{2}$/;
+  if (sp.from && day.test(sp.from)) q = q.gte("created_at", new Date(sp.from).toISOString());
+  if (sp.to && day.test(sp.to)) q = q.lt("created_at", new Date(new Date(sp.to).getTime() + 86_400_000).toISOString());
+  const term = (sp.q ?? "").trim().replace(/[%,()*]/g, " ").slice(0, 80);
+  if (term) q = q.or(`name.ilike.%${term}%,phone.ilike.%${term}%,email.ilike.%${term}%,need.ilike.%${term}%`);
   const { data } = await q.order("created_at", { ascending: false }).limit(300);
   const leads = (data ?? []) as LeadRow[];
   const base = `/app/bots/${bot.id}/leads`;
@@ -27,7 +32,7 @@ export default async function LeadsPage({ params, searchParams }: { params: Prom
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-1.5 text-sm">
         {[undefined, ...STATUSES].map((s) => (
-          <Link key={s ?? "all"} href={s ? `${base}?status=${s}` : base} className={`rounded-full px-3 py-1 ${sp.status === s ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"}`}>
+          <Link key={s ?? "all"} href={`${base}?${new URLSearchParams(Object.entries({ q: sp.q, from: sp.from, to: sp.to, status: s }).filter(([, v]) => v) as [string, string][]).toString()}`} className={`rounded-full px-3 py-1 ${sp.status === s ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"}`}>
             {s ?? "All"}
           </Link>
         ))}
@@ -35,6 +40,13 @@ export default async function LeadsPage({ params, searchParams }: { params: Prom
           Export CSV
         </a>
       </div>
+      <form className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_150px_auto]" action={base}>
+        {sp.status ? <input type="hidden" name="status" value={sp.status} /> : null}
+        <input name="q" defaultValue={sp.q ?? ""} placeholder="Search name, phone, email or need" aria-label="Search leads" className={inputClass} />
+        <input type="date" name="from" defaultValue={sp.from ?? ""} aria-label="From date" className={inputClass} />
+        <input type="date" name="to" defaultValue={sp.to ?? ""} aria-label="To date" className={inputClass} />
+        <button className={btn.secondary}>Search</button>
+      </form>
       {leads.length === 0 ? (
         <Empty title="No leads yet">When a visitor wants to buy or asks for a person, their details land here and in your email.</Empty>
       ) : (

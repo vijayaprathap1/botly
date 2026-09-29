@@ -153,6 +153,19 @@ test("client access: owner sees only their business, no cost, can suggest answer
   await expect(owner.getByRole("heading", { level: 1, name: "Ananya Handlooms" })).toBeVisible();
   await expect(owner.getByText("Meenakshi Silks")).toHaveCount(0);
   await expect(owner.getByText("AI cost")).toHaveCount(0);
+  // Phone layout: nothing wider than the screen. Business profile written from approved knowledge.
+  expect(await owner.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  await pool.query("update organizations set profile_markdown = null where id = (select org_id from bots where id = $1)", [BOT]);
+  await owner.reload();
+  await owner.getByRole("button", { name: "Write it from your knowledge" }).click();
+  await expect(owner.getByRole("heading", { name: "Ananya Handlooms", level: 3 })).toBeVisible();
+  // Add assistant: the page states the plan's allowance and how many are used.
+  await owner.goto(`${APP}/app/assistants/new`);
+  await expect(owner.getByText(/plan includes \d assistants?; you're using 1/)).toBeVisible();
+  // Invoiced client: billing shows the current plan, no checkout buttons.
+  await owner.goto(`${APP}/app/billing`);
+  await expect(owner.getByText("Billed by invoice").first()).toBeVisible();
+  await expect(owner.getByRole("button", { name: "Choose Starter" })).toHaveCount(0);
   // Clients edit their own assistant, but never platform settings (model, plan, quota).
   await owner.goto(`${APP}/app/bots/${BOT}/settings`);
   await expect(owner.getByLabel("Greeting")).toBeVisible();

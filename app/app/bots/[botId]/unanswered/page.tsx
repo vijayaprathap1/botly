@@ -31,12 +31,15 @@ export default async function UnansweredPage({ params, searchParams }: { params:
     .limit(200);
   const rows = (data ?? []) as Q[];
   const base = `/app/bots/${bot.id}/unanswered`;
+  // Self-serve customers run their own assistant: they answer directly. Clients you
+  // set up (done-for-you) suggest, and you approve.
+  const canAnswer = session.isAdmin || Boolean(bot.org.self_serve);
 
   return (
     <div className="grid gap-4">
       <PageHeader level={2}
         title="Unanswered questions"
-        sub={session.isAdmin ? "Questions the assistant couldn't answer, grouped when similar. Answer once and it's added to the knowledge." : "Questions the assistant couldn't answer. Suggest an answer and we'll add it."}
+        sub={canAnswer ? "Questions the assistant couldn't answer, grouped when similar. Answer once and it's added to the knowledge." : "Questions the assistant couldn't answer. Suggest an answer and we'll add it."}
       />
       <div className="flex gap-1.5 text-sm">
         {["open", "answered", "ignored"].map((s) => (
@@ -64,13 +67,13 @@ export default async function UnansweredPage({ params, searchParams }: { params:
                   ) : null}
                 </p>
               </div>
-              {session.isAdmin && q.status === "open" ? (
+              {canAnswer && q.status === "open" ? (
                 <form action={setUnansweredStatus.bind(null, bot.id)}>
                   <input type="hidden" name="id" value={q.id} />
                   <input type="hidden" name="status" value="ignored" />
                   <SubmitButton className={btn.ghost} pendingText="…">Ignore</SubmitButton>
                 </form>
-              ) : session.isAdmin && q.status === "ignored" ? (
+              ) : canAnswer && q.status === "ignored" ? (
                 <form action={setUnansweredStatus.bind(null, bot.id)}>
                   <input type="hidden" name="id" value={q.id} />
                   <input type="hidden" name="status" value="open" />
@@ -83,7 +86,7 @@ export default async function UnansweredPage({ params, searchParams }: { params:
                 <b>Client suggested:</b> {q.suggested_answer}
               </p>
             ) : null}
-            {q.status === "open" ? <AnswerForm botId={bot.id} q={q} isAdmin={session.isAdmin} /> : null}
+            {q.status === "open" ? <AnswerForm botId={bot.id} q={q} isAdmin={canAnswer} /> : null}
           </Card>
         ))
       )}

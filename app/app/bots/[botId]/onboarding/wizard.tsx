@@ -67,7 +67,7 @@ export function OnboardingWizard({ botId, defaultUrl, maxPages }: { botId: strin
             <input id="pages" type="number" min={1} max={100} className={inputClass} value={pages} onChange={(e) => setPages(Number(e.target.value))} />
           </Field>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} /> Draft FAQs, policy summary and tone with Claude
+            <input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} /> Draft FAQs, policy summary and tone with AI
           </label>
           <button className={btn.primary} disabled={running}>
             {running ? "Working…" : "Start"}

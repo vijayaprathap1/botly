@@ -79,6 +79,7 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
         products,
         ownerNotes: o.ownerNotes,
         model: process.env.ONBOARDING_MODEL || bot.model || config.defaultModel,
+        onProgress: (message) => send({ stage: "drafting", message }),
       });
       const drafts = [
         ...d.faqs.map((f) => stamp({ type: "faq", title: f.question.slice(0, 200), url: f.source_url ?? null, content: `Q: ${f.question}\nA: ${f.answer}` })),
