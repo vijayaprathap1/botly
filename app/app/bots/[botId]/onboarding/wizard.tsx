@@ -81,7 +81,7 @@ export function OnboardingWizard({ botId, defaultUrl, maxPages, selfServe = fals
       </Card>
       <Card title="2. Progress">
         {events.length === 0 ? (
-          <p className="text-sm text-zinc-600">Usually 1–3 minutes for 40 pages. Keep this tab open until it finishes.</p>
+          <p className="text-sm text-zinc-600">Usually 1–3 minutes for 40 pages. Progress shows here; if you leave this page the import still finishes.</p>
         ) : (
           <>
             <div className="mb-3 h-2 overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>

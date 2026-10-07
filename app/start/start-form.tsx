@@ -85,7 +85,7 @@ export function StartForm({ email }: { email: string }) {
     return (
       <Card title={next ? "Step 2 of 2 · Almost there" : "Step 2 of 2 · Building your assistant"}>
         <p className="text-sm text-zinc-600">
-          {next ? "Your assistant was created. A few things need your attention:" : "Reading your pages, writing FAQs and your business profile, then running safety checks. Keep this tab open."}
+          {next ? "Your assistant was created. A few things need your attention:" : "Reading your pages, writing FAQs and your business profile, then running safety checks. This can take a few minutes; if you close this tab it still finishes, and you'll find the result in your dashboard."}
         </p>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-label="Progress">
           <div className="h-full rounded-full bg-brand-600 transition-all" style={{ width: `${next || last?.stage === "done" ? 100 : last?.stage === "checking" || last?.stage === "live" || last?.stage === "warn" ? 90 : last?.stage === "drafting" || last?.stage === "drafted" ? 70 : Math.min(60, 10 + pages * 4)}%` }} />
