@@ -1,16 +1,34 @@
+import { brandEmail } from "./layout";
 import type { LeadNotice, Notifier, SendResult } from "./types";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 export function renderLeadEmail(n: LeadNotice): { subject: string; html: string; text: string } {
   if (n.kind === "quota_warning" && n.quota) {
-    const subject = `${n.businessName}: chat assistant at ${Math.round((n.quota.used / n.quota.limit) * 100)}% of this month's conversations`;
-    const text = `${n.botName} has used ${n.quota.used} of ${n.quota.limit} conversations this month. At 100% the widget shows your contact details instead of AI replies until the month resets or the plan is upgraded.`;
-    return { subject, text, html: `<p>${esc(text)}</p>` };
+    const pct = Math.round((n.quota.used / n.quota.limit) * 100);
+    const subject = `${n.businessName}: chat assistant at ${pct}% of this month's conversations`;
+    const { html, text } = brandEmail({
+      tone: "warning",
+      badge: "&#128200;",
+      eyebrow: "Usage heads-up",
+      preheader: `${n.quota.used} of ${n.quota.limit} conversations used this month.`,
+      heading: `${pct}% of this month's conversations used`,
+      paragraphs: [
+        `${n.botName} has used ${n.quota.used} of ${n.quota.limit} conversations this month.`,
+        "At 100% the widget shows your contact details instead of AI replies until the month resets or the plan is upgraded.",
+      ],
+      stats: [
+        { value: `${n.quota.used}`, label: "conversations used" },
+        { value: `${Math.max(0, n.quota.limit - n.quota.used)}`, label: "left this month" },
+      ],
+      reason: `Sent by Botly for ${n.botName}.`,
+    });
+    return { subject, html, text };
   }
   const l = n.lead!;
-  const label = n.kind === "handoff" ? "wants to talk to a person" : l.type === "callback" ? "asked for a callback" : `new ${l.type} lead`;
-  const subject = `${l.name} ${n.kind === "handoff" ? "wants to talk to a person" : "— new lead"} · ${n.businessName}`;
+  const handoff = n.kind === "handoff";
+  const label = handoff ? "wants to talk to a person" : l.type === "callback" ? "asked for a callback" : `new ${l.type} lead`;
+  const subject = `${l.name} ${handoff ? "wants to talk to a person" : "\u2014 new lead"} \u00b7 ${n.businessName}`;
   const rows: [string, string][] = [
     ["Name", l.name],
     ["Phone", l.phoneDisplay],
@@ -19,26 +37,21 @@ export function renderLeadEmail(n: LeadNotice): { subject: string; html: string;
     ["Type", l.type],
     ...(l.preferredTime ? ([["Preferred time", l.preferredTime]] as [string, string][]) : []),
   ];
-  const text = [
-    `${l.name} ${label} on ${n.businessName}.`,
-    n.summary,
-    "",
-    ...rows.map(([k, v]) => `${k}: ${v}`),
-    "",
-    n.whatsappUrl ? `WhatsApp them: ${n.whatsappUrl}` : "",
-    n.transcriptUrl ? `Read the conversation: ${n.transcriptUrl}` : "",
-  ]
-    .filter((x) => x !== undefined)
-    .join("\n");
-  const html = `<!doctype html><html><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111827;max-width:560px;margin:0 auto;padding:16px">
-<p style="font-size:16px;margin:0 0 8px"><strong>${esc(l.name)}</strong> ${esc(label)} on ${esc(n.businessName)}.</p>
-<p style="color:#374151;margin:0 0 16px;white-space:pre-line">${esc(n.summary)}</p>
-<table style="border-collapse:collapse;font-size:14px;margin-bottom:16px">${rows
-    .map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;color:#6b7280">${esc(k)}</td><td style="padding:4px 0">${esc(v)}</td></tr>`)
-    .join("")}</table>
-<p>${n.whatsappUrl ? `<a href="${esc(n.whatsappUrl)}" style="display:inline-block;background:#16a34a;color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none;margin-right:8px">WhatsApp ${esc(l.name)}</a>` : ""}<a href="tel:${esc(l.phone)}" style="display:inline-block;background:#111827;color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none">Call</a></p>
-${n.transcriptUrl ? `<p style="font-size:14px"><a href="${esc(n.transcriptUrl)}">Read the full conversation</a></p>` : ""}
-<p style="font-size:12px;color:#9ca3af">Sent by Botly for ${esc(n.botName)}.</p></body></html>`;
+  // The owner acts on this from their phone: the first button should start the conversation.
+  const call = { label: "Call", url: `tel:${l.phone}` };
+  const { html, text } = brandEmail({
+    tone: handoff ? "warning" : "success",
+    badge: handoff ? "&#128587;" : "&#127919;",
+    eyebrow: handoff ? "Needs a person" : l.type === "callback" ? "Callback request" : "New lead",
+    preheader: `${l.name} \u00b7 ${l.phoneDisplay}${l.need ? ` \u00b7 ${l.need}` : ""}`,
+    heading: handoff ? `${l.name} wants to talk to a person` : l.type === "callback" ? `${l.name} asked for a callback` : `New lead: ${l.name}`,
+    paragraphs: [`${l.name} ${label} on ${n.businessName}.`, ...n.summary.split("\n").filter(Boolean)],
+    cta: n.whatsappUrl ? { label: `WhatsApp ${l.name}`, url: n.whatsappUrl } : call,
+    secondary: [...(n.whatsappUrl ? [call] : []), ...(n.transcriptUrl ? [{ label: "Read the chat", url: n.transcriptUrl }] : [])],
+    panel: { title: "Contact details", rows },
+    note: "Leads who hear back within a few minutes are far more likely to buy. Reply while they are still on your website.",
+    reason: `Sent by Botly for ${n.botName}.`,
+  });
   return { subject, html, text };
 }
 

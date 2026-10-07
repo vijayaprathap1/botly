@@ -84,13 +84,19 @@ export async function inviteOwner(botId: string, orgId: string, _: ActionState, 
     to: email,
     subject: `You now have access to the ${business} assistant on Botly`,
     ...brandEmail({
+      tone: "brand",
+      badge: "&#128075;",
+      eyebrow: "You're invited",
       preheader: "See conversations, leads and reports for your website assistant.",
       heading: `Your ${business} assistant dashboard is ready`,
-      paragraphs: [
-        `You've been given access to the ${business} chat assistant on Botly: conversations with your website visitors, leads, questions it couldn't answer, and monthly reports.`,
-        `Sign in with this email address (${email}). We'll send you a one-time sign-in link, so there is no password to remember.`,
-      ],
+      paragraphs: [`You've been given access to the ${business} chat assistant on Botly, the AI assistant answering visitors on your website.`],
       cta: { label: "Open your dashboard", url: login },
+      panel: { title: "How to sign in", rows: [["Email", email], ["Password", "None needed: we email you a one-time link"]] },
+      steps: {
+        title: "What you'll find inside",
+        items: ["Every conversation your assistant has with visitors.", "Leads with name and phone, ready to call or WhatsApp.", "Questions it couldn't answer, so you can add the answer once.", "A monthly report of what customers asked."],
+      },
+      reason: `You're getting this because ${business} added you to their Botly dashboard.`,
     }),
   });
   revalidatePath(`/app/bots/${botId}`);

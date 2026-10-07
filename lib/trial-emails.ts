@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { config } from "./config";
 import { sendEmail } from "./notify/email";
-import { brandEmail } from "./notify/layout";
+import { brandEmail, type BrandEmail } from "./notify/layout";
 import { planDef, trialState } from "./plans";
 import type { OrgRow } from "./types";
 
@@ -64,7 +64,36 @@ export function renderTrialEmail(key: TrialEmailKey, org: Pick<OrgRow, "name" | 
     },
   };
   const c = copy[key];
-  const { html, text } = brandEmail({ heading: c.subject, preheader: c.lines[0], paragraphs: c.lines, cta: { label: c.cta[0], url: c.cta[1] } });
+  // Each stage of the trial gets its own look: a calm welcome, an amber heads-up, a red stop.
+  const days = `${t.daysLeft} day${t.daysLeft === 1 ? "" : "s"}`;
+  const usage = [
+    { value: `${t.left} of ${t.limit}`, label: "free AI replies left" },
+    { value: days, label: "left in your trial" },
+  ];
+  const design: Record<TrialEmailKey, Partial<BrandEmail> & { heading: string }> = {
+    welcome: {
+      tone: "brand",
+      badge: "&#127881;",
+      eyebrow: "You're all set",
+      heading: `Your ${org.name} assistant is ready`,
+      paragraphs: ["Your AI assistant has read your business details and is ready to answer customers on your website."],
+      stats: usage,
+      steps: {
+        title: "Three quick steps",
+        items: ["Try it in Preview: ask what your customers ask.", "Check the business profile it wrote and fix anything that's off.", "Paste the one-line install code on your website. That's it."],
+      },
+    },
+    replies80: { tone: "warning", badge: "&#9889;", eyebrow: "Customers are asking", heading: `${t.left} free replies left`, stats: usage },
+    ending: { tone: "warning", badge: "&#9203;", eyebrow: "Trial ending", heading: `Your free trial ends in ${days}`, stats: usage },
+    ended: { tone: "danger", badge: "&#9208;", eyebrow: "Trial ended", heading: "Your assistant has stopped answering" },
+  };
+  const { html, text } = brandEmail({
+    preheader: c.lines[0],
+    paragraphs: c.lines,
+    cta: { label: c.cta[0], url: c.cta[1] },
+    reason: `You're getting this because you started a Botly trial for ${org.name}.`,
+    ...design[key],
+  });
   return { subject: c.subject, html, text };
 }
 

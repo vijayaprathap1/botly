@@ -2,51 +2,91 @@
  * Writes the HTML for Supabase's own auth emails (Authentication → Emails → Templates),
  * from the same layout as every other Botly email. Supabase fills the {{ … }} variables.
  *   npx tsx scripts/gen-auth-emails.ts
- * Then paste each file into the matching template in the Supabase dashboard.
+ * Then paste each file into the matching template in the Supabase dashboard and set its subject.
+ *
+ * Every link goes to /auth/confirm on Botly's own domain with the token hash. That page
+ * only uses the token when the person presses its button, so the link works on any device
+ * and mail scanners that open links can't use it up (the default {{ .ConfirmationURL }}
+ * fails on both counts).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { brandEmail } from "../lib/notify/layout";
+import { brandEmail, type BrandEmail } from "../lib/notify/layout";
 
 // Supabase template variables must reach the output unescaped.
-const LINK = "__CONFIRM_LINK__";
+const LINK = "https://link.invalid/__CONFIRM__";
 const link = (type: string) => `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=${type}&amp;redirect_to={{ .RedirectTo }}`;
+const SAFETY = "Didn't ask for this? You can safely ignore this email. Nobody can get into your account without this link, and it stops working after one use.";
 
-const templates: Record<string, { subject: string; type: string; heading: string; paragraphs: string[]; cta: string; preheader: string }> = {
+const templates: Record<string, { subject: string; type: string; email: BrandEmail }> = {
   "magic-link": {
     subject: "Sign in to Botly",
     type: "email",
-    preheader: "Your sign-in link for Botly. It works once and expires in 1 hour.",
-    heading: "Sign in to Botly",
-    paragraphs: ["Press the button to sign in to your Botly dashboard. No password needed."],
-    cta: "Sign in to Botly",
+    email: {
+      tone: "brand",
+      badge: "&#128272;",
+      eyebrow: "Secure sign-in",
+      preheader: "Your one-time sign-in link for Botly. It expires in 1 hour.",
+      heading: "Sign in to Botly",
+      paragraphs: ["Press the button to open your Botly dashboard. There's no password to remember: this link is your key."],
+      cta: { label: "Sign in to Botly", url: LINK },
+      showLink: true,
+      panel: {
+        title: "About this link",
+        rows: [
+          ["Requested for", "{{ .Email }}"],
+          ["Valid for", "1 hour, one use only"],
+          ["Works on", "Any device or browser"],
+        ],
+      },
+      note: SAFETY,
+      reason: "You're getting this because someone entered this address on botly.in.",
+    },
   },
   "confirm-signup": {
-    subject: "Welcome to Botly: confirm your email",
+    subject: "Welcome to Botly — confirm your email",
     type: "email",
-    preheader: "Confirm your email to set up your AI assistant. The link expires in 1 hour.",
-    heading: "Welcome to Botly",
-    paragraphs: ["Confirm your email to create your account. Next you'll tell us about your business and we'll build your website assistant in a few minutes."],
-    cta: "Confirm and continue",
+    email: {
+      tone: "brand",
+      badge: "&#128075;",
+      eyebrow: "Welcome",
+      preheader: "Confirm your email and your website assistant is about five minutes away.",
+      heading: "Let's build your AI assistant",
+      paragraphs: ["Confirm your email to create your Botly account. Your website assistant is about five minutes away."],
+      cta: { label: "Confirm and get started", url: LINK },
+      showLink: true,
+      steps: {
+        title: "What happens next",
+        items: [
+          "Tell us about your business: your website, what you sell, how customers reach you.",
+          "Botly reads it and writes your assistant's knowledge, FAQs and greeting.",
+          "Try it, then paste one line of code on your website. Free for 14 days, no card needed.",
+        ],
+      },
+      note: SAFETY,
+      reason: "You're getting this because someone signed up on botly.in with this address ({{ .Email }}).",
+    },
   },
   invite: {
     subject: "You've been invited to Botly",
     type: "invite",
-    preheader: "Accept your invitation to the Botly dashboard.",
-    heading: "You're invited to Botly",
-    paragraphs: ["You've been given access to a Botly assistant dashboard: conversations, leads and reports for your business."],
-    cta: "Accept the invitation",
+    email: {
+      tone: "brand",
+      badge: "&#9993;",
+      eyebrow: "You're invited",
+      preheader: "Accept your invitation to the Botly dashboard.",
+      heading: "You've been invited to Botly",
+      paragraphs: ["You've been given access to a Botly assistant dashboard: conversations with website visitors, leads and reports for your business."],
+      cta: { label: "Accept the invitation", url: LINK },
+      showLink: true,
+      panel: { title: "Your access", rows: [["Email", "{{ .Email }}"], ["Password", "None needed"]] },
+      note: SAFETY,
+    },
   },
 };
 
 mkdirSync("supabase/templates", { recursive: true });
 for (const [name, t] of Object.entries(templates)) {
-  const { html } = brandEmail({
-    preheader: t.preheader,
-    heading: t.heading,
-    paragraphs: t.paragraphs,
-    cta: { label: t.cta, url: LINK },
-    note: "This link works once and expires in 1 hour. If you didn't ask for it, you can safely ignore this email; nobody can sign in without it.",
-  });
+  const { html } = brandEmail(t.email);
   writeFileSync(`supabase/templates/${name}.html`, html.replaceAll(LINK, link(t.type)) + "\n");
   console.log(`supabase/templates/${name}.html  ← subject: ${t.subject}`);
 }
