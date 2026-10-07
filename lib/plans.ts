@@ -44,7 +44,7 @@ export function plans(): Record<Plan, PlanDef> {
       id: "starter", name: "Starter", priceInr: num("PRICE_STARTER_INR", 2999), conversations: num("DEFAULT_QUOTA_STARTER", 2000), bots: 1, crawlPages: 40, growthTools: false,
       razorpayPlanEnv: "RAZORPAY_PLAN_STARTER",
       blurb: "For a shop or clinic getting started",
-      features: ["2,000 conversations a month", "English, Tamil, Hindi, Hinglish", "Leads to email and WhatsApp", "Unanswered-questions inbox", "Monthly report"],
+      features: ["2,000 conversations a month", "English, Tamil, Hindi, Hinglish", "Leads by email, one-tap WhatsApp reply", "Unanswered-questions inbox", "Monthly report"],
     },
     growth: {
       id: "growth", name: "Growth", priceInr: num("PRICE_GROWTH_INR", 9999), conversations: num("DEFAULT_QUOTA_GROWTH", 10000), bots: 3, crawlPages: 100, growthTools: true,

@@ -18,7 +18,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
           <p className="text-[13px] font-semibold uppercase tracking-wider text-brand-300">Botly</p>
           <h2 className="mt-4 max-w-md text-[34px] font-semibold leading-[1.1] tracking-[-0.03em]">An assistant that knows your business, ready in five minutes.</h2>
           <ul className="mt-8 space-y-3.5 text-[15px] text-zinc-300">
-            {["Trained on your website and social profiles", "Answers in English, Tamil and Hindi", "Leads straight to your WhatsApp and email", "One line to install on any website"].map((t) => (
+            {["Trained on your website and social profiles", "Answers in English, Tamil and Hindi", "Leads emailed to you in seconds", "One line to install on any website"].map((t) => (
               <li key={t} className="flex items-center gap-3"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-600/30 ring-1 ring-brand-400/40"><Check className="h-3 w-3 text-brand-200" /></span>{t}</li>
             ))}
           </ul>

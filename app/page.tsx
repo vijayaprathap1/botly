@@ -7,23 +7,23 @@ import { fmtInr, paidPlans, TRIAL } from "@/lib/plans";
 
 export const metadata: Metadata = {
   title: "Botly · AI customer support that speaks your customers' language",
-  description: "An AI assistant trained on your website and social profiles. Answers customers in English, Tamil and Hindi, 24/7, and sends you leads on WhatsApp and email. One line to install.",
+  description: "An AI assistant trained on your website and social profiles. Answers customers in English, Tamil and Hindi, 24/7, and emails you every lead with a one-tap WhatsApp reply. One line to install.",
   robots: { index: true, follow: true },
   // One address for search engines: the old vercel.app host and www serve the same page.
   alternates: { canonical: "/" },
-  openGraph: { title: "Botly · AI customer support for Indian businesses", description: "Trained on your business. Answers in English, Tamil and Hindi. Leads to WhatsApp.", type: "website" },
+  openGraph: { title: "Botly · AI customer support for Indian businesses", description: "Trained on your business. Answers in English, Tamil and Hindi. Sends you the leads.", type: "website" },
   twitter: { card: "summary_large_image" },
 };
 
 const STEPS = [
-  { t: "Tell us where you are online", d: "Your website, Instagram, Facebook, LinkedIn or Google profile, plus anything customers always ask about.", icon: Globe2 },
-  { t: "We write your assistant's knowledge", d: "We read your public pages and build a business profile and FAQs in about two minutes. Edit anything.", icon: Sparkles },
+  { t: "Tell us about your business", d: "Your website address, the bio from your Instagram or Google profile, and anything customers always ask about.", icon: Globe2 },
+  { t: "We write your assistant's knowledge", d: "We read your website and what you typed, then build a business profile and FAQs in a few minutes. Edit anything.", icon: Sparkles },
   { t: "Try it, then paste one line", d: "Chat with it yourself first. When you're happy, add one line of code to Shopify, WordPress, Wix or any site.", icon: Zap },
 ];
 const FEATURES = [
   { t: "Answers only from your facts", d: "No invented prices or promises. If it doesn't know, it says so and offers to connect the customer to you.", icon: ShieldCheck, big: true },
   { t: "English, Tamil, Hindi, Hinglish", d: "Replies in the customer's own language and script, even when your website is only in English.", icon: Languages, big: true },
-  { t: "Leads to WhatsApp and email", d: "Bulk orders, “talk to a person”, callbacks: name and phone number straight to you, in seconds.", icon: MessageCircle },
+  { t: "Leads straight to your inbox", d: "Bulk orders, “talk to a person”, callbacks: name and phone number emailed to you in seconds, with one tap to WhatsApp or call them back.", icon: MessageCircle },
   { t: "Learns what customers ask", d: "Unanswered questions are collected for you. Answer once, and it knows from then on.", icon: Inbox },
   { t: "Order status lookup", d: "Shopify and WooCommerce order tracking, after the customer verifies their phone or email.", icon: PackageSearch, tag: "Growth plan" },
   { t: "Monthly reports", d: "Top questions, languages, busiest hours, leads and the hours of replies it saved you.", icon: BarChart3 },
@@ -37,25 +37,77 @@ const FAQ = [
   ["Is my customers' data safe?", "Conversations are visible only to you and our support team. You can export everything and delete a customer's data on request."],
 ];
 
+/** Illustration of the dashboard: the numbers and names are examples. */
+function DashboardMock() {
+  return (
+    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-[var(--shadow-raised)]" role="img" aria-label="Example of the Botly dashboard: this month's numbers, a new lead and an unanswered question">
+      <div className="flex items-center justify-between">
+        <p className="text-[13px] font-semibold text-zinc-900">Ananya Handlooms <span className="ml-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Live</span></p>
+        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-zinc-500">Example</span>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-3">
+        {[["412", "Conversations"], ["37", "Leads"], ["21 h", "Staff time saved"]].map(([v, l]) => (
+          <div key={l} className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-3">
+            <p className="text-[20px] font-semibold tracking-[-0.02em] text-zinc-950">{v}</p>
+            <p className="text-[11.5px] text-zinc-500">{l}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 rounded-xl border border-zinc-200 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[13.5px] font-semibold text-zinc-900">Priya Raman <span className="ml-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">bulk</span></p>
+            <p className="mt-0.5 text-[12.5px] text-zinc-600">+91 98765 43210 · 25 sarees for a wedding in March</p>
+          </div>
+          <div className="flex gap-2">
+            <span className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[12px] font-semibold text-white">WhatsApp</span>
+            <span className="rounded-lg border border-zinc-200 px-3 py-1.5 text-[12px] font-semibold text-zinc-800">Call</span>
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 rounded-xl border border-zinc-200 p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Unanswered · asked 4 times</p>
+        <p className="mt-1 text-[13.5px] font-medium text-zinc-900">Do you ship to Dubai?</p>
+        <div className="mt-2 flex items-center gap-2">
+          <div className="h-8 flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-[12.5px] leading-8 text-zinc-500">Yes, in 7–10 days by DHL…</div>
+          <span className="rounded-lg bg-zinc-950 px-3 py-1.5 text-[12px] font-semibold text-white">Add answer</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Landing() {
+  const offers = paidPlans().map((p) => ({ "@type": "Offer", name: p.name, price: p.priceInr, priceCurrency: "INR", category: "subscription" }));
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "Botly",
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    url: "https://botly.in",
+    description: "An AI assistant trained on your business that answers website visitors in English, Tamil and Hindi and sends you the leads.",
+    offers: [{ "@type": "Offer", name: "Free trial", price: 0, priceCurrency: "INR" }, ...offers],
+  };
   return (
     <MarketingShell>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
       <main>
         {/* Hero */}
         <section className="relative overflow-hidden">
           <div className="bg-grid absolute inset-0 -z-10 [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_70%)]" aria-hidden />
-          <div className="mx-auto max-w-6xl px-5 pb-16 pt-16 text-center sm:pt-24">
+          <div className="mx-auto max-w-6xl px-5 pb-12 pt-10 text-center sm:pb-16 sm:pt-24">
             <Link href="#features" className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 text-[12.5px] font-medium text-zinc-700 shadow-sm transition hover:border-zinc-300">
               <span className="rounded-full bg-brand-600 px-1.5 py-px text-[10.5px] font-semibold text-white">New</span>
               Speaks Tamil, Hindi and Hinglish <ArrowRight className="h-3.5 w-3.5 text-zinc-400" />
             </Link>
-            <h1 className="mx-auto mt-6 max-w-4xl text-[40px] font-semibold leading-[1.05] tracking-[-0.035em] text-zinc-950 sm:text-[64px]">
+            <h1 className="mx-auto mt-5 max-w-4xl text-[33px] font-semibold leading-[1.08] tracking-[-0.035em] text-zinc-950 min-[400px]:text-[38px] sm:mt-6 sm:text-[64px] sm:leading-[1.05]">
               Customer support that knows your business, in your customers&apos; language
             </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-[17px] leading-relaxed text-zinc-600 sm:text-[19px]">
+            <p className="mx-auto mt-4 max-w-2xl text-[16px] leading-relaxed text-zinc-600 sm:mt-6 sm:text-[19px]">
               An AI assistant trained on your website and social profiles. It answers questions about products, prices, delivery and returns around the clock, and sends you the leads.
             </p>
-            <div className="mt-9 flex flex-wrap justify-center gap-3">
+            <div className="mt-6 flex flex-wrap justify-center gap-3 sm:mt-9">
               <Link href="/login?signup=1" className="inline-flex h-12 items-center gap-2 rounded-xl bg-zinc-950 px-6 text-[15px] font-medium text-white shadow-lg shadow-zinc-950/10 transition hover:bg-zinc-800">
                 Build my assistant free <ArrowRight className="h-4 w-4" />
               </Link>
@@ -90,6 +142,18 @@ export default function Landing() {
               </li>
             ))}
           </ol>
+        </section>
+
+        {/* What the owner sees */}
+        <section className="border-t border-zinc-100 bg-zinc-50/60">
+          <div className="mx-auto grid max-w-6xl items-center gap-10 px-5 py-24 lg:grid-cols-[1fr_1.25fr]">
+            <div>
+              <p className="text-[13px] font-semibold uppercase tracking-wider text-brand-600">Your dashboard</p>
+              <h2 className="mt-3 text-[32px] font-semibold leading-tight tracking-[-0.03em] sm:text-[40px]">See every question, and every customer worth calling</h2>
+              <p className="mt-4 max-w-md text-[15px] leading-relaxed text-zinc-600">Read each conversation, call or WhatsApp new leads in one tap, and answer the questions it couldn&apos;t. Each answer you add is used from the next message.</p>
+            </div>
+            <DashboardMock />
+          </div>
         </section>
 
         {/* Features */}
@@ -134,7 +198,7 @@ export default function Landing() {
               const hot = p.id === "growth";
               return (
                 <div key={p.id} className={`relative flex flex-col rounded-2xl p-7 ${hot ? "bg-zinc-950 text-white shadow-[var(--shadow-float)]" : "border border-zinc-200 bg-white"}`}>
-                  {hot ? <span className="absolute -top-3 left-7 rounded-full bg-brand-600 px-2.5 py-0.5 text-[11.5px] font-semibold text-white">Most popular</span> : null}
+                  {hot ? <span className="absolute -top-3 left-7 rounded-full bg-brand-600 px-2.5 py-0.5 text-[11.5px] font-semibold text-white">For online stores</span> : null}
                   <h3 className="text-[15px] font-semibold">{p.name}</h3>
                   <p className={`mt-1 text-[13.5px] ${hot ? "text-zinc-400" : "text-zinc-500"}`}>{p.blurb}</p>
                   <p className="mt-6 text-[40px] font-semibold tracking-[-0.03em]">{fmtInr(p.priceInr)}<span className={`text-[15px] font-normal ${hot ? "text-zinc-400" : "text-zinc-500"}`}>/month</span></p>
@@ -142,12 +206,13 @@ export default function Landing() {
                   <ul className={`mt-6 flex-1 space-y-2.5 text-[14px] ${hot ? "text-zinc-200" : "text-zinc-700"}`}>
                     {p.features.map((f) => <li key={f} className="flex gap-2"><Check className={`mt-0.5 h-4 w-4 flex-none ${hot ? "text-brand-300" : "text-brand-600"}`} />{f}</li>)}
                   </ul>
-                  <Link href="/login?signup=1" className={`mt-8 inline-flex h-10 items-center justify-center rounded-lg font-medium ${hot ? "bg-white text-zinc-950 hover:bg-zinc-100" : "bg-zinc-950 text-white hover:bg-zinc-800"}`}>Start with a free trial</Link>
+                  <Link href="/login?signup=1" className={`mt-8 inline-flex h-10 items-center justify-center rounded-lg font-medium ${hot ? "bg-white text-zinc-950 hover:bg-zinc-100" : "bg-zinc-950 text-white hover:bg-zinc-800"}`}>Try {p.name} free for {TRIAL.days} days</Link>
                 </div>
               );
             })}
           </div>
-          <p className="mt-8 text-center text-[13.5px] text-zinc-500">
+          <p className="mt-8 text-center text-[13.5px] text-zinc-600">Every plan starts with the same free trial. You choose Starter or Growth when it ends, and nothing is charged before that.</p>
+          <p className="mt-2 text-center text-[13.5px] text-zinc-500">
             Want us to set it up and tune it for you every month? Ask about our done-for-you service.{process.env.SUPPORT_EMAIL ? <> <a className="font-medium text-zinc-900 underline underline-offset-4" href={`mailto:${process.env.SUPPORT_EMAIL}`}>Contact us</a></> : null}
           </p>
         </section>
