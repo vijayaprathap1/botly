@@ -69,11 +69,19 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
     }
     const { data: existing } = await db.from("knowledge_sources").select("url").eq("bot_id", botId).not("url", "is", null);
     const have = new Set((existing ?? []).map((r) => r.url as string));
+    // The site-wide row has no URL to recognise it by: keep one and refresh it on a re-import.
+    const SITE_WIDE = "Site-wide details (header and footer)";
+    const { data: priorSiteWide } = await db.from("knowledge_sources").select("id").eq("bot_id", botId).eq("type", "page").eq("title", SITE_WIDE).is("url", null).limit(1);
+    const siteWideId = priorSiteWide?.[0]?.id as string | undefined;
+    if (siteWide && siteWideId) {
+      const { error } = await db.from("knowledge_sources").update({ content: siteWide, token_count: estimateTokens(siteWide), updated_by: o.userId }).eq("id", siteWideId);
+      if (error) throw new Error(error.message);
+    }
     // Raw pages stay drafts even for self-serve: the drafted FAQ/profile carry the facts, pages are backup.
     const rows = [
       ...pages.filter((p) => !have.has(p.url)).map((p) => stamp({ type: "page", title: p.title || new URL(p.url).pathname, url: p.url, content: p.text }, "draft")),
       ...products.filter((p) => !have.has(p.url)).map((p) => stamp({ type: "product", title: p.title, url: p.url, content: p.content })),
-      ...(siteWide ? [stamp({ type: "page", title: "Site-wide details (header and footer)", url: null, content: siteWide }, "draft")] : []),
+      ...(siteWide && !siteWideId ? [stamp({ type: "page", title: SITE_WIDE, url: null, content: siteWide }, "draft")] : []),
     ];
     for (let i = 0; i < rows.length; i += 100) {
       const { error } = await db.from("knowledge_sources").insert(rows.slice(i, i + 100));
