@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { config } from "@/lib/config";
+import { HOURS_NOT_SET, parseHoursText } from "@/lib/hours";
 import { TRIAL } from "@/lib/plans";
 import { normalizeOrigin } from "@/lib/security/origin";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -94,7 +95,18 @@ export async function startWorkspace(_: StartState, form: FormData): Promise<Sta
     .select("id")
     .single();
   if (error || !org) return { error: "Couldn't create your workspace. Please try again." };
-  await db.from("memberships").insert({ user_id: session.userId, org_id: org.id, role: "owner" });
+  // All or nothing: a workspace without a membership or an assistant is a dead end the
+  // customer can't get out of (and would burn their one free trial).
+  const undo = async (what: string, message?: string) => {
+    console.error("[start] rolled back:", what, message ?? "");
+    await db.from("trial_claims").delete().eq("org_id", org.id);
+    await db.from("organizations").delete().eq("id", org.id); // memberships, bots and knowledge cascade
+  };
+  const { error: memberError } = await db.from("memberships").insert({ user_id: session.userId, org_id: org.id, role: "owner" });
+  if (memberError) {
+    await undo("membership", memberError.message);
+    return { error: "Couldn't create your workspace. Please try again." };
+  }
   if (!claimed && email) await db.from("trial_claims").insert({ email, org_id: org.id });
 
   const site = d.website ? normalizeOrigin(d.website) : null;
@@ -113,10 +125,15 @@ export async function startWorkspace(_: StartState, form: FormData): Promise<Sta
       notify_emails: [d.contactEmail || email].filter(Boolean),
       notify_whatsapp: wa?.ok ? [wa.e164] : [],
       fallback_contact: contact,
+      // The owner's own hours when we can read them; otherwise "not set", never a made-up default.
+      business_hours: parseHoursText(d.hours) ?? HOURS_NOT_SET,
     })
     .select("id")
     .single();
-  if (e2 || !bot) return { error: "Couldn't create your assistant. Please try again." };
+  if (e2 || !bot) {
+    await undo("assistant", e2?.message);
+    return { error: "Couldn't create your assistant. Please try again." };
+  }
 
   // Everything the owner typed is their own statement of fact: save it approved.
   const lines = [

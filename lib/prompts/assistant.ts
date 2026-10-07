@@ -99,7 +99,8 @@ export function buildSystemPrompt(p: PromptInput): SystemBlocks {
   const contextText = renderTemplate(CONTEXT_TEMPLATE, {
     now_in_business_timezone: p.nowInBusinessTimezone,
     business_hours: p.businessHours,
-    open_or_closed: p.isOpen ? "open" : "closed",
+    // Hours not set: don't claim the shop is open; the chat itself is what's available.
+    open_or_closed: p.businessHours.startsWith("not specified") ? "reachable through this chat" : p.isOpen ? "open" : "closed",
     page_title: safePageTitle(p.pageTitle),
     page_url: cleanPageField(p.pageUrl, 300),
     conversation_facts: facts.length ? "Known so far in this conversation:\n" + facts.map((f) => `- ${f}`).join("\n") : "",

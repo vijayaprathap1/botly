@@ -1,14 +1,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { config } from "../config";
 import { crawlSite } from "../crawler/crawl";
-import { runSafetyCheck } from "../eval/run";
+import { runSafetyCheck, SAFETY_CASES } from "../eval/run";
 import type { KnowledgeSource } from "../knowledge";
 import { getLlm } from "../llm";
+import { requestTokenLimit } from "../llm/provider";
 import { estimateTokens } from "../tokens";
 import type { BotWithOrg } from "../types";
 import { draftKnowledge, isRealAnswer, policyToText } from "./draft";
 
-export type OnboardEvent = { stage: string; message: string; count?: number; total?: number };
+export type OnboardEvent = {
+  stage: string;
+  message: string;
+  count?: number;
+  total?: number;
+  /** On the final "done" event (self-serve): live, preview (safety check failed) or busy (check couldn't finish). */
+  outcome?: "live" | "preview" | "busy";
+};
 
 export type OnboardOptions = {
   db: SupabaseClient; // service role (caller has already checked access)
@@ -21,6 +29,8 @@ export type OnboardOptions = {
   selfServe: boolean;
   /** Details the owner typed in the sign-up form. */
   ownerNotes?: string;
+  /** Time allowed for the whole import (default 270 s). */
+  budgetMs?: number;
 };
 
 /**
@@ -29,6 +39,9 @@ export type OnboardOptions = {
  */
 export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) => void): Promise<{ ok: boolean }> {
   const { db, botId } = o;
+  // The whole import must fit one serverless invocation (300 s): leave the safety check out
+  // rather than be cut off half-way with nothing recorded.
+  const mustEndBy = Date.now() + (o.budgetMs ?? 270_000);
   const { data: botRow } = await db.from("bots").select("*, org:organizations(*)").eq("id", botId).single();
   if (!botRow) throw new Error("Bot not found");
   const bot = botRow as BotWithOrg;
@@ -91,8 +104,18 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
         ...(policyToText(d.policy) ? [stamp({ type: "policy", title: "Policy summary", url: null, content: policyToText(d.policy) })] : []),
         ...(o.selfServe && d.profile_markdown ? [stamp({ type: "note", title: "Business profile", url: null, content: d.profile_markdown })] : []),
       ];
-      if (drafts.length) {
-        const { error } = await db.from("knowledge_sources").insert(drafts);
+      // Importing again must not pile up copies: skip FAQs we already have (any status, so an
+      // archived answer stays archived) and refresh the single policy summary / profile.
+      const { data: prior } = await db.from("knowledge_sources").select("id, type, title").eq("bot_id", botId).in("type", ["faq", "policy", "note"]);
+      const key = (type: string, title: string) => `${type}:${title.trim().toLowerCase()}`;
+      const priorId = new Map((prior ?? []).map((r) => [key(r.type as string, r.title as string), r.id as string]));
+      const fresh = drafts.filter((r) => !priorId.has(key(r.type, r.title)));
+      if (fresh.length) {
+        const { error } = await db.from("knowledge_sources").insert(fresh);
+        if (error) throw new Error(error.message);
+      }
+      for (const r of drafts.filter((x) => x.type !== "faq" && priorId.has(key(x.type, x.title)))) {
+        const { error } = await db.from("knowledge_sources").update({ content: r.content, token_count: r.token_count, updated_by: r.updated_by }).eq("id", priorId.get(key(r.type, r.title))!);
         if (error) throw new Error(error.message);
       }
       if (o.selfServe) {
@@ -121,21 +144,57 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
     await db.from("knowledge_sources").update({ status: "approved" }).eq("bot_id", botId).eq("type", "page");
   }
 
+  let outcome: OnboardEvent["outcome"];
   if (o.selfServe) {
-    send({ stage: "checking", message: "Running safety checks (the assistant must refuse fake discounts and prompt tricks)…" });
-    const passed = await goLiveCheck(db, botId);
-    send({ stage: passed ? "live" : "skip", message: passed ? "Safety checks passed. Your assistant is live." : "Safety checks didn't all pass. Your assistant works in preview; we'll review it." });
+    const slow = safetyPaceMs() > 0;
+    send({ stage: "checking", message: `Running safety checks (the assistant must refuse fake discounts and prompt tricks)…${slow ? " This takes about two minutes." : ""}` });
+    const left = mustEndBy - Date.now();
+    // Paced checks need (cases − 1) pauses plus the calls themselves.
+    const needed = slow ? safetyPaceMs() * (SAFETY_CASES.length - 1) + 30_000 : 30_000;
+    const check = left < needed ? { passed: false, inconclusive: true } : await goLiveCheck(db, botId, { budgetMs: left - 10_000 });
+    outcome = check.passed ? "live" : check.inconclusive ? "busy" : "preview";
+    send({
+      stage: check.passed ? "live" : "warn",
+      message: check.passed
+        ? "Safety checks passed. Your assistant is live."
+        : check.inconclusive
+          ? "There wasn't time to finish the safety checks (the AI service is busy). Your assistant works in preview; press “Run checks and go live” on the next screen in a minute."
+          : "Safety checks didn't all pass, so your assistant stays in preview for now. Add more details in Knowledge, then press “Run checks and go live”.",
+    });
   }
-  send({ stage: "done", message: o.selfServe ? "Your assistant is ready." : "Done. Review and approve the drafts in Knowledge." });
+  // Knowledge changed: bring the retrieval index up to date (no-op below the size cap).
+  await afterOnboarding(botId);
+  send({ stage: "done", message: o.selfServe ? (outcome === "live" ? "Your assistant is ready." : "Your assistant is ready to preview.") : "Done. Review and approve the drafts in Knowledge.", outcome });
   return { ok: true };
 }
 
+/**
+ * Providers with a small per-minute token limit (free tiers) can't take the four checks
+ * at once: the model would be rate-limited mid-check. Run them one at a time, spaced out.
+ */
+export function safetyPaceMs(): number {
+  return requestTokenLimit() ? 32_000 : 0;
+}
+
+async function afterOnboarding(botId: string): Promise<void> {
+  try {
+    const { syncChunks } = await import("../retrieval/index-sync");
+    await syncChunks(botId);
+  } catch (e) {
+    console.error("[onboarding] index sync", e instanceof Error ? e.message : e);
+  }
+}
+
+export type GoLiveResult = { passed: boolean; inconclusive: boolean };
+
 /** Runs the prompt-injection cases with the real model, records them, and sets the bot live if all pass. */
-export async function goLiveCheck(db: SupabaseClient, botId: string): Promise<boolean> {
+export async function goLiveCheck(db: SupabaseClient, botId: string, opts: { budgetMs?: number } = {}): Promise<GoLiveResult> {
   const { data: botRow } = await db.from("bots").select("*, org:organizations(*)").eq("id", botId).single();
   const { data: ks } = await db.from("knowledge_sources").select("id, type, title, url, content").eq("bot_id", botId).eq("status", "approved");
-  if (!botRow) return false;
-  const r = await runSafetyCheck(botRow as BotWithOrg, (ks ?? []) as KnowledgeSource[], getLlm());
+  if (!botRow) return { passed: false, inconclusive: false };
+  const r = await runSafetyCheck(botRow as BotWithOrg, (ks ?? []) as KnowledgeSource[], getLlm(), { paceMs: safetyPaceMs(), budgetMs: opts.budgetMs });
+  // A check the AI service never answered says nothing about the assistant: don't record it as a failure.
+  if (r.inconclusive) return { passed: false, inconclusive: true };
   await db.from("eval_runs").insert({
     bot_id: botId,
     passed: r.passed,
@@ -145,5 +204,5 @@ export async function goLiveCheck(db: SupabaseClient, botId: string): Promise<bo
     results: r.results.map((x) => ({ id: x.id, category: x.category, pass: x.pass, failures: x.failures, reply: x.reply.slice(0, 500) })),
   });
   if (r.injectionPassed) await db.from("bots").update({ status: "live" }).eq("id", botId);
-  return r.injectionPassed;
+  return { passed: r.injectionPassed, inconclusive: false };
 }

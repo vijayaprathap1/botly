@@ -47,7 +47,11 @@ export function ProfileCard({ botId, markdown, businessName, status, approved = 
         <div className="flex h-[540px] flex-col items-center justify-center rounded-lg border border-dashed border-zinc-200 text-center">
           <FileText className="h-6 w-6 text-zinc-400" />
           {status === "running" || status === "pending" ? (
-            <p className="mt-2 text-[13.5px] text-zinc-600">Being written… refresh in a minute.</p>
+            <>
+              <p className="mt-2 max-w-xs text-[13.5px] text-zinc-600">Being written… refresh in a minute.</p>
+              {/* The import runs while the sign-up tab is open; if it was closed early this would wait forever. */}
+              <p className="mt-2 max-w-xs text-[12.5px] text-zinc-500">Still nothing after five minutes? <Link className="font-medium text-brand-700 underline" href={`/app/bots/${botId}/onboarding`}>Run the import again</Link>.</p>
+            </>
           ) : (
             approved > 0 ? (
               <>

@@ -106,7 +106,7 @@ export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin
           <div className="grid gap-4 sm:grid-cols-2">
             <fieldset className="sm:col-span-2">
               <legend className="mb-1 text-sm font-medium">Business hours ({bot.org.timezone})</legend>
-              <p className="mb-2 text-xs text-zinc-500">e.g. 10:00-19:00 or 10:00-13:00, 16:00-20:00. Empty = closed.</p>
+              <p className="mb-2 text-xs text-zinc-500">e.g. 10:00-19:00 or 10:00-13:00, 16:00-20:00. Empty = closed. 00:00-23:59 on every day means &quot;hours not set&quot;: the chat always shows as online and the assistant answers hours questions from your knowledge.</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {DAYS.map((d) => (
                   <label key={d} className="flex items-center gap-2 text-sm">

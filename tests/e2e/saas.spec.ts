@@ -85,6 +85,7 @@ test("new user signs up, builds an assistant from website + social text, preview
 
   // Validation keeps what was typed.
   await page.getByLabel("Business name").fill("Meenakshi Silks");
+  await page.getByLabel("Type of business").fill("saree store");
   await page.getByLabel("Instagram").fill("instagram.com/meenakshisilks");
   await page.getByLabel("I own or represent this business", { exact: false }).check();
   await page.getByRole("button", { name: "Create my assistant" }).click();
@@ -207,6 +208,7 @@ test("one free trial per email", async ({ page }) => {
   await signIn(page, "repeat@shop.test");
   await expect(page).toHaveURL(/\/start$/);
   await page.getByLabel("Business name").fill("Repeat Shop");
+  await page.getByLabel("Type of business").fill("candle shop");
   await page.getByLabel("About your business, products and prices").fill("We sell handmade candles in Pune. Prices from ₹299. Delivery across India in 5 days.");
   await page.getByLabel("I own or represent this business", { exact: false }).check();
   await page.getByRole("button", { name: "Create my assistant" }).click();

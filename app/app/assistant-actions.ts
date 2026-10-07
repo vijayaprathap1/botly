@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { config } from "@/lib/config";
+import { HOURS_NOT_SET, type BusinessHours } from "@/lib/hours";
 import { planDef } from "@/lib/plans";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { ActionState } from "./actions";
@@ -53,6 +54,7 @@ export async function addAssistant(_: ActionState, form: FormData): Promise<Acti
       notify_whatsapp: (first?.notify_whatsapp as string[] | undefined) ?? [],
       fallback_contact: (first?.fallback_contact as Record<string, string> | undefined) ?? {},
       privacy_url: (first?.privacy_url as string | undefined) ?? null,
+      business_hours: (first?.business_hours as BusinessHours | undefined) ?? HOURS_NOT_SET,
     })
     .select("id")
     .single();

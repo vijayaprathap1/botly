@@ -10,7 +10,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireAdmin, requireSession } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { parseProductCsv, productContent } from "@/lib/csv";
-import { DAYS, type BusinessHours } from "@/lib/hours";
+import { DAYS, HOURS_NOT_SET, type BusinessHours } from "@/lib/hours";
 import { normalizeOrigin } from "@/lib/security/origin";
 import { supabaseServer } from "@/lib/supabase/server";
 import { estimateTokens } from "@/lib/tokens";
@@ -79,6 +79,8 @@ export async function createOrgAndBot(_: ActionState, form: FormData): Promise<A
       allowed_origins: site ? cleanOrigins([new URL(site).host]) : [],
       branding: { primary_color: "#4f46e5", avatar_url: null, assistant_name: d.assistantName, position: "right", theme: "auto", show_powered_by: true },
       notify_emails: session.email ? [session.email] : [],
+      // Not a made-up default: set the client's real hours in Settings.
+      business_hours: HOURS_NOT_SET,
     })
     .select("id")
     .single();
@@ -203,8 +205,8 @@ export async function setBotStatus(botId: string, form: FormData) {
     const { data: run } = await db.from("eval_runs").select("injection_passed, created_at").eq("bot_id", botId).order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (!run?.injection_passed) {
       const { goLiveCheck } = await import("@/lib/onboarding/pipeline");
-      const passed = await goLiveCheck(db, botId).catch(() => false);
-      if (!passed) redirect(`/app/bots/${botId}?live=blocked`);
+      const check = await goLiveCheck(db, botId).catch(() => ({ passed: false, inconclusive: true }));
+      if (!check.passed) redirect(`/app/bots/${botId}?live=${check.inconclusive ? "busy" : "blocked"}`);
     }
   }
   await db.from("bots").update({ status: live ? "live" : "draft" }).eq("id", botId);

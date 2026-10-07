@@ -3,9 +3,9 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { btn, Card, Field, inputClass, Notice } from "@/components/ui";
 
-type Ev = { stage: string; message: string; count?: number; total?: number };
+type Ev = { stage: string; message: string; count?: number; total?: number; outcome?: string };
 
-export function OnboardingWizard({ botId, defaultUrl, maxPages }: { botId: string; defaultUrl: string; maxPages: number }) {
+export function OnboardingWizard({ botId, defaultUrl, maxPages, selfServe = false }: { botId: string; defaultUrl: string; maxPages: number; selfServe?: boolean }) {
   const [url, setUrl] = useState(defaultUrl);
   const [pages, setPages] = useState(maxPages);
   const [draft, setDraft] = useState(true);
@@ -42,7 +42,12 @@ export function OnboardingWizard({ botId, defaultUrl, maxPages }: { botId: strin
         buf = lines.pop() ?? "";
         for (const l of lines) {
           if (!l.trim()) continue;
-          const ev = JSON.parse(l) as Ev;
+          let ev: Ev;
+          try {
+            ev = JSON.parse(l) as Ev;
+          } catch {
+            continue;
+          }
           if (ev.stage === "page") setPageCount(ev.count ?? 0);
           setEvents((x) => [...x, ev]);
           queueMicrotask(() => logRef.current?.lastElementChild?.scrollIntoView({ block: "nearest" }));
@@ -76,7 +81,7 @@ export function OnboardingWizard({ botId, defaultUrl, maxPages }: { botId: strin
       </Card>
       <Card title="2. Progress">
         {events.length === 0 ? (
-          <p className="text-sm text-zinc-600">Usually 1–3 minutes for 40 pages.</p>
+          <p className="text-sm text-zinc-600">Usually 1–3 minutes for 40 pages. Keep this tab open until it finishes.</p>
         ) : (
           <>
             <div className="mb-3 h-2 overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
@@ -84,7 +89,7 @@ export function OnboardingWizard({ botId, defaultUrl, maxPages }: { botId: strin
             </div>
             <ol ref={logRef} className="max-h-80 space-y-1 overflow-y-auto text-sm" aria-live="polite">
               {events.map((e, i) => (
-                <li key={i} className={e.stage === "error" ? "text-red-700" : e.stage === "skip" ? "text-zinc-500" : "text-zinc-800"}>
+                <li key={i} className={e.stage === "error" ? "text-red-700" : e.stage === "empty" || e.stage === "warn" ? "text-amber-800" : e.stage === "skip" ? "text-zinc-500" : "text-zinc-800"}>
                   {e.stage === "page" ? `Page ${e.count}: ` : ""}
                   {e.message}
                 </li>
@@ -94,9 +99,15 @@ export function OnboardingWizard({ botId, defaultUrl, maxPages }: { botId: strin
         )}
         {last?.stage === "done" ? (
           <div className="mt-4 grid gap-2">
-            <Notice tone="green">Drafts are ready. Next: review and approve them.</Notice>
-            <Link className={btn.primary} href={`/app/bots/${botId}/knowledge?status=draft`}>
-              3. Review drafts in Knowledge
+            {events.some((e) => e.stage === "empty") ? (
+              <Notice tone="amber">Nothing could be read from that website. Add your price list or details in Knowledge instead.</Notice>
+            ) : selfServe ? (
+              <Notice tone="green">Done. New FAQs and details are in your assistant&apos;s knowledge and apply to the next message.</Notice>
+            ) : (
+              <Notice tone="green">Drafts are ready. Next: review and approve them.</Notice>
+            )}
+            <Link className={btn.primary} href={selfServe ? `/app/bots/${botId}/knowledge` : `/app/bots/${botId}/knowledge?status=draft`}>
+              {selfServe ? "3. Check your knowledge" : "3. Review drafts in Knowledge"}
             </Link>
           </div>
         ) : null}

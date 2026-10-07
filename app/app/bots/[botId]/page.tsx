@@ -16,7 +16,10 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { fmtInr, planDef, trialState } from "@/lib/plans";
 import { ProfileCard } from "./profile-card";
 
-export default async function BotOverview({ params, searchParams }: { params: Promise<{ botId: string }>; searchParams: Promise<{ live?: string; welcome?: string }> }) {
+// "Go live" runs the safety checks inside this page's server action; on small AI rate limits they are paced over ~2 minutes.
+export const maxDuration = 300;
+
+export default async function BotOverview({ params, searchParams }: { params: Promise<{ botId: string }>; searchParams: Promise<{ live?: string; welcome?: string; setup?: string }> }) {
   const { botId } = await params;
   const sp = await searchParams;
   const session = await requireSession();
@@ -45,7 +48,19 @@ export default async function BotOverview({ params, searchParams }: { params: Pr
   const liveLabel = bot.allowed_origins.length ? bot.allowed_origins.join(", ") : "none yet";
   return (
     <div className="grid gap-5">
-      {sp.welcome ? <Notice tone="green">Your assistant is ready. Try it below, check your business profile, then add the install code to your website.</Notice> : null}
+      {sp.welcome && !sp.setup ? <Notice tone="green">Your assistant is ready. Try it below, check your business profile, then add the install code to your website.</Notice> : null}
+      {sp.setup === "failed" ? (
+        <Notice tone="amber">
+          Your assistant was created, but we couldn&apos;t finish reading your website. It knows only what you typed. <Link className="font-medium underline" href={`/app/bots/${bot.id}/onboarding`}>Run the import again</Link> or add details in <Link className="font-medium underline" href={`/app/bots/${bot.id}/knowledge`}>Knowledge</Link>.
+        </Notice>
+      ) : null}
+      {sp.setup === "preview" ? <Notice tone="amber">Your assistant is ready to preview, but the safety checks didn&apos;t all pass, so it isn&apos;t on your website yet. Add more details in Knowledge, then run the checks again below.</Notice> : null}
+      {sp.setup === "busy" || sp.live === "busy" ? <Notice tone="amber">The AI service was too busy to finish the safety checks, so nothing changed. Please try going live again in a minute.</Notice> : null}
+      {bot.status === "live" && bot.active && bot.allowed_origins.length === 0 ? (
+        <Notice tone="amber">
+          No website is allowed to show this assistant yet, so the chat bubble won&apos;t appear anywhere. <Link className="font-medium underline" href={`/app/bots/${bot.id}/settings`}>Add your domain in Settings</Link>.
+        </Notice>
+      ) : null}
       {sp.live === "blocked" ? (
         <Notice tone="amber">
           {session.isAdmin ? (
@@ -99,7 +114,7 @@ export default async function BotOverview({ params, searchParams }: { params: Pr
             <p className="max-w-xl text-[13.5px] text-zinc-600">
               {bot.status === "live"
                 ? `The assistant is answering visitors on ${liveLabel}. Pause it any time; your install code can stay in place.`
-                : "Before going live we run safety checks: the assistant must refuse fake discounts and prompt tricks. It takes about 20 seconds."}
+                : "Before going live we run safety checks: the assistant must refuse fake discounts and prompt tricks. It takes from 20 seconds to about two minutes. Keep this tab open."}
             </p>
             <form action={setBotStatus.bind(null, bot.id)}>
               <input type="hidden" name="status" value={bot.status === "live" ? "draft" : "live"} />
