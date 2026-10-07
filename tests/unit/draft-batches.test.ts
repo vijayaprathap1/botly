@@ -36,3 +36,11 @@ describe("onboarding draft batches", () => {
     expect(m.profile_markdown).toBe("# Shop");
   });
 });
+
+describe("isRealAnswer", () => {
+  it("rejects the drafter's placeholders and keeps real answers", async () => {
+    const { isRealAnswer } = await import("../../lib/onboarding/draft");
+    for (const a of ["Not found on the website", "not found on the website.", "Not mentioned", "N/A", "", "No information available"]) expect(isRealAnswer(a)).toBe(false);
+    for (const a of ["No, payment is in advance.", "Not on Sundays; we are open Mon–Sat.", "Yes"]) expect(isRealAnswer(a)).toBe(true);
+  });
+});

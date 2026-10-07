@@ -11,7 +11,7 @@ export function ImportForms({ botId }: { botId: string }) {
     <div className="grid gap-4 lg:grid-cols-2">
       <Card title="Import products (CSV)">
         <form action={csvAction} className="grid gap-2 text-sm">
-          <p className="text-zinc-600">Columns: name, price, sizes, stock note, URL. Existing products with the same name are updated (use this for price and stock changes).</p>
+          <p className="text-zinc-600">Columns: name and price, plus any of category, pack/unit, MRP, sizes, stock note, description, URL (a price list exported from Excel works). Existing products with the same name are updated (use this for price and stock changes).</p>
           <input type="file" name="file" accept=".csv,text/csv" required className="text-sm" aria-label="Product CSV file" />
           <label className="flex items-center gap-2">
             <input type="checkbox" name="approve" defaultChecked /> Approve on import

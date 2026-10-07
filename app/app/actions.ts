@@ -135,7 +135,15 @@ export async function updateBotSettings(botId: string, _: ActionState, form: For
   const botQuota = quotaRaw ? Number(quotaRaw) : null;
   if (botQuota !== null && (!Number.isInteger(botQuota) || botQuota < 0)) return { error: "Quota override must be a whole number" };
   const model = text(form.get("model")) || config.defaultModel;
-  if (!/^claude-[a-z0-9.\-]+$/.test(model)) return { error: "Model must be a Claude model id, e.g. claude-haiku-4-5" };
+  // Only the super admin sets the model (owners' forms carry the stored value, which is ignored below).
+  // Ids differ by provider: claude-haiku-4-5, openai/gpt-oss-120b, gemini-3.5-flash, vendor/model:free…
+  if (session.isAdmin && !/^[A-Za-z0-9][A-Za-z0-9._:/\-]{1,99}$/.test(model)) return { error: "Model must be a model id, e.g. claude-haiku-4-5 or openai/gpt-oss-120b" };
+
+  // Older forms don't send these: keep what is stored.
+  const orgName = form.has("org_name") ? text(form.get("org_name")).replace(/s+/g, " ") : editable.org.name;
+  if (orgName.length < 2 || orgName.length > 200) return { error: "Business name: 2 to 200 characters" };
+  const businessType = form.has("business_type") ? text(form.get("business_type")).replace(/s+/g, " ") : editable.org.business_type;
+  if (businessType.length < 2 || businessType.length > 100) return { error: "Business type: 2 to 100 characters" };
 
   const db = supabaseAdmin();
   const patch = {
@@ -172,16 +180,15 @@ export async function updateBotSettings(botId: string, _: ActionState, form: For
   const { data: bot, error } = await db.from("bots").update(patch).eq("id", botId).select("org_id").single();
   if (error) return { error: error.message };
 
-  if (!session.isAdmin) {
-    revalidatePath(`/app/bots/${botId}`, "layout");
-    return { ok: true, message: "Saved. Changes apply to the next message." };
+  // The business's own name and type: owners may change these. Plan and quota: super admin only.
+  const orgPatch: Record<string, unknown> = { name: orgName, business_type: businessType };
+  if (session.isAdmin) {
+    const plan = text(form.get("plan"));
+    const orgQuota = Number(text(form.get("org_quota")));
+    if ((plan === "trial" || plan === "starter" || plan === "growth") && Number.isInteger(orgQuota) && orgQuota >= 0) Object.assign(orgPatch, { plan, monthly_conversation_quota: orgQuota });
   }
-  const plan = text(form.get("plan"));
-  const orgQuota = Number(text(form.get("org_quota")));
-  if ((plan === "trial" || plan === "starter" || plan === "growth") && Number.isInteger(orgQuota) && orgQuota >= 0) {
-    const { error: e2 } = await db.from("organizations").update({ plan, monthly_conversation_quota: orgQuota }).eq("id", bot.org_id);
-    if (e2) return { error: e2.message };
-  }
+  const { error: e2 } = await db.from("organizations").update(orgPatch).eq("id", bot.org_id);
+  if (e2) return { error: e2.message };
   revalidatePath(`/app/bots/${botId}`, "layout");
   return { ok: true, message: "Saved. Changes apply to the next message." };
 }

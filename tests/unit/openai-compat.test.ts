@@ -205,3 +205,13 @@ describe("helpers", () => {
     expect(calls[0]!.body.tool_choice).toEqual({ type: "function", function: { name: "save_drafts" } });
   });
 });
+
+describe("rateLimitWaitMs", () => {
+  it("reads the provider's suggested wait", async () => {
+    const { rateLimitWaitMs } = await import("@/lib/llm/rate-limit");
+    expect(rateLimitWaitMs("LLM API 429: Rate limit reached. Please try again in 7.66s. Need more tokens?")).toBe(7910);
+    expect(rateLimitWaitMs("Please try again in 1m2.5s")).toBe(62750);
+    expect(rateLimitWaitMs("Please try again in 850ms.")).toBe(1100);
+    expect(rateLimitWaitMs("LLM API 429: quota exceeded")).toBeNull();
+  });
+});

@@ -14,6 +14,7 @@ const good = {
   RAZORPAY_PLAN_STARTER: "plan_Starter1",
   RAZORPAY_PLAN_GROWTH: "plan_Growth1",
   RAZORPAY_WEBHOOK_SECRET: "hook",
+  RESEND_API_KEY: "re_" + "a".repeat(24),
 };
 
 describe("env check", () => {
@@ -42,6 +43,11 @@ describe("env check", () => {
   it("Resend placeholder is reported but not blocking", () => {
     expect(checkEnv({ ...good, RESEND_API_KEY: "re_..." })).toHaveLength(1);
     expect(blockingProblems({ ...good, RESEND_API_KEY: "re_..." })).toHaveLength(0);
+  });
+  it("a missing Resend key is reported (no emails go out) but not blocking", () => {
+    const p = checkEnv({ ...good, RESEND_API_KEY: "" });
+    expect(p.map((x) => [x.name, x.problem])).toEqual([["RESEND_API_KEY", "missing (optional)"]]);
+    expect(blockingProblems({ ...good, RESEND_API_KEY: "" })).toHaveLength(0);
   });
   it("payments: not set up, partly set up and malformed ids are feature problems", () => {
     const none = { ...good, RAZORPAY_KEY_ID: "", RAZORPAY_KEY_SECRET: "", RAZORPAY_PLAN_STARTER: "", RAZORPAY_PLAN_GROWTH: "", RAZORPAY_WEBHOOK_SECRET: "" };

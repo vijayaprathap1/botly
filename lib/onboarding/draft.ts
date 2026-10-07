@@ -180,6 +180,12 @@ async function draftOnce(o: { openai: boolean; model: string; userText: string; 
   return { input: block.input as DraftInput, usage: { input: res.usage.input_tokens, output: res.usage.output_tokens } };
 }
 
+/** False for the placeholders a drafting model writes when the pages don't state a fact. */
+export function isRealAnswer(answer: string | null | undefined): boolean {
+  const a = (answer ?? "").trim();
+  return a.length > 1 && !/^(not (found|available|mentioned|specified|stated|provided)\b|no information\b|n\/?a\.?$|unknown\.?$)/i.test(a);
+}
+
 export function policyToText(policy: Drafts["policy"]): string {
   const label: Record<string, string> = {
     shipping: "Shipping and delivery",

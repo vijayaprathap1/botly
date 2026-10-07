@@ -6,6 +6,7 @@
  */
 import type { LlmClient, LlmMessage, LlmRequest, LlmTurn, TextPart, ToolDef, ToolUsePart } from "./types";
 import { openaiCompat } from "./provider";
+import { rateLimitWaitMs } from "./rate-limit";
 import { parseTextToolCalls, TextToolFilter } from "./text-tool-filter";
 
 type OaiToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
@@ -83,6 +84,7 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
   const models = [String(body.model), ...openaiCompat.fallbackModels().filter((m) => m !== body.model)];
   let modelIdx = 0;
   let busyRetried = false;
+  let waited = false;
   let fieldDrops = 0;
   for (;;) {
     try {
@@ -103,7 +105,20 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
         await new Promise((r) => setTimeout(r, 700));
         continue;
       }
-      if (++modelIdx >= models.length) throw e;
+      if (++modelIdx >= models.length) {
+        // Every model is rate-limited. Per-minute limits refill within seconds: when the
+        // provider says how long, wait once (if it fits the request) and start over.
+        const waitMs = /LLM API 429/.test(msg) ? rateLimitWaitMs(msg) : null;
+        if (waited || waitMs === null || waitMs > MAX_RATE_LIMIT_WAIT_MS) throw e;
+        waited = true;
+        console.warn(`[llm] all models rate-limited, waiting ${Math.round(waitMs / 100) / 10}s`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        if (signal?.aborted) throw e;
+        modelIdx = 0;
+        payload = { ...payload, model: models[0] };
+        busyRetried = true; // one attempt per model after the wait
+        continue;
+      }
       console.warn(`[llm] ${models[modelIdx - 1]} busy (${msg.slice(0, 60)}), falling back to ${models[modelIdx]}`);
       payload = { ...payload, model: models[modelIdx] };
       busyRetried = false;
@@ -111,6 +126,10 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
   }
 }
 const OPTIONAL_FIELDS = ["reasoning_effort", "stream_options"];
+
+/** Longest pause inside one chat request (the visitor sees the typing dots meanwhile). */
+const MAX_RATE_LIMIT_WAIT_MS = 15_000;
+
 
 /**
  * Per-call timeout. Chat replies must finish inside the 60 s serverless limit (with a

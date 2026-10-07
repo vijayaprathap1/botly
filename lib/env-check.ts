@@ -58,7 +58,9 @@ export function checkEnv(env: Record<string, string | undefined> = process.env):
   const ak = v("ANTHROPIC_API_KEY");
   if (!openaiCompat && ak && !PLACEHOLDER.test(ak) && !/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(ak)) out.push({ name: "ANTHROPIC_API_KEY", problem: "doesn't look like an Anthropic key", fix: "It starts with sk-ant- and is ~100 characters" });
   const rk = v("RESEND_API_KEY");
-  if (rk && !/^re_[A-Za-z0-9_]{10,}$/.test(rk)) out.push({ name: "RESEND_API_KEY", problem: "placeholder or malformed (optional)", fix: "resend.com → API Keys, or delete the line to run without lead emails" });
+  // Without Resend nothing breaks, but no lead, invite, trial or alert email is ever sent: say so.
+  if (!rk) out.push({ name: "RESEND_API_KEY", problem: "missing (optional)", fix: "resend.com → API Keys. Until it is set, leads are saved but nobody is emailed" });
+  else if (!/^re_[A-Za-z0-9_]{10,}$/.test(rk)) out.push({ name: "RESEND_API_KEY", problem: "placeholder or malformed (optional)", fix: "resend.com → API Keys, or delete the line to run without lead emails" });
   // Payments (optional until you sell): all four together, and test/live keys not mixed up.
   const rzp = ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_PLAN_STARTER", "RAZORPAY_PLAN_GROWTH", "RAZORPAY_WEBHOOK_SECRET"];
   const rzpSet = rzp.filter((k) => !PLACEHOLDER.test(v(k)));

@@ -24,6 +24,12 @@ export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin
       <div className="grid content-start gap-4">
         <Card title="Assistant">
           <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Business name" htmlFor="org_name" hint="Shown in the chat header and used by the assistant to introduce itself.">
+              <input id="org_name" name="org_name" defaultValue={bot.org.name} required minLength={2} maxLength={200} className={inputClass} />
+            </Field>
+            <Field label="Business type" htmlFor="business_type" hint="2–4 words, e.g. crackers shop, saree store, dental clinic.">
+              <input id="business_type" name="business_type" defaultValue={bot.org.business_type} required minLength={2} maxLength={100} className={inputClass} />
+            </Field>
             <Field label="Bot name (internal)" htmlFor="name">
               <input id="name" name="name" defaultValue={bot.name} className={inputClass} />
             </Field>

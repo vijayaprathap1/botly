@@ -187,7 +187,7 @@ async function main() {
     } catch {
       warn("Can't reach Resend");
     }
-  } else if (!rk) warn("RESEND_API_KEY not set: leads are saved but not emailed");
+  }
 
   console.log(failures ? `\n\x1b[31m${failures} problem(s) to fix.\x1b[0m After editing .env.local, stop and restart \`npm run dev\`.\n` : "\n\x1b[32mAll good.\x1b[0m Start with: npm run dev\n");
   process.exitCode = failures ? 1 : 0;

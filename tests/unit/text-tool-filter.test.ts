@@ -60,3 +60,41 @@ describe("TextToolFilter", () => {
     expect(calls[0]!.input).toEqual({ name: "Priya {VIP}", phone: "9876543210", need: "bulk [100 boxes]", type: "bulk" });
   });
 });
+
+describe("TextToolFilter: forms seen from gpt-oss on Groq", () => {
+  const answer = "No, we don't offer cash on delivery; payment is in advance by UPI or bank transfer.";
+  const qs = ["How can I place an order?", "What are your payment methods?", "How do I pick up my order?"];
+
+  it("hides bare trailing arguments { \"questions\": [...] } and runs them as suggest_followups", () => {
+    const reply = `${answer}\n\n{\n  "questions": [\n    "${qs[0]}",\n    "${qs[1]}",\n    "${qs[2]}"\n  ]\n}`;
+    for (const size of [1, 2, 5, 17, 400]) {
+      const r = run(reply, size);
+      expect(r.streamed.trimEnd()).toBe(answer);
+      expect(r.toolUses).toHaveLength(1);
+      expect(r.toolUses[0]).toMatchObject({ name: "suggest_followups", input: { questions: qs } });
+    }
+  });
+
+  it("hides the Harmony <commentary to=functions.x>{...} form, even when cut off mid-JSON", () => {
+    const full = `${answer}\n\n<commentary to=functions.suggest_followups>{ "questions": ["${qs[0]}", "${qs[1]}"] }`;
+    for (const size of [1, 3, 11, 400]) {
+      const r = run(full, size);
+      expect(r.streamed.trimEnd()).toBe(answer);
+      expect(r.toolUses[0]).toMatchObject({ name: "suggest_followups", input: { questions: [qs[0], qs[1]] } });
+    }
+    const cut = run(`${answer}\n\n<commentary to=functions.suggest_followups>{ "questions": ["What product`, 4);
+    expect(cut.streamed.trimEnd()).toBe(answer);
+    expect(cut.text).not.toContain("commentary");
+  });
+
+  it("hides <|channel|>commentary to=functions.x <|message|>{...}", () => {
+    const r = run(`${answer}<|channel|>commentary to=functions.report_unanswered <|constrain|>json<|message|>{"question":"Do you ship to Dubai?","language":"en"}`, 5);
+    expect(r.streamed.trimEnd()).toBe(answer);
+    expect(r.toolUses[0]).toMatchObject({ name: "report_unanswered", input: { question: "Do you ship to Dubai?", language: "en" } });
+  });
+
+  it("leaves ordinary braces and the word questions alone", () => {
+    const text = "Any questions? Sizes {S, M, L} are in stock.";
+    expect(run(text, 2).streamed).toBe(text);
+  });
+});

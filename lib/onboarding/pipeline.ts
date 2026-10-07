@@ -6,7 +6,7 @@ import type { KnowledgeSource } from "../knowledge";
 import { getLlm } from "../llm";
 import { estimateTokens } from "../tokens";
 import type { BotWithOrg } from "../types";
-import { draftKnowledge, policyToText } from "./draft";
+import { draftKnowledge, isRealAnswer, policyToText } from "./draft";
 
 export type OnboardEvent = { stage: string; message: string; count?: number; total?: number };
 
@@ -81,6 +81,11 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
         model: process.env.ONBOARDING_MODEL || bot.model || config.defaultModel,
         onProgress: (message) => send({ stage: "drafting", message }),
       });
+      // "Not found on the website" is the drafter's placeholder for a missing fact, not an answer:
+      // never save it as knowledge, and don't offer its question as a starter chip.
+      const unanswered = new Set(d.faqs.filter((f) => !isRealAnswer(f.answer)).map((f) => f.question.trim().toLowerCase()));
+      d.faqs = d.faqs.filter((f) => isRealAnswer(f.answer));
+      if (d.suggested_questions) d.suggested_questions = d.suggested_questions.filter((q) => !unanswered.has(q.trim().toLowerCase()));
       const drafts = [
         ...d.faqs.map((f) => stamp({ type: "faq", title: f.question.slice(0, 200), url: f.source_url ?? null, content: `Q: ${f.question}\nA: ${f.answer}` })),
         ...(policyToText(d.policy) ? [stamp({ type: "policy", title: "Policy summary", url: null, content: policyToText(d.policy) })] : []),

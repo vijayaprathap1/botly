@@ -7,6 +7,7 @@ import { toCard, verifyCustomer, type OrderProvider, type OrderStatusCard } from
 import { detectLanguage } from "../language";
 import type { LlmClient, LlmMessage, TextPart, ToolResultPart, ToolUsePart } from "../llm/types";
 import { resolveModel } from "../llm/provider";
+import { rateLimitWaitMs } from "../llm/rate-limit";
 import { reportError } from "../alerts";
 import { dispatchNotice } from "../notify/dispatch";
 import type { Notifier } from "../notify/types";
@@ -246,6 +247,18 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
 
   // 5. Model + tool loop ---------------------------------------------------------------
   const tools = toolsForPlan(bot.org.plan);
+  const baseMessages = structuredClone(messages);
+  // A reply with neither text nor a card would leave the visitor looking at nothing.
+  let cardShown = false;
+  const emitTurn: Emit = (event, data) => {
+    if (event === "tool_card") cardShown = true;
+    emit(event, data);
+  };
+  const say = (t: string) => {
+    if (outcome.firstTokenMs === null) outcome.firstTokenMs = Date.now() - started;
+    outcome.text += t;
+    emit("delta", { text: t });
+  };
   let rounds = 0;
   try {
     while (rounds < config.maxToolRounds) {
@@ -286,7 +299,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
           isTest,
           pageTitle: req.pageTitle ?? null,
           phoneWasGiven,
-          emit,
+          emit: emitTurn,
           outcome,
           lead,
         });
@@ -300,11 +313,47 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
       messages.push({ role: "assistant", content: turn.content as (TextPart | ToolUsePart)[] });
       messages.push({ role: "user", content: results });
     }
+
+    // The model said nothing (some open models end a turn after thinking, or keep calling
+    // tools): ask once more for a plain answer, then fall back to a fixed line.
+    if (!outcome.text.trim() && !cardShown) {
+      try {
+        rounds++;
+        const retry = await deps.llm.stream(
+          {
+            model,
+            maxTokens: config.maxOutputTokens,
+            system: [{ text: staticText, cache: true }, { text: `${contextText}\n\nReply to the visitor now in plain text, in 1–3 sentences. Do not call a tool.` }],
+            messages: baseMessages,
+            tools: [],
+          },
+          say,
+        );
+        outcome.usage = addUsage(outcome.usage, retry.usage);
+      } catch (e) {
+        console.error("[chat] empty-reply retry failed", bot.id, e instanceof Error ? e.message : e);
+      }
+      if (!outcome.text.trim()) {
+        console.warn("[chat] model returned an empty reply twice", bot.id, model);
+        say(emptyReplyText(outcome.language, conversation.status === "handed_off"));
+      }
+    }
   } catch (e) {
-    console.error("[chat] model call failed", bot.id, e instanceof Error ? `${e.name}: ${e.message}` : e);
+    const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    console.error("[chat] model call failed", bot.id, msg);
     outcome.jobs.push(() => reportError("AI replies failing", e, { bot: bot.name, business: bot.org.name, model }).then(() => undefined));
-    emit("tool_card", { type: "fallback_contact", reason: "error", contact: bot.fallback_contact } satisfies ToolCard);
-    emit("error", { code: "llm_error", message: "Sorry, I couldn't reply just now. You can reach the team directly." });
+    if (outcome.text.trim() || cardShown) {
+      // The visitor already has an answer or a form; a later tool round failing changes nothing for them.
+    } else if (isRateLimited(msg)) {
+      // Provider is saturated for a few seconds (free tiers): asking again shortly works,
+      // so don't send the visitor away to the phone number.
+      const waitMs = rateLimitWaitMs(msg);
+      const when = waitMs && waitMs > 5_000 ? `about ${Math.ceil(waitMs / 5_000) * 5} seconds` : "a few seconds";
+      emit("error", { code: "busy", message: `I'm answering a lot of questions right now. Please send that again in ${when}.`, retryAfterMs: waitMs ?? undefined });
+    } else {
+      emit("tool_card", { type: "fallback_contact", reason: "error", contact: bot.fallback_contact } satisfies ToolCard);
+      emit("error", { code: "llm_error", message: "Sorry, I couldn't reply just now. You can reach the team directly." });
+    }
   }
 
   // 6. Persist + account ---------------------------------------------------------------
@@ -379,6 +428,20 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   }
   emit("done", { conversationId, messageId: assistantId });
   return outcome;
+}
+
+const isRateLimited = (message: string) => /LLM API 429|\b429\b|rate.?limit|tokens per minute|overloaded/i.test(message);
+
+/** Last resort when the model returns no text: never leave the visitor without a reply. */
+function emptyReplyText(language: string, handedOff: boolean): string {
+  if (handedOff) {
+    if (language === "ta") return "நன்றி! உங்கள் விவரங்கள் எங்கள் குழுவிடம் உள்ளன; அவர்கள் விரைவில் தொடர்பு கொள்வார்கள். வேறு ஏதாவது கேட்க வேண்டுமா?";
+    if (language === "hi") return "धन्यवाद! आपकी जानकारी हमारी टीम के पास है, वे जल्द ही आपसे संपर्क करेंगे। क्या मैं और कुछ मदद कर सकता हूँ?";
+    return "Thanks! The team has your details and will contact you soon. Is there anything else I can help with?";
+  }
+  if (language === "ta") return "மன்னிக்கவும், எனக்குப் புரியவில்லை. உங்கள் கேள்வியை வேறு விதமாகக் கேட்க முடியுமா?";
+  if (language === "hi") return "माफ़ कीजिए, मैं समझ नहीं पाया। क्या आप अपना सवाल दूसरे तरीके से पूछ सकते हैं?";
+  return "Sorry, I didn't catch that. Could you ask it another way? You can also tap “Talk to a person”.";
 }
 
 type ToolCtx = {

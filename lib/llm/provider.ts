@@ -85,7 +85,8 @@ export function resolveModel(requested: string | null | undefined): string {
   if (llmProvider() === "openai") {
     return !requested || requested.startsWith("claude") ? openaiCompat.model() : requested;
   }
-  return requested || process.env.ANTHROPIC_DEFAULT_MODEL || "claude-haiku-4-5";
+  // A bot created while another provider was active stores that provider's id: use the default instead.
+  return (requested && requested.startsWith("claude") ? requested : "") || process.env.ANTHROPIC_DEFAULT_MODEL || "claude-haiku-4-5";
 }
 
 export function providerLabel(): string {

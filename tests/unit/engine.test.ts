@@ -320,3 +320,36 @@ describe("chat engine", () => {
     expect(llm.calls).toHaveLength(0);
   });
 });
+
+describe("chat engine: the visitor always gets a reply", () => {
+  it("asks once more without tools when the model returns nothing", async () => {
+    const llm = new QueueLlm([{}, { text: "We deliver in 4 to 7 days." }]);
+    const out = await runChat(deps(llm), req("How long does delivery take?"), ctx, emit);
+    expect(out.text).toBe("We deliver in 4 to 7 days.");
+    expect(llm.calls).toHaveLength(2);
+    expect(llm.calls[1]!.tools).toEqual([]);
+    expect(llm.calls[1]!.messages.at(-1)).toEqual({ role: "user", content: "How long does delivery take?" });
+    expect(events.some((e) => e.event === "error")).toBe(false);
+  });
+
+  it("falls back to a fixed line when the model is silent twice", async () => {
+    const out = await runChat(deps(new QueueLlm([{}, {}])), req("hi"), ctx, emit);
+    expect(out.text).toMatch(/Could you ask it another way/);
+    expect(events.filter((e) => e.event === "delta").map((e) => e.data.text).join("")).toBe(out.text);
+    expect([...store.messages.values()].flat().some((m: any) => m.role === "assistant" && m.content === out.text)).toBe(true);
+  });
+
+  it("a rate-limited provider asks the visitor to retry instead of showing the contact card", async () => {
+    const llm: LlmClient = { stream: async () => { throw new Error("LLM API 429: Rate limit reached for model. Please try again in 31.2s."); } };
+    await runChat(deps(llm), req("hi"), ctx, emit);
+    expect(events.find((e) => e.event === "error")!.data).toMatchObject({ code: "busy", message: expect.stringContaining("about 35 seconds") });
+    expect(events.some((e) => e.event === "tool_card")).toBe(false);
+  });
+
+  it("any other provider failure still shows the contact card", async () => {
+    const llm: LlmClient = { stream: async () => { throw new Error("LLM API 401: invalid api key"); } };
+    await runChat(deps(llm), req("hi"), ctx, emit);
+    expect(events.find((e) => e.event === "tool_card")!.data).toMatchObject({ type: "fallback_contact", reason: "error" });
+    expect(events.find((e) => e.event === "error")!.data.code).toBe("llm_error");
+  });
+});

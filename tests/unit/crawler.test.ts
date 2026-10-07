@@ -41,6 +41,14 @@ describe("extraction", () => {
     expect(p.text).not.toContain("secret");
     expect(p.links).toContain("https://ananya.example/policies/shipping#x");
   });
+  it("keeps a price list that sits inside a <form>, without its controls", () => {
+    const list = `<html><body><main><form><table><tr><td>10 cm Electric Sparklers</td><td>1 Box</td><td>Rs. 30</td><td><input name="q1" value="0"><button>Add</button></td></tr><tr><td>Flower Pots Big</td><td>1 Box</td><td>Rs. 120</td><td><select><option>1</option></select></td></tr></table><textarea>hidden note</textarea></form>${"<p>About our Sivakasi factory outlet and delivery.</p>".repeat(12)}</main></body></html>`;
+    const p = extractPage(list, "https://shop.example/price-list");
+    expect(p.text).toContain("10 cm Electric Sparklers");
+    expect(p.text).toContain("Rs. 120");
+    expect(p.text).not.toContain("Add");
+    expect(p.text).not.toContain("hidden note");
+  });
   it("moves boilerplate lines into site-wide text", () => {
     const mk = (i: number) => ({ url: `u${i}`, title: "", description: "", links: [], text: `Menu\nCall +91 98765 43210\nUnique line ${i}` });
     const s = splitBoilerplate([mk(1), mk(2), mk(3), mk(4)]);

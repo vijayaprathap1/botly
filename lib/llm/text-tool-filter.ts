@@ -7,7 +7,9 @@ import type { ToolUsePart } from "./types";
  *   Here are our sparklers: …
  *   suggest_followups({"questions":["…"]})
  *
- * or `<|python_tag|>{"name": "report_unanswered", "parameters": {…}}`.
+ * or `<|python_tag|>{"name": "report_unanswered", "parameters": {…}}`, the Harmony form
+ * `<commentary to=functions.suggest_followups>{…}`, or just the bare arguments
+ * `{ "questions": ["…"] }` at the end of the reply.
  *
  * This filter sits between the model's text stream and the visitor. It passes text
  * through immediately, except for the few characters that could be the start of a tool
@@ -40,8 +42,9 @@ export class TextToolFilter {
     if (this.captured !== null) {
       const calls = parseTextToolCalls(this.captured, this.names);
       if (calls.length) return { text: this.shown, toolUses: calls };
-      // Not a tool call after all: show it.
-      this.out(this.captured);
+      // Not a tool call after all: show it, unless it is markup a reply never contains
+      // (a call cut off mid-way by the token limit).
+      if (!isToolMarkup(this.captured, this.names)) this.out(this.captured);
       this.captured = null;
     }
     return { text: this.shown, toolUses: [] };
@@ -79,6 +82,19 @@ export class TextToolFilter {
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/**
+ * Tools whose arguments a model sometimes writes with no tool name at all. The first
+ * key of the object identifies the tool (only keys no customer-facing reply would contain).
+ */
+const BARE_ARGS: Record<string, string> = { questions: "suggest_followups" };
+const bareKeys = (names: string[]) => Object.keys(BARE_ARGS).filter((k) => names.includes(BARE_ARGS[k]!));
+
+/** Text that can only be a (possibly unfinished) tool call, never part of an answer. */
+function isToolMarkup(text: string, names: string[]): boolean {
+  const keys = bareKeys(names).map(esc).join("|");
+  return new RegExp(`^(?:<\\|channel\\|>|<commentary\\b|(?:commentary\\s+)?to=functions\\.${keys ? `|(?:\`\`\`(?:json)?\\s*)?\\{\\s*"(?:${keys})"\\s*:` : ""})`).test(text);
+}
+
 /** True when position i in `full` starts a word (start of text, or after space/punctuation). */
 function atBoundary(full: string, i: number): boolean {
   if (i === 0) return true;
@@ -95,6 +111,12 @@ function findToolCallStart(shown: string, pending: string, names: string[]): num
     /<\|python_tag\|>/g,
     /\{\s*"name"\s*:/g, // {"name": "report_unanswered", "parameters": {...}}
     /```(?:json)?\s*\n?\s*\{\s*"name"/g,
+    // Harmony (gpt-oss) channel markup: <commentary to=functions.x>{…}, <|channel|>commentary to=functions.x …
+    /<\|channel\|>/g,
+    /<commentary\b/g,
+    /(?:commentary\s+)?to=functions\./g,
+    // Bare arguments with no tool name: { "questions": [ … ] } (also inside a code fence).
+    ...bareKeys(names).map((k) => new RegExp("(?:```(?:json)?\\s*)?\\{\\s*\"" + k + "\"\\s*:", "g")),
   ];
   let best = -1;
   for (const re of patterns) {
@@ -116,13 +138,13 @@ function findToolCallStart(shown: string, pending: string, names: string[]): num
 function holdFrom(shown: string, pending: string, names: string[]): number {
   const full = shown + pending;
   const base = shown.length;
-  const openers = [...names.map((n) => `${n}(`), ...names.map((n) => `${n} {`), "<|python_tag|>", '{"name"', "```"];
+  const openers = [...names.map((n) => `${n}(`), ...names.map((n) => `${n} {`), "<|python_tag|>", '{"name"', "```", "<|channel|>", "<commentary", "commentary to=functions.", "to=functions.", ...bareKeys(names).map((k) => `{"${k}":`)];
   // Earliest position whose remaining text is a proper prefix of an opener.
   for (let i = Math.max(base, full.length - 40); i < full.length; i++) {
     const tail = full.slice(i);
     if (!atBoundary(full, i)) continue;
     const squeezed = tail.replace(/\s+/g, "");
-    const fence = /^```(?:j(?:s(?:o(?:n)?)?)?)?\s*(?:\{\s*(?:"(?:n(?:a(?:m(?:e(?:")?)?)?)?)?)?)?$/.test(tail);
+    const fence = /^```(?:j(?:s(?:o(?:n)?)?)?)?\s*(?:\{\s*(?:"[a-z_]{0,20}"?)?)?$/.test(tail);
     if (fence || (squeezed && openers.some((o) => o.startsWith(tail) || o.replace(/\s+/g, "").startsWith(squeezed)))) {
       return i - base;
     }
@@ -168,14 +190,14 @@ function asArgs(v: unknown): Record<string, unknown> {
 
 /** Parses every tool call written as text: `name({...})`, `name {...}`, `{"name":…,"parameters":…}` (also in arrays / code fences). */
 export function parseTextToolCalls(text: string, names: string[]): ToolUsePart[] {
-  const s = text.replace(/<\|python_tag\|>|<\|eom_id\|>|<\|eot_id\|>|<\|call\|>/g, " ").replace(/```(?:json)?/gi, " ");
+  const s = text.replace(/<\|[a-z_]+\|>/gi, " ").replace(/<\/?commentary\b/gi, " ").replace(/```(?:json)?/gi, " ");
   const calls: ToolUsePart[] = [];
   const known = new Set(names);
   let i = 0;
   while (i < s.length) {
     // name( {..} ) or name {..}
     const rest = s.slice(i);
-    const m = new RegExp(`^(${names.map(esc).join("|")})\\s*\\(?\\s*`).exec(rest);
+    const m = new RegExp(`^(${names.map(esc).join("|")})[\\s>]*(?:json\\b)?\\s*\\(?\\s*`).exec(rest);
     if (m) {
       const at = i + m[0].length;
       const json = readJson(s, at);
@@ -197,6 +219,11 @@ export function parseTextToolCalls(text: string, names: string[]): ToolUsePart[]
           for (const item of Array.isArray(v) ? v : [v]) {
             const o = item as { name?: unknown; parameters?: unknown; arguments?: unknown } | null;
             if (o && typeof o.name === "string" && known.has(o.name)) calls.push({ type: "tool_use", id: newId(), name: o.name, input: asArgs(o.parameters ?? o.arguments ?? {}) });
+            else if (o && typeof o === "object" && !Array.isArray(v)) {
+              // Bare arguments: the first key names the tool.
+              const tool = BARE_ARGS[Object.keys(o)[0] ?? ""];
+              if (tool && known.has(tool)) calls.push({ type: "tool_use", id: newId(), name: tool, input: asArgs(o) });
+            }
           }
         } catch {
           /* ignore */

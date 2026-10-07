@@ -8,6 +8,7 @@ export type CrawlEvent =
   | { stage: "sitemap"; message: string; count: number }
   | { stage: "page"; message: string; count: number; total: number }
   | { stage: "skip"; message: string }
+  | { stage: "empty"; message: string }
   | { stage: "shopify"; message: string; count: number };
 
 export type CrawlResult = { pages: ExtractedPage[]; siteWide: string; products: CrawledProduct[] };
@@ -145,6 +146,10 @@ export async function crawlSite(
   await Promise.all(Array.from({ length: opts.concurrency ?? 4 }, worker));
 
   const products = (await productsPromise) ?? [];
+  if (!pages.length && !products.length) {
+    // Typical for React/Angular/Vue sites: the server sends an empty shell and a browser fills it in.
+    onEvent({ stage: "empty", message: "Couldn't read any text from this website. It is probably built with JavaScript, so its pages are empty until a browser runs them. Add your details instead: upload a price list or document, import a product CSV, or type them in Knowledge." });
+  }
   if (products.length) onEvent({ stage: "shopify", message: `Shopify store: ${products.length} products`, count: products.length });
   const split = splitBoilerplate(pages);
   return { pages: split.pages, siteWide: split.siteWide, products };

@@ -2,9 +2,13 @@ import { parse, type HTMLElement } from "node-html-parser";
 
 export type ExtractedPage = { url: string; title: string; description: string; text: string; links: string[] };
 
-const DROP = "script,style,noscript,svg,iframe,template,form,button,select,canvas,video,audio,picture,[aria-hidden=true],.visually-hidden,.sr-only";
+const DROP = "script,style,noscript,svg,iframe,template,button,select,option,input,textarea,canvas,video,audio,picture,[aria-hidden=true],.visually-hidden,.sr-only";
 
-/** Readable text from an HTML page: prefer <main>/<article>, keep block structure as lines. */
+/**
+ * Readable text from an HTML page: prefer <main>/<article>, keep block structure as lines.
+ * <form> wrappers are kept (only their controls are dropped): price lists and enquiry
+ * pages are usually one big form with a quantity box per product.
+ */
 export function extractPage(html: string, pageUrl: string): ExtractedPage {
   const root = parse(html, { comment: false, blockTextElements: { script: false, style: false, noscript: false, pre: true } });
   const title = (root.querySelector("title")?.text ?? "").replace(/\s+/g, " ").trim();
