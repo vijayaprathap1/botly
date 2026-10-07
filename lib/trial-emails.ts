@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { config } from "./config";
-import { escapeHtml, sendEmail } from "./notify/email";
+import { sendEmail } from "./notify/email";
+import { brandEmail } from "./notify/layout";
 import { planDef, trialState } from "./plans";
 import type { OrgRow } from "./types";
 
@@ -63,10 +64,7 @@ export function renderTrialEmail(key: TrialEmailKey, org: Pick<OrgRow, "name" | 
     },
   };
   const c = copy[key];
-  const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;line-height:1.55;color:#18181b;max-width:520px">${c.lines
-    .map((l) => `<p style="margin:0 0 12px">${escapeHtml(l)}</p>`)
-    .join("")}<p style="margin:20px 0"><a href="${escapeHtml(c.cta[1])}" style="background:#18181b;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600;display:inline-block">${escapeHtml(c.cta[0])}</a></p><p style="margin:24px 0 0;color:#71717a;font-size:13px">Botly · reply to this email if you need help.</p></div>`;
-  const text = `${c.lines.join("\n\n")}\n\n${c.cta[0]}: ${c.cta[1]}\n\nBotly`;
+  const { html, text } = brandEmail({ heading: c.subject, preheader: c.lines[0], paragraphs: c.lines, cta: { label: c.cta[0], url: c.cta[1] } });
   return { subject: c.subject, html, text };
 }
 

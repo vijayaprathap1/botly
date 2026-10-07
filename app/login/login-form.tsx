@@ -63,7 +63,7 @@ export function LoginForm({ next }: { next: string }) {
     return (
       <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-5 text-[14px] text-zinc-700" role="status">
         <p className="font-semibold text-zinc-950">Check your email</p>
-        <p className="mt-1">We sent a sign-in link to <b className="text-zinc-950">{email}</b>. Open it on this device. You can close this tab.</p>
+        <p className="mt-1">We sent a sign-in link from Botly to <b className="text-zinc-950">{email}</b>. It works once and expires in an hour. If you don&apos;t see it within a minute, check your spam folder.</p>
       </div>
     );
   return (

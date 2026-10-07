@@ -7,7 +7,8 @@ import { requireBotEditor } from "@/lib/bot-access";
 import { requireAdmin, requireSession } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { afterKnowledgeChange } from "@/lib/knowledge-sync";
-import { escapeHtml, sendEmail } from "@/lib/notify/email";
+import { sendEmail } from "@/lib/notify/email";
+import { brandEmail } from "@/lib/notify/layout";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseServer } from "@/lib/supabase/server";
 import { estimateTokens } from "@/lib/tokens";
@@ -78,11 +79,19 @@ export async function inviteOwner(botId: string, orgId: string, _: ActionState, 
   const { error: e2 } = await supabaseAdmin().rpc("accept_invites_for_email", { p_email: email });
   if (e2) console.error("[invite] accept existing", e2.message);
   const login = `${config.appUrl}/login`;
+  const business = org?.name ?? "your business";
   const mail = await sendEmail({
     to: email,
-    subject: `Your ${org?.name ?? "Botly"} chat assistant dashboard`,
-    text: `You now have access to the ${org?.name ?? ""} assistant dashboard: conversations, leads, unanswered questions and monthly reports.\n\nSign in with this email address at ${login} (we'll email you a one-time link).`,
-    html: `<p>You now have access to the <b>${escapeHtml(org?.name ?? "")}</b> chat assistant dashboard: conversations, leads, unanswered questions and monthly reports.</p><p><a href="${escapeHtml(login)}">Sign in</a> with this email address. We'll email you a one-time link, no password needed.</p>`,
+    subject: `You now have access to the ${business} assistant on Botly`,
+    ...brandEmail({
+      preheader: "See conversations, leads and reports for your website assistant.",
+      heading: `Your ${business} assistant dashboard is ready`,
+      paragraphs: [
+        `You've been given access to the ${business} chat assistant on Botly: conversations with your website visitors, leads, questions it couldn't answer, and monthly reports.`,
+        `Sign in with this email address (${email}). We'll send you a one-time sign-in link, so there is no password to remember.`,
+      ],
+      cta: { label: "Open your dashboard", url: login },
+    }),
   });
   revalidatePath(`/app/bots/${botId}`);
   return { ok: true, message: mail.sent ? `Invited ${email}. They'll get an email with the sign-in link.` : `Invited ${email}. Email not sent (${mail.error}); send them ${login}.` };
