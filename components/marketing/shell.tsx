@@ -10,8 +10,8 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
           <nav className="flex items-center gap-1 text-[14px]" aria-label="Main">
             <Link href="/#how" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 md:inline">How it works</Link>
             <Link href="/#features" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 md:inline">Features</Link>
-            <Link href="/#pricing" className="rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950">Pricing</Link>
-            <Link href="/login" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 sm:inline">Sign in</Link>
+            <Link href="/#pricing" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 min-[400px]:inline">Pricing</Link>
+            <Link href="/login" className="rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950">Sign in</Link>
             <Link href="/login?signup=1" className="ml-1 inline-flex h-9 items-center rounded-lg bg-zinc-950 px-4 font-medium text-white shadow-sm transition hover:bg-zinc-800">Start free</Link>
           </nav>
         </div>
@@ -25,23 +25,26 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="text-[13.5px]">
             <p className="font-medium text-zinc-900">Product</p>
-            <ul className="mt-3 space-y-2 text-zinc-500">
-              <li><Link className="hover:text-zinc-900" href="/#how">How it works</Link></li>
-              <li><Link className="hover:text-zinc-900" href="/#pricing">Pricing</Link></li>
-              <li><Link className="hover:text-zinc-900" href="/login?signup=1">Start free</Link></li>
+            <ul className="mt-2 space-y-0.5 text-zinc-500">
+              <li><Link className="inline-block py-1 hover:text-zinc-900" href="/#how">How it works</Link></li>
+              <li><Link className="inline-block py-1 hover:text-zinc-900" href="/#features">Features</Link></li>
+              <li><Link className="inline-block py-1 hover:text-zinc-900" href="/#pricing">Pricing</Link></li>
+              <li><Link className="inline-block py-1 hover:text-zinc-900" href="/#faq">Questions</Link></li>
+              <li><Link className="inline-block py-1 hover:text-zinc-900" href="/login?signup=1">Start free</Link></li>
+              <li><Link className="inline-block py-1 hover:text-zinc-900" href="/login">Sign in</Link></li>
             </ul>
           </div>
           <div className="text-[13.5px]">
             <p className="font-medium text-zinc-900">Company</p>
-            <ul className="mt-3 space-y-2 text-zinc-500">
-              <li><Link className="hover:text-zinc-900" href="/terms">Terms</Link></li>
-              <li><Link className="hover:text-zinc-900" href="/privacy-policy">Privacy</Link></li>
-              <li><Link className="hover:text-zinc-900" href="/refund-policy">Refunds &amp; cancellation</Link></li>
-              <li><Link className="hover:text-zinc-900" href="/contact">Contact</Link></li>
+            <ul className="mt-2 space-y-0.5 text-zinc-500">
+              <li><Link className="inline-block py-1 hover:text-zinc-900" href="/terms">Terms</Link></li>
+              <li><Link className="inline-block py-1 hover:text-zinc-900" href="/privacy-policy">Privacy</Link></li>
+              <li><Link className="inline-block py-1 hover:text-zinc-900" href="/refund-policy">Refunds &amp; cancellation</Link></li>
+              <li><Link className="inline-block py-1 hover:text-zinc-900" href="/contact">Contact</Link></li>
             </ul>
           </div>
         </div>
-        <div className="border-t border-zinc-100 py-5 text-center text-[12.5px] text-zinc-400">© {new Date().getFullYear()} {process.env.BUSINESS_LEGAL_NAME || "Botly"}. Made in India.</div>
+        <div className="border-t border-zinc-100 py-5 text-center text-[12.5px] text-zinc-500">© {new Date().getFullYear()} {process.env.BUSINESS_LEGAL_NAME || "Botly"}. Made in India.</div>
       </footer>
     </div>
   );

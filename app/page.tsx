@@ -9,6 +9,8 @@ export const metadata: Metadata = {
   title: "Botly · AI customer support that speaks your customers' language",
   description: "An AI assistant trained on your website and social profiles. Answers customers in English, Tamil and Hindi, 24/7, and sends you leads on WhatsApp and email. One line to install.",
   robots: { index: true, follow: true },
+  // One address for search engines: the old vercel.app host and www serve the same page.
+  alternates: { canonical: "/" },
   openGraph: { title: "Botly · AI customer support for Indian businesses", description: "Trained on your business. Answers in English, Tamil and Hindi. Leads to WhatsApp.", type: "website" },
   twitter: { card: "summary_large_image" },
 };
@@ -23,7 +25,7 @@ const FEATURES = [
   { t: "English, Tamil, Hindi, Hinglish", d: "Replies in the customer's own language and script, even when your website is only in English.", icon: Languages, big: true },
   { t: "Leads to WhatsApp and email", d: "Bulk orders, “talk to a person”, callbacks: name and phone number straight to you, in seconds.", icon: MessageCircle },
   { t: "Learns what customers ask", d: "Unanswered questions are collected for you. Answer once, and it knows from then on.", icon: Inbox },
-  { t: "Order status lookup", d: "Shopify and WooCommerce order tracking, after the customer verifies their phone or email.", icon: PackageSearch },
+  { t: "Order status lookup", d: "Shopify and WooCommerce order tracking, after the customer verifies their phone or email.", icon: PackageSearch, tag: "Growth plan" },
   { t: "Monthly reports", d: "Top questions, languages, busiest hours, leads and the hours of replies it saved you.", icon: BarChart3 },
 ];
 const FAQ = [
@@ -43,7 +45,7 @@ export default function Landing() {
         <section className="relative overflow-hidden">
           <div className="bg-grid absolute inset-0 -z-10 [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_70%)]" aria-hidden />
           <div className="mx-auto max-w-6xl px-5 pb-16 pt-16 text-center sm:pt-24">
-            <Link href="/login?signup=1" className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 text-[12.5px] font-medium text-zinc-700 shadow-sm transition hover:border-zinc-300">
+            <Link href="#features" className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 text-[12.5px] font-medium text-zinc-700 shadow-sm transition hover:border-zinc-300">
               <span className="rounded-full bg-brand-600 px-1.5 py-px text-[10.5px] font-semibold text-white">New</span>
               Speaks Tamil, Hindi and Hinglish <ArrowRight className="h-3.5 w-3.5 text-zinc-400" />
             </Link>
@@ -66,8 +68,8 @@ export default function Landing() {
 
         {/* Works with */}
         <section className="border-y border-zinc-100 bg-zinc-50/60">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-10 gap-y-3 px-5 py-7 text-[14px] font-medium text-zinc-400">
-            <span className="text-[12px] font-medium uppercase tracking-wider text-zinc-500">Works on</span>
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-10 gap-y-3 px-5 py-7 text-[14px] font-medium text-zinc-500">
+            <span className="text-[12px] font-semibold uppercase tracking-wider text-zinc-600">Works on</span>
             <span>Shopify</span><span>WordPress</span><span>WooCommerce</span><span>Wix</span><span>Webflow</span><span>Any HTML site</span>
           </div>
         </section>
@@ -81,7 +83,7 @@ export default function Landing() {
               <li key={s.t} className="relative rounded-2xl border border-zinc-200 bg-white p-6 shadow-[var(--shadow-card)]">
                 <div className="flex items-center justify-between">
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600 ring-1 ring-brand-100"><s.icon className="h-5 w-5" /></span>
-                  <span className="font-mono text-[12px] text-zinc-400">0{i + 1}</span>
+                  <span className="font-mono text-[12px] text-zinc-500">0{i + 1}</span>
                 </div>
                 <h3 className="mt-5 text-[16px] font-semibold tracking-[-0.01em]">{s.t}</h3>
                 <p className="mt-2 text-[14px] leading-relaxed text-zinc-600">{s.d}</p>
@@ -98,7 +100,10 @@ export default function Landing() {
             <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {FEATURES.map((f) => (
                 <div key={f.t} className={`rounded-2xl border border-white/10 bg-white/[0.04] p-6 ${f.big ? "lg:col-span-2" : ""}`}>
-                  <f.icon className="h-5 w-5 text-brand-300" />
+                  <div className="flex items-center justify-between gap-2">
+                    <f.icon className="h-5 w-5 text-brand-300" />
+                    {"tag" in f && f.tag ? <span className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] font-medium text-zinc-300">{f.tag}</span> : null}
+                  </div>
                   <h3 className="mt-4 text-[15.5px] font-semibold">{f.t}</h3>
                   <p className="mt-2 text-[14px] leading-relaxed text-zinc-400">{f.d}</p>
                 </div>
@@ -148,7 +153,7 @@ export default function Landing() {
         </section>
 
         {/* FAQ */}
-        <section className="border-t border-zinc-100 bg-zinc-50/60">
+        <section id="faq" className="scroll-mt-20 border-t border-zinc-100 bg-zinc-50/60">
           <div className="mx-auto grid max-w-6xl gap-10 px-5 py-24 lg:grid-cols-[1fr_1.6fr]">
             <div>
               <h2 className="text-[32px] font-semibold tracking-[-0.03em]">Questions</h2>
@@ -156,12 +161,12 @@ export default function Landing() {
             </div>
             <div className="divide-y divide-zinc-200 rounded-2xl border border-zinc-200 bg-white">
               {FAQ.map(([q, a]) => (
-                <details key={q} className="group px-6 py-5 [&_summary::-webkit-details-marker]:hidden">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15px] font-medium text-zinc-900">
+                <details key={q} className="group [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 text-[15px] font-medium text-zinc-900">
                     {q}
                     <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full border border-zinc-200 text-zinc-500 transition group-open:rotate-45">+</span>
                   </summary>
-                  <p className="mt-3 text-[14.5px] leading-relaxed text-zinc-600">{a}</p>
+                  <p className="-mt-2 px-6 pb-5 text-[14.5px] leading-relaxed text-zinc-600">{a}</p>
                 </details>
               ))}
             </div>

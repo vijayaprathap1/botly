@@ -6,6 +6,15 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["unpdf", "mammoth"],
   // Knowledge uploads (PDF/DOCX/CSV) go through Server Actions.
   experimental: { serverActions: { bodySizeLimit: "5mb" } },
+  async redirects() {
+    // botly.in is the one public address. The first deployment host and www send people
+    // (and search engines) there. The widget script and API stay reachable on the old host:
+    // customers' websites already load them from it.
+    return [
+      { source: "/:path((?!api/|widget\\.js|_next/|auth/).*)", has: [{ type: "host", value: "botly-rosy.vercel.app" }], destination: "https://botly.in/:path", permanent: true },
+      { source: "/:path*", has: [{ type: "host", value: "www.botly.in" }], destination: "https://botly.in/:path*", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {
