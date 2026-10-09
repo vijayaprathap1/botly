@@ -97,7 +97,7 @@ export async function saveLead(args: {
           whatsapps: bot.notify_whatsapp,
           notice: {
             kind: args.handoff ? "handoff" : "new_lead",
-            businessName: (args.isTest ? "[TEST] " : "") + business,
+            businessName: (bot.org.is_demo ? "[DEMO] " : args.isTest ? "[TEST] " : "") + business,
             botName: bot.name,
             lead: {
               name: lead.name,

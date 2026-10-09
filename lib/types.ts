@@ -39,6 +39,32 @@ export type OrgRow = {
   razorpay_subscription_id?: string | null;
   trial_emails?: Record<string, string>;
   created_by?: string | null;
+  /** A pitch preview built by the super admin (see lib/demo). Never a customer. */
+  is_demo?: boolean;
+};
+
+export type DemoSiteRow = {
+  id: string;
+  created_at: string;
+  slug: string;
+  org_id: string;
+  bot_id: string;
+  source_url: string;
+  final_url: string | null;
+  business_name: string;
+  html: string | null;
+  html_bytes: number | null;
+  mode: "static" | "rendered";
+  status: "pending" | "copying" | "training" | "ready" | "failed" | "expired";
+  error: string | null;
+  progress: string | null;
+  max_pages: number;
+  views: number;
+  first_viewed_at: string | null;
+  last_viewed_at: string | null;
+  opened_notified_at: string | null;
+  expires_at: string;
+  created_by: string | null;
 };
 
 export type BotRow = {

@@ -131,6 +131,19 @@ Anyone can now sign up at your site, build an assistant from their public profil
 3. **Razorpay** (full steps below in "Payments (Razorpay)").
 4. Fill `BUSINESS_LEGAL_NAME`, `SUPPORT_EMAIL`, `GRIEVANCE_OFFICER` for the Terms and Privacy Policy pages (templates: have a lawyer review them).
 
+## Pitching with a demo
+
+Super admin → **Demos**. Paste a business's website and, two to four minutes later, you get a private link (`/demo/<long-random-id>`) showing a copy of their homepage with a Botly assistant trained on their site. Send it to the owner or open it on a call.
+
+- **What the page is.** A static copy of their homepage: their images, styles and fonts load from their own servers, none of their scripts run (the page's Content-Security-Policy only allows Botly's widget and bar), forms and cart/login links do nothing, and other links open the real site in a new tab. A bar says "Preview made by Botly… Not the official website". The page isn't indexed.
+- **JavaScript-built sites** (React, some Wix and Shopify themes) arrive empty when downloaded. Those are opened in a headless browser instead (`@sparticuz/chromium` on Vercel, your own Chrome locally), which also reads a few of their pages for the assistant. `DEMO_RENDER=off` switches this off.
+- **Limits.** Each demo gets `DEMO_REPLY_LIMIT` AI replies (150) and expires after `DEMO_DEFAULT_DAYS` (14); both are enforced by the same gate as free trials. When either runs out the chat shows your contact details (`DEMO_CONTACT_*`). Leads and "talk to a person" requests from a demo are emailed to you, marked `[DEMO]`.
+- **You're told when it's opened.** The first view by someone who isn't a signed-in admin sends you an email.
+- **Housekeeping.** The daily job expires demos past their date and deletes them, with their conversations, 30 days later. Delete removes one immediately.
+- **Use.** Only to pitch that business's owner. Not for advertising or showing to the public.
+
+Setup: run `supabase/migrations/0009_demos.sql` in the Supabase SQL editor and set `DEMO_CONTACT_PHONE` / `DEMO_CONTACT_WHATSAPP` on Vercel. Demos are separate organizations flagged `is_demo`, left out of the client list, revenue numbers and trial emails.
+
 ## Payments (Razorpay)
 
 1. **Account:** sign up at razorpay.com and complete KYC (PAN, bank account, business details). Ask support to enable **Subscriptions** if it isn't in the menu.

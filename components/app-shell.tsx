@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   BarChart3, BookOpen, Bot, CreditCard, Crown, Download, Gauge, Inbox, LayoutGrid, LogOut, Menu, MessagesSquare,
-  Plus, Settings, Sparkles, UserRound, X,
+  Plus, Presentation, Settings, Sparkles, UserRound, X,
 } from "lucide-react";
 import { Logo } from "./ui";
 
@@ -68,7 +68,8 @@ export function AppShell(p: ShellProps) {
       </div>
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 pb-4" aria-label="Main">
         <div className="space-y-0.5">
-          {p.isAdmin ? <NavItem href="/app/admin" icon={Crown} label="Super admin" active={is("/app/admin")} onClick={close} /> : null}
+          {p.isAdmin ? <NavItem href="/app/admin" icon={Crown} label="Super admin" active={path === "/app/admin"} onClick={close} /> : null}
+          {p.isAdmin ? <NavItem href="/app/admin/demos" icon={Presentation} label="Demos" active={is("/app/admin/demos")} onClick={close} /> : null}
           {p.isAdmin || p.bots.length > 1 ? <NavItem href="/app" icon={LayoutGrid} label={p.isAdmin ? "All assistants" : "Assistants"} active={path === "/app"} onClick={close} /> : null}
         </div>
         {botId ? (

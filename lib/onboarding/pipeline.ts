@@ -31,6 +31,8 @@ export type OnboardOptions = {
   ownerNotes?: string;
   /** Time allowed for the whole import (default 270 s). */
   budgetMs?: number;
+  /** Demo bots stay drafts behind a test token, so the go-live check is skipped. */
+  skipSafetyCheck?: boolean;
 };
 
 /**
@@ -153,7 +155,7 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
   }
 
   let outcome: OnboardEvent["outcome"];
-  if (o.selfServe) {
+  if (o.selfServe && !o.skipSafetyCheck) {
     const slow = safetyPaceMs() > 0;
     send({ stage: "checking", message: `Running safety checks (the assistant must refuse fake discounts and prompt tricks)…${slow ? " This takes about two minutes." : ""}` });
     const left = mustEndBy - Date.now();

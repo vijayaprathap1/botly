@@ -15,7 +15,7 @@ export default async function ClientsPage() {
   if (!session.isAdmin && session.orgIds.length === 0) redirect("/start");
   const db = await supabaseServer();
   const { data } = await db.from("bots").select("*, org:organizations(*)").order("created_at", { ascending: false });
-  const bots = (data ?? []) as BotWithOrg[];
+  const bots = ((data ?? []) as BotWithOrg[]).filter((b) => !b.org.is_demo);
   // Customers with a single assistant go straight to it.
   if (!session.isAdmin && bots.length === 1) redirect(`/app/bots/${bots[0]!.id}`);
   const metrics = await botMetrics(bots);

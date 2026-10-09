@@ -14,7 +14,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await requireSession();
   const db = await supabaseServer();
   const { data: rows } = await db.from("bots").select("id, name, org:organizations(*)").order("created_at", { ascending: false }).limit(200);
-  const bots = ((rows ?? []) as unknown as { id: string; name: string; org: OrgRow }[]).map((b) => ({ id: b.id, name: b.name, business: b.org.name, org: b.org }));
+  const bots = ((rows ?? []) as unknown as { id: string; name: string; org: OrgRow }[]).map((b) => ({ id: b.id, name: b.name, business: b.org.is_demo ? `Demo · ${b.org.name}` : b.org.name, org: b.org }));
   const myOrg = !session.isAdmin ? bots.find((b) => session.orgIds.includes(b.org.id))?.org : undefined;
   const trial = myOrg ? trialState(myOrg) : null;
   // Super admin: surface a broken AI key immediately (live check, cached 5 minutes).

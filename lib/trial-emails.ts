@@ -101,12 +101,13 @@ export function renderTrialEmail(key: TrialEmailKey, org: Pick<OrgRow, "name" | 
 export async function sendTrialEmails(db: SupabaseClient, now = new Date()): Promise<{ sent: number; skipped: number }> {
   const { data } = await db
     .from("organizations")
-    .select("id, name, plan, created_at, created_by, billing_email, trial_ends_at, trial_reply_limit, trial_replies_used, trial_emails, suspended")
+    .select("*")
     .eq("plan", "trial")
-    .limit(500);
+    .limit(1000);
   let sent = 0;
   let skipped = 0;
   for (const org of (data ?? []) as (OrgRow & { created_at: string })[]) {
+    if (org.is_demo) continue;
     const key = nextTrialEmail(org, now);
     if (!key) continue;
     let to = org.billing_email ?? null;

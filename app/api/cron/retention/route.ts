@@ -1,4 +1,5 @@
 import { cronAuthorized } from "@/lib/cron";
+import { sweepDemos } from "@/lib/demo/service";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { sendTrialEmails } from "@/lib/trial-emails";
 
@@ -18,5 +19,10 @@ export async function GET(req: Request) {
     console.error("[cron/trial-emails]", e instanceof Error ? e.message : e);
     return { sent: 0, skipped: 0 };
   });
-  return Response.json({ ok: true, purged: data, trialEmails: trial });
+  // Demos: expire the ones past their date, and delete them for good 30 days later.
+  const demos = await sweepDemos(supabaseAdmin()).catch((e) => {
+    console.error("[cron/demos]", e instanceof Error ? e.message : e);
+    return { expired: 0, deleted: 0 };
+  });
+  return Response.json({ ok: true, purged: data, trialEmails: trial, demos });
 }

@@ -3,7 +3,13 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Parsers used by knowledge uploads must stay server-side and unbundled.
-  serverExternalPackages: ["unpdf", "mammoth"],
+  // Headless Chromium (demo builder, rendered mode) ships a binary that must not be bundled.
+  serverExternalPackages: ["unpdf", "mammoth", "@sparticuz/chromium", "puppeteer-core"],
+  // Only the two functions that copy a homepage carry the browser (about 70 MB).
+  outputFileTracingIncludes: {
+    "/api/admin/demos": ["./node_modules/@sparticuz/chromium/bin/**"],
+    "/app/admin/demos": ["./node_modules/@sparticuz/chromium/bin/**"],
+  },
   // Knowledge uploads (PDF/DOCX/CSV) go through Server Actions.
   experimental: { serverActions: { bodySizeLimit: "5mb" } },
   async redirects() {
