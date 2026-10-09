@@ -142,9 +142,9 @@ export async function updateBotSettings(botId: string, _: ActionState, form: For
   if (session.isAdmin && !/^[A-Za-z0-9][A-Za-z0-9._:/\-]{1,99}$/.test(model)) return { error: "Model must be a model id, e.g. claude-haiku-4-5 or openai/gpt-oss-120b" };
 
   // Older forms don't send these: keep what is stored.
-  const orgName = form.has("org_name") ? text(form.get("org_name")).replace(/s+/g, " ") : editable.org.name;
+  const orgName = form.has("org_name") ? text(form.get("org_name")).replace(/\s+/g, " ") : editable.org.name;
   if (orgName.length < 2 || orgName.length > 200) return { error: "Business name: 2 to 200 characters" };
-  const businessType = form.has("business_type") ? text(form.get("business_type")).replace(/s+/g, " ") : editable.org.business_type;
+  const businessType = form.has("business_type") ? text(form.get("business_type")).replace(/\s+/g, " ") : editable.org.business_type;
   if (businessType.length < 2 || businessType.length > 100) return { error: "Business type: 2 to 100 characters" };
 
   const db = supabaseAdmin();
