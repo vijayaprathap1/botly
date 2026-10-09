@@ -41,7 +41,9 @@ create policy demo_sites_admin_all on public.demo_sites for all to authenticated
 -- No anon or owner policy: the public page reads through the service role, by slug.
 
 -- Counts a view of a live demo. Returns true only for the very first view.
-create or replace function public.record_demo_view(p_slug text)
+-- (Dropped first so this file can be re-run over an earlier draft with another return type.)
+drop function if exists public.record_demo_view(text);
+create function public.record_demo_view(p_slug text)
 returns boolean
 language plpgsql security definer set search_path = public as $$
 declare v_views int;
