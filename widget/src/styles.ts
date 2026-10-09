@@ -149,7 +149,7 @@ button{cursor:pointer;background:none;border:0;padding:0;text-align:inherit}
 .meta a{color:var(--muted);text-decoration:underline;text-underline-offset:2px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media (max-width:640px){
-  .panel{inset:auto 0 0 0;width:100%;height:var(--vh,100dvh);max-height:none;border-radius:0;bottom:0;box-shadow:none;animation:sheetIn .3s cubic-bezier(.2,.8,.2,1)}
+  .panel{inset:0 0 auto 0;top:0;bottom:auto;width:100%;height:var(--vh,100dvh);max-height:none;border-radius:0;box-shadow:none;animation:sheetIn .3s cubic-bezier(.2,.8,.2,1)}
   .right .panel,.left .panel{right:0;left:0}
   .head{padding-top:calc(14px + env(safe-area-inset-top))}
   .open .launcher,.open .nudge{display:none}

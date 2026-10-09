@@ -238,8 +238,12 @@ export class BotlyWidget {
     const vv = window.visualViewport;
     if (!vv || !this.panel) return;
     this.wrap.style.setProperty("--vh", `${Math.round(vv.height)}px`);
-    if (this.isMobile()) this.panel.style.transform = vv.offsetTop ? `translateY(${vv.offsetTop}px)` : "";
+    // On phones the sheet is pinned to the top of the page viewport; when the keyboard opens the
+    // browser may also slide the visible area down inside it, so follow it by the same amount.
+    if (this.isMobile() || this.opts.fullscreen) this.panel.style.transform = vv.offsetTop ? `translateY(${Math.round(vv.offsetTop)}px)` : "";
     else this.panel.style.transform = "";
+    // The newest message stays in view when the keyboard takes half the screen.
+    if (this.list) this.scroll();
   };
 
   // ─── panel ─────────────────────────────────────────────────────────────────

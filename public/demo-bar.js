@@ -18,7 +18,7 @@
   try { dismissed = sessionStorage.getItem(key) === "1"; } catch (e) {}
 
   var set = function (el, props) { for (var k in props) el.style.setProperty(k, props[k], "important"); };
-  set(host, { all: "initial", position: "fixed", top: "0", left: "0", right: "0", "z-index": "2147483646", display: "block" });
+  set(host, { all: "initial", position: "fixed", top: "0", left: "0", right: "0", "z-index": "2147482990", display: "block" });
   var root = host.attachShadow({ mode: "open" });
   var style = document.createElement("style");
   style.textContent =
