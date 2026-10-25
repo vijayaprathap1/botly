@@ -9,7 +9,7 @@ export function homeFaqs() {
       q: "Will it make things up?",
       a: "It's instructed to answer only from your approved information, and it's tested against tricks like fake discount requests before it goes live. If it doesn't know, it says so.",
     },
-    { q: "Do I need a website?", a: "No. You can start from your Instagram or Google profile details and what you type in. A website gives it more to learn from." },
+    { q: "Do I need a website?", a: "No. You can start from what you type in, plus the bio you paste from your Instagram or Google profile. A website gives it more to learn from." },
     { q: "Which languages does it speak?", a: `${SPOKEN_LANGUAGES}. It replies in the same language and script the customer used.` },
     {
       q: "What happens after the free trial?",

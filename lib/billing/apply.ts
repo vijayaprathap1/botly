@@ -12,14 +12,24 @@ export function planForRazorpayPlan(planId: string): Plan | null {
 }
 
 /**
+ * Only an `active` subscription has been charged. `authenticated` means the mandate is set
+ * up but no payment has gone through yet (and `created` not even that), so neither unlocks
+ * a paid plan. Razorpay moves the subscription to `active` (subscription.activated /
+ * subscription.charged) once the first charge succeeds.
+ */
+export const isPaidStatus = (status: RzpSubscription["status"]) => status === "active";
+
+/**
  * Brings an organization in line with its Razorpay subscription. Paid and active →
  * that plan's quota; ended/halted → service stops (visitors see contact details).
+ * Not yet paid (created/authenticated) → nothing changes. Safe to apply the same
+ * state twice, and an out-of-order `authenticated` event never undoes `active`.
  */
 export async function applySubscription(db: SupabaseClient, orgId: string, sub: RzpSubscription): Promise<void> {
   const plan = planForRazorpayPlan(sub.plan_id);
   const periodEnd = sub.current_end ? new Date(sub.current_end * 1000).toISOString() : null;
   const base = { razorpay_subscription_id: sub.id, razorpay_plan_id: sub.plan_id, current_period_end: periodEnd };
-  if ((sub.status === "active" || sub.status === "authenticated") && plan && plan !== "trial") {
+  if (isPaidStatus(sub.status) && plan && plan !== "trial") {
     await db
       .from("organizations")
       .update({ ...base, plan, subscription_status: "active", monthly_conversation_quota: plans()[plan].conversations, suspended: false, cancel_at_period_end: false })
@@ -47,18 +57,23 @@ export async function applySubscription(db: SupabaseClient, orgId: string, sub: 
   }
 }
 
-export const isPaidActive = (sub: RzpSubscription) => (sub.status === "active" || sub.status === "authenticated") && Boolean(planForRazorpayPlan(sub.plan_id));
+export const isPaidActive = (sub: RzpSubscription) => isPaidStatus(sub.status) && Boolean(planForRazorpayPlan(sub.plan_id));
 
 /**
- * A newly paid subscription becomes the workspace's subscription. If it replaces an
+ * A newly paid subscription becomes the workspace's subscription. Returns false (and
+ * changes nothing) while the subscription isn't charged yet. If it replaces an
  * earlier one (plan switch), that one is cancelled now, so the customer is never billed
  * for both. Only called after the payment signature or webhook signature is verified.
  */
-export async function activateSubscription(db: SupabaseClient, orgId: string, sub: RzpSubscription): Promise<void> {
+export async function activateSubscription(db: SupabaseClient, orgId: string, sub: RzpSubscription): Promise<boolean> {
+  // Not charged yet: keep the current plan (and any subscription it replaces) untouched.
+  // The webhook activates it when Razorpay reports the first successful charge.
+  if (!isPaidActive(sub)) return false;
   const { data: org } = await db.from("organizations").select("razorpay_subscription_id").eq("id", orgId).maybeSingle();
   const previous = [sub.notes?.replaces, org?.razorpay_subscription_id].filter((id): id is string => Boolean(id) && id !== sub.id);
   await applySubscription(db, orgId, sub);
   for (const id of new Set(previous)) {
     await cancelSubscription(id, false).catch((e) => console.warn("[billing] couldn't cancel replaced subscription", id, e instanceof Error ? e.message : e));
   }
+  return true;
 }

@@ -66,7 +66,7 @@ export default async function SuperAdminPage({ searchParams }: { searchParams: P
         <Stat label="Active trials" value={fmtInt(trials.length)} hint={`${orgs.length} workspaces total`} />
         <Stat label="Trial → paid" value={selfServe.length ? `${Math.round((converted / selfServe.length) * 100)}%` : "—"} hint={`${converted} of ${selfServe.length} sign-ups`} />
         <Stat label="AI cost this month" value={fmtUsd(aiCostUsd)} hint={`≈ ${fmtInr(Math.round(aiCostUsd * usdInr))}`} />
-        <Stat label="Gross margin (est.)" value={mrr ? `${Math.round(((mrr - aiCostUsd * usdInr) / mrr) * 100)}%` : "—"} hint="MRR minus AI cost, before hosting and GST" />
+        <Stat label="Gross margin (est.)" value={mrr ? `${Math.round(((mrr - aiCostUsd * usdInr) / mrr) * 100)}%` : "—"} hint="MRR minus AI cost, before hosting" />
       </div>
       <Card>
         <form className="flex flex-wrap gap-2" action="/app/admin">

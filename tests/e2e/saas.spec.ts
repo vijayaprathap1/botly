@@ -112,6 +112,9 @@ test("new user signs up, builds an assistant from website + social text, preview
   const { rows: ks } = await pool.query("select type, title, status from knowledge_sources where bot_id = $1", [botId]);
   expect(ks.find((k) => k.title === "Details from the owner")?.status).toBe("approved");
   expect(ks.some((k) => k.title === "Returns policy")).toBe(true);
+  // AI-drafted knowledge waits for the owner's approval (QA R2).
+  expect(ks.filter((k) => k.title !== "Details from the owner").every((k) => k.status === "draft")).toBe(true);
+  await expect(page.getByRole("link", { name: "Review and approve" })).toBeVisible();
   const { rows: runs } = await pool.query("select total from eval_runs where bot_id = $1", [botId]);
   expect(runs[0].total).toBe(4);
 

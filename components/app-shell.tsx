@@ -7,6 +7,7 @@ import {
   Plus, Presentation, Settings, Sparkles, UserRound, X,
 } from "lucide-react";
 import { Logo } from "./ui";
+import { currentTrial } from "@/app/app/trial-actions";
 
 export type ShellBot = { id: string; name: string; business: string };
 export type ShellProps = {
@@ -39,6 +40,26 @@ export function AppShell(p: ShellProps) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [path]);
+  // Keep the trial card current: re-read it on navigation, on tab focus, and every 30 s.
+  const [trial, setTrial] = useState(p.trial);
+  useEffect(() => setTrial(p.trial), [p.trial]);
+  const onTrial = Boolean(p.trial);
+  useEffect(() => {
+    if (!onTrial) return;
+    let live = true;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      currentTrial().then((t) => live && setTrial(t), () => {});
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 30_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [path, onTrial]);
   const botMatch = /^\/app\/bots\/([0-9a-f-]{36})/.exec(path);
   const botId = botMatch?.[1] ?? (p.bots.length === 1 && !p.isAdmin ? p.bots[0]!.id : null);
   const current = p.bots.find((b) => b.id === botId);
@@ -91,18 +112,18 @@ export function AppShell(p: ShellProps) {
           </div>
         ) : null}
       </nav>
-      {p.trial ? (
+      {trial ? (
         <div className="mx-3 mb-3 rounded-lg border border-zinc-200 bg-white p-3 shadow-[var(--shadow-card)]">
           <div className="flex items-center justify-between text-[12px]">
-            <span className="font-semibold text-zinc-900">{p.trial.over ? "Trial ended" : "Free trial"}</span>
-            {!p.trial.over ? <span className="text-zinc-500">{p.trial.daysLeft}d left</span> : null}
+            <span className="font-semibold text-zinc-900">{trial.over ? "Trial ended" : "Free trial"}</span>
+            {!trial.over ? <span className="text-zinc-500">{trial.daysLeft}d left</span> : null}
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100">
-            <div className={`h-full rounded-full ${p.trial.over ? "bg-red-500" : "bg-brand-600"}`} style={{ width: `${Math.min(100, ((p.trial.limit - p.trial.left) / Math.max(1, p.trial.limit)) * 100)}%` }} />
+            <div className={`h-full rounded-full ${trial.over ? "bg-red-500" : "bg-brand-600"}`} style={{ width: `${Math.min(100, ((trial.limit - trial.left) / Math.max(1, trial.limit)) * 100)}%` }} />
           </div>
-          <p className="mt-1.5 text-[11.5px] text-zinc-500">{p.trial.over ? "AI replies are paused." : `${p.trial.left} of ${p.trial.limit} replies left`}</p>
+          <p className="mt-1.5 text-[11.5px] text-zinc-500">{trial.over ? "AI replies are paused." : `${trial.left} of ${trial.limit} replies left`}</p>
           <Link href="/app/billing" onClick={close} className="mt-2.5 flex h-7 items-center justify-center rounded-md bg-zinc-900 text-[12px] font-medium text-white hover:bg-zinc-800">
-            {p.trial.over ? "Choose a plan" : "Upgrade"}
+            {trial.over ? "Choose a plan" : "Upgrade"}
           </Link>
         </div>
       ) : p.planName ? (

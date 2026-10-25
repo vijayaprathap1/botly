@@ -29,9 +29,11 @@ export default async function BotOverview({ params, searchParams }: { params: Pr
   const snippet = installSnippet(config.appUrl, bot.public_key);
   const testUrl = `${config.appUrl}/t/${bot.test_token}`;
   const db = await supabaseServer();
-  const [{ data: evalRun }, { count: approved }, { data: perf }] = await Promise.all([
+  const [{ data: evalRun }, { count: approved }, { count: drafts }, { data: perf }] = await Promise.all([
     supabaseAdmin().from("eval_runs").select("created_at, passed, total, injection_passed, first_token_p50_ms").eq("bot_id", bot.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("knowledge_sources").select("id", { count: "exact", head: true }).eq("bot_id", bot.id).eq("status", "approved"),
+    // Drafted answers waiting for the owner (raw pages are backup material, not counted).
+    db.from("knowledge_sources").select("id", { count: "exact", head: true }).eq("bot_id", bot.id).eq("status", "draft").neq("type", "page"),
     session.isAdmin
       ? db.from("messages").select("first_token_ms, conversations!inner(bot_id)").eq("conversations.bot_id", bot.id).eq("role", "assistant").not("first_token_ms", "is", null).order("created_at", { ascending: false }).limit(100)
       : Promise.resolve({ data: null }),
@@ -48,7 +50,7 @@ export default async function BotOverview({ params, searchParams }: { params: Pr
   const liveLabel = bot.allowed_origins.length ? bot.allowed_origins.join(", ") : "none yet";
   return (
     <div className="grid gap-5">
-      {sp.welcome && !sp.setup ? <Notice tone="green">Your assistant is ready. Try it below, check your business profile, then add the install code to your website.</Notice> : null}
+      {sp.welcome && !sp.setup ? <Notice tone="green">Your assistant is ready. Try it below, approve the drafted answers, check your business profile, then add the install code to your website.</Notice> : null}
       {sp.setup === "failed" ? (
         <Notice tone="amber">
           Your assistant was created, but we couldn&apos;t finish reading your website. It knows only what you typed. <Link className="font-medium underline" href={`/app/bots/${bot.id}/onboarding`}>Run the import again</Link> or add details in <Link className="font-medium underline" href={`/app/bots/${bot.id}/knowledge`}>Knowledge</Link>.
@@ -69,6 +71,15 @@ export default async function BotOverview({ params, searchParams }: { params: Pr
             <>The safety check didn&apos;t pass yet, so the assistant stays in preview. Add more details in Knowledge and try again, or contact support.</>
           )}
         </Notice>
+      ) : null}
+      {drafts ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/70 px-5 py-4">
+          <div>
+            <p className="text-[14px] font-semibold text-amber-900">{drafts === 1 ? "1 drafted answer is" : `${fmtInt(drafts)} drafted answers are`} waiting for your approval.</p>
+            <p className="text-[13px] text-amber-800">We wrote them from your website. Your assistant uses only approved answers, so check them, fix anything wrong, then approve.</p>
+          </div>
+          <Link href={`/app/bots/${bot.id}/knowledge?status=draft`} className={btn.primary}>Review and approve</Link>
+        </div>
       ) : null}
       {approved === 0 ? (
         <Notice tone="amber">

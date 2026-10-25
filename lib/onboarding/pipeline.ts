@@ -25,7 +25,7 @@ export type OnboardOptions = {
   url?: string | null;
   maxPages: number;
   draft: boolean;
-  /** Self-serve: approve drafts, fill greeting/suggestions/tone, save the business profile, run the safety check and go live. */
+  /** Self-serve: fill greeting/suggestions/tone, save the business profile, run the safety check and go live. Drafted knowledge stays draft for the owner to approve (demo workspaces excepted). */
   selfServe: boolean;
   /** Details the owner typed in the sign-up form. */
   ownerNotes?: string;
@@ -47,7 +47,10 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
   const { data: botRow } = await db.from("bots").select("*, org:organizations(*)").eq("id", botId).single();
   if (!botRow) throw new Error("Bot not found");
   const bot = botRow as BotWithOrg;
-  const status = o.selfServe ? "approved" : "draft";
+  // AI-drafted knowledge always waits for the owner's approval. Only throwaway demo
+  // workspaces (admin-built sales previews, no owner to review) are approved straight away.
+  const autoApprove = o.selfServe && Boolean(bot.org.is_demo);
+  const status = autoApprove ? "approved" : "draft";
   const stamp = (r: { type: string; title: string; url: string | null; content: string }, st = status) => ({
     ...r,
     bot_id: botId,
@@ -160,12 +163,16 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
       send({
         stage: "skip",
         message: aiPaused
-          ? "Live chats are using the AI capacity right now, so FAQ drafting is paused instead of failing. Your pages are saved. Run the import again in a few minutes."
-          : "Couldn't write the FAQs automatically. Using your website pages directly instead.",
+          ? autoApprove
+            ? "Live chats are using the AI capacity right now, so FAQ drafting is paused instead of failing. Your pages are saved. Run the import again in a few minutes."
+            : "Live chats are using the AI capacity right now, so FAQ drafting is paused instead of failing. Your pages are saved as drafts. Run the import again in a few minutes."
+          : autoApprove
+            ? "Couldn't write the FAQs automatically. Using your website pages directly instead."
+            : "Couldn't write the FAQs automatically. Your website pages are saved as drafts you can approve instead.",
       });
-      if (o.selfServe) await db.from("knowledge_sources").update({ status: "approved" }).eq("bot_id", botId).eq("type", "page");
+      if (autoApprove) await db.from("knowledge_sources").update({ status: "approved" }).eq("bot_id", botId).eq("type", "page");
     }
-  } else if (o.selfServe && pages.length) {
+  } else if (autoApprove && pages.length) {
     await db.from("knowledge_sources").update({ status: "approved" }).eq("bot_id", botId).eq("type", "page");
   }
 
@@ -179,7 +186,8 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
     const left = mustEndBy - Date.now();
     // Paced checks need (cases − 1) pauses plus the calls themselves.
     const needed = slow ? safetyPaceMs() * (SAFETY_CASES.length - 1) + 30_000 : 30_000;
-    const check = left < needed ? { passed: false, inconclusive: true } : await goLiveCheck(db, botId, { budgetMs: left - 10_000 });
+    // Check the drafts too: they go live as soon as the owner approves them, without another check.
+    const check = left < needed ? { passed: false, inconclusive: true } : await goLiveCheck(db, botId, { budgetMs: left - 10_000, includeDrafts: !autoApprove });
     outcome = check.passed ? "live" : check.inconclusive ? "busy" : "preview";
     send({
       stage: check.passed ? "live" : "warn",
@@ -192,7 +200,15 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
   }
   // Knowledge changed: bring the retrieval index up to date (no-op below the size cap).
   await afterOnboarding(botId);
-  send({ stage: "done", message: o.selfServe ? (outcome === "live" ? "Your assistant is ready." : "Your assistant is ready to preview.") : "Done. Review and approve the drafts in Knowledge.", outcome });
+  send({
+    stage: "done",
+    message: o.selfServe && autoApprove
+      ? outcome === "live" ? "Your assistant is ready." : "Your assistant is ready to preview."
+      : o.selfServe
+        ? `${outcome === "live" ? "Your assistant is live." : "Your assistant is ready to preview."} Next: review and approve the drafted answers in Knowledge. Until then it only uses the details you typed.`
+        : "Done. Review and approve the drafts in Knowledge.",
+    outcome,
+  });
   return { ok: true };
 }
 
@@ -216,9 +232,12 @@ async function afterOnboarding(botId: string): Promise<void> {
 export type GoLiveResult = { passed: boolean; inconclusive: boolean };
 
 /** Runs the prompt-injection cases with the real model, records them, and sets the bot live if all pass. */
-export async function goLiveCheck(db: SupabaseClient, botId: string, opts: { budgetMs?: number } = {}): Promise<GoLiveResult> {
+export async function goLiveCheck(db: SupabaseClient, botId: string, opts: { budgetMs?: number; includeDrafts?: boolean } = {}): Promise<GoLiveResult> {
   const { data: botRow } = await db.from("bots").select("*, org:organizations(*)").eq("id", botId).single();
-  const { data: ks } = await db.from("knowledge_sources").select("id, type, title, url, content").eq("bot_id", botId).eq("status", "approved");
+  // includeDrafts: onboarding checks the drafted answers as well, so approving them later is already covered.
+  // Raw page drafts stay out (they were never auto-approved and would overflow small token limits).
+  const base = db.from("knowledge_sources").select("id, type, title, url, content").eq("bot_id", botId);
+  const { data: ks } = await (opts.includeDrafts ? base.or("status.eq.approved,and(status.eq.draft,type.in.(faq,policy,note,product))") : base.eq("status", "approved"));
   if (!botRow) return { passed: false, inconclusive: false };
   const r = await runSafetyCheck(botRow as BotWithOrg, (ks ?? []) as KnowledgeSource[], getLlm(), { paceMs: safetyPaceMs(), budgetMs: opts.budgetMs });
   // A check the AI service never answered says nothing about the assistant: don't record it as a failure.

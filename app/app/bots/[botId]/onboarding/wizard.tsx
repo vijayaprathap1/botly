@@ -102,12 +102,12 @@ export function OnboardingWizard({ botId, defaultUrl, maxPages, selfServe = fals
             {events.some((e) => e.stage === "empty") ? (
               <Notice tone="amber">Nothing could be read from that website. Add your price list or details in Knowledge instead.</Notice>
             ) : selfServe ? (
-              <Notice tone="green">Done. New FAQs and details are in your assistant&apos;s knowledge and apply to the next message.</Notice>
+              <Notice tone="green">Done. The new FAQs and details are drafts: your assistant starts using each one once you approve it.</Notice>
             ) : (
               <Notice tone="green">Drafts are ready. Next: review and approve them.</Notice>
             )}
-            <Link className={btn.primary} href={selfServe ? `/app/bots/${botId}/knowledge` : `/app/bots/${botId}/knowledge?status=draft`}>
-              {selfServe ? "3. Check your knowledge" : "3. Review drafts in Knowledge"}
+            <Link className={btn.primary} href={`/app/bots/${botId}/knowledge?status=draft`}>
+              {selfServe ? "3. Review and approve your drafts" : "3. Review drafts in Knowledge"}
             </Link>
           </div>
         ) : null}
