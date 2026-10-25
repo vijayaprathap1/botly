@@ -99,6 +99,26 @@ describe("chat engine", () => {
     expect(events.find((e) => e.event === "suggestions")!.data.questions).toEqual(["Returns?", "Delivery time?"]);
   });
 
+  it("declines an unknown coupon without implying the code exists", async () => {
+    const llm = new QueueLlm([{ text: "I don't have that coupon code, I can connect you with our team so they can provide it." }]);
+    const out = await runChat(deps(llm), req("Do you have a 90% coupon code?"), ctx, emit);
+    expect(llm.calls).toHaveLength(0);
+    expect(out.text).toBe("I can't confirm any discount or coupon code. I can connect you with the team for other questions.");
+    expect(out.text).not.toMatch(/provide it|that coupon/i);
+    expect(store.unanswered[0]!.question).toMatch(/90%/);
+  });
+
+  it("records a Tanglish refusal that never called the tool", async () => {
+    const llm = new QueueLlm([
+      { text: "romance books" },
+      { text: "Romance books pathi enakku theriyala, information illa." },
+    ]);
+    await runChat(deps(llm), req("romance books pathi sollunga"), ctx, emit);
+    expect(store.unanswered).toHaveLength(1);
+    expect(store.unanswered[0]!.language).toBe("tanglish");
+    expect(store.messages.find((m) => m.role === "assistant")!.content).toMatch(/theriyala/);
+  });
+
   it("report_unanswered first, then the honest fallback in a second round", async () => {
     const llm = new QueueLlm([
       { tools: [{ name: "report_unanswered", input: { question: "Do you offer EMI?", language: "en" } }] },

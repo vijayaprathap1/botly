@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isOriginAllowed, normalizeOrigin } from "@/lib/security/origin";
+import { widgetDisabledWarning } from "@/widget/src/api";
 
 describe("origin check", () => {
   const allowed = ["https://ananya.in", "shop.example.com", "*.myshopify.com", "http://localhost:3000"];
@@ -32,5 +33,23 @@ describe("origin check", () => {
 
   it("empty allow-list allows nothing", () => {
     expect(isOriginAllowed("https://ananya.in", [])).toBe(false);
+  });
+
+  it("logs one warning when the widget is disabled for the origin", () => {
+    expect(widgetDisabledWarning("origin", "http://localhost:8765")).toBe(
+      "[Botly] This domain isn't allowed (http://localhost:8765). Add it in Botly → Settings → Allowed domains.",
+    );
+    expect(widgetDisabledWarning("inactive", "http://localhost:8765")).toBeNull();
+  });
+
+  it("a host with no port matches any port, and a host with a port matches only that port", () => {
+    expect(isOriginAllowed("http://localhost:8765", ["localhost"])).toBe(true);
+    expect(isOriginAllowed("https://localhost", ["localhost"])).toBe(true);
+    expect(isOriginAllowed("http://localhost:3000", ["localhost"])).toBe(true);
+    expect(isOriginAllowed("http://127.0.0.1:8765", ["localhost"])).toBe(false);
+    expect(isOriginAllowed("http://localhost:8765", ["localhost:8765"])).toBe(true);
+    expect(isOriginAllowed("http://localhost:3000", ["localhost:8765"])).toBe(false);
+    expect(isOriginAllowed("http://localhost:3000", ["http://localhost"])).toBe(true);
+    expect(isOriginAllowed("https://localhost:8443", ["http://localhost"])).toBe(false);
   });
 });
