@@ -1,6 +1,12 @@
 -- Growth analytics. Additive: new table, new columns, a metrics schema the Data API
 -- cannot read. Existing signup, chat, billing and widget behaviour is unchanged.
 --
+-- This is 0012 because 0011_launch_guards.sql already uses 0011. It does not
+-- read or change that migration's objects (check_reply, commit_reply,
+-- platform_state, claim_slot, ai_budget_try, ai_budget_add). Apply order when
+-- both files are present: 0011_launch_guards.sql, then 0012_analytics.sql.
+-- 0012 also applies cleanly on a database that has only 0001–0010.
+--
 -- Checked against migrations 0001–0010 (the launch-readiness note had no runnable
 -- SQL, only the sources below). Corrections applied here:
 --   * organizations.created_at is the signup time. auth.users is not required.

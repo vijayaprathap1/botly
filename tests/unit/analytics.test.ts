@@ -191,7 +191,7 @@ describe("widget first load", () => {
 });
 
 describe("analytics migration", () => {
-  const sql = readFileSync(path.join(root, "supabase/migrations/0011_analytics.sql"), "utf8");
+  const sql = readFileSync(path.join(root, "supabase/migrations/0012_analytics.sql"), "utf8");
   const manual = readFileSync(path.join(root, "supabase/manual/metrics_reader.sql"), "utf8");
 
   it("prices match the plan defaults and the reader role has no password", () => {

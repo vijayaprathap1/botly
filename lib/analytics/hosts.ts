@@ -1,7 +1,7 @@
 /**
  * Origins that are Botly itself, a preview host, or a developer machine.
  * A widget load or conversation on one of these is not a customer going live.
- * Kept in sync with metrics.ignored_origin in supabase/migrations/0011_analytics.sql.
+ * Kept in sync with metrics.ignored_origin in supabase/migrations/0012_analytics.sql.
  */
 const EXACT = new Set(["botly.in", "www.botly.in", "localhost", "127.0.0.1"]);
 

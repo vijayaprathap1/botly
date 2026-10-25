@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Recreate a local Postgres database with the Supabase shim, all migrations and the seed.
+# Files in supabase/migrations run in lexical order, so 0011_launch_guards.sql
+# (when present) runs before 0012_analytics.sql. 0012 does not require 0011.
 # Usage: DB=botly_test bash scripts/local-db.sh   (needs a local Postgres + psql)
 set -euo pipefail
 DB="${DB:-botly_test}"

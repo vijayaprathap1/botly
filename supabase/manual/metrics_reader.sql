@@ -1,4 +1,4 @@
--- NOT a migration. Run by hand in the Supabase SQL editor if 0011_analytics.sql
+-- NOT a migration. Run by hand in the Supabase SQL editor if 0012_analytics.sql
 -- could not create metrics_reader, and to turn the role into a login.
 -- Do not put a password in this file or in git.
 --
