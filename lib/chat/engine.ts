@@ -5,7 +5,10 @@ import { buildKnowledgeBlock } from "../knowledge";
 import type { Retriever } from "../retrieval/retriever";
 import { toCard, verifyCustomer, type OrderProvider, type OrderStatusCard } from "../orders/types";
 import { detectLanguage } from "../language";
+import { declinesKnowledge, offerDecision, offerDecline, replyInstruction } from "../reply-style";
+import { needsQueryRewrite, prepareSearch } from "../retrieval/retriever";
 import type { LlmClient, LlmMessage, TextPart, ToolResultPart, ToolUsePart } from "../llm/types";
+import { matchApprovedFaq } from "../faq-match";
 import { resolveModel } from "../llm/provider";
 import { rateLimitWaitMs } from "../llm/rate-limit";
 import { reportError } from "../alerts";
@@ -39,7 +42,7 @@ export type Emit = (event: ChatEventName, data: unknown) => void;
 export type ToolCard =
   | { type: "lead_form"; leadType: LeadType; prefill: { name?: string; phone?: string; email?: string; need?: string }; error?: string }
   | { type: "lead_saved"; name: string; handoff: boolean }
-  | { type: "fallback_contact"; reason: "quota" | "inactive" | "error"; contact: BotWithOrg["fallback_contact"] }
+  | { type: "fallback_contact"; reason: "quota" | "inactive" | "error" | "busy" | "cap"; contact: BotWithOrg["fallback_contact"] }
   | ({ type: "order_status" } & OrderStatusCard)
   | { type: "callback_form"; prefill: { name?: string; phone?: string; date?: string; slot?: string; need?: string }; minDate: string; error?: string };
 
@@ -115,10 +118,10 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   if (blocked) return fail("rate_limited", "You're sending messages quickly. Please wait a minute and try again.");
 
   // 2b. Plan gate: free-trial replies and days, suspended accounts ---------------------
-  const gate = await deps.store.consumeReply(bot.org.id);
-  if (gate !== "ok") {
+  const gate = await deps.store.checkReply(bot.org.id);
+  if (gate.status !== "ok") {
     emit("tool_card", { type: "fallback_contact", reason: "quota", contact: bot.fallback_contact } satisfies ToolCard);
-    emit("done", { conversationId: req.conversationId ?? null, quota: gate === "suspended" ? "suspended" : "trial_ended" });
+    emit("done", { conversationId: req.conversationId ?? null, quota: gate.status === "suspended" ? "suspended" : "trial_ended" });
     return outcome;
   }
 
@@ -157,11 +160,15 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   emit("meta", { conversationId, isNew: isNewConversation });
 
   // 4. Context: knowledge, history, facts -------------------------------------------
-  const [sources, rows, lead] = await Promise.all([
+  const [sources, rows, lead, aiReplies] = await Promise.all([
     deps.store.getApprovedKnowledge(bot.id),
     deps.store.getMessages(conversationId, config.historyTurns * 4),
     conversation.lead_id ? deps.store.getLead(conversation.lead_id) : Promise.resolve(null),
+    isNewConversation ? Promise.resolve(0) : deps.store.countAiReplies(conversationId),
   ]);
+  const faqHit = matchApprovedFaq(sources, req.message);
+  const replyCap = config.maxAiReplies(bot.org.plan);
+  const capped = !faqHit && replyCap > 0 && aiReplies >= replyCap;
   // Saved while the model streams (after reading history, so it isn't duplicated there).
   const userMessagePromise = deps.store.insertMessage({
     conversation_id: conversationId,
@@ -171,18 +178,30 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   });
   const knowledge = buildKnowledgeBlock(sources, config.knowledgeTokenCap);
   const model = resolveModel(bot.model || config.defaultModel);
+  const lastUser = [...rows].reverse().find((r) => r.role === "user")?.content ?? "";
+
+  // Non-English questions are rewritten once, on the small fallback model, and only for search.
+  let searchQueries = [req.message.slice(0, 500)];
+  let englishQuery = "";
+  if (!faqHit && !capped && needsQueryRewrite(outcome.language, req.message)) {
+    const prepared = await prepareSearch(deps.llm, model, req.message, outcome.language);
+    searchQueries = prepared.queries;
+    englishQuery = prepared.english;
+    outcome.usage = addUsage(outcome.usage, prepared.usage);
+  }
+  if (lastUser && lastUser !== req.message && !searchQueries.includes(lastUser)) searchQueries.push(lastUser.slice(0, 300));
 
   // Retrieval mode (P1 knowledge too big for one prompt): pinned policies + chunks for this question.
   let approvedKnowledgeText = knowledge.text;
   let retrievedKnowledge: string | null = null;
   let retrievalInfo: { mode: "full" | "retrieval" | "full-capped"; titles?: string[]; query?: string } = { mode: "full" };
-  if (knowledge.overCap && deps.retriever) {
-    const lastUser = [...rows].reverse().find((r) => r.role === "user")?.content ?? "";
+  if (!faqHit && !capped && knowledge.overCap && deps.retriever) {
     try {
       const r = await deps.retriever.retrieve({
         botId: bot.id,
         sources,
-        query: `${req.message}\n${lastUser}`.slice(0, 800),
+        query: req.message.slice(0, 500),
+        queries: searchQueries,
         language: outcome.language,
         model,
         cap: config.knowledgeTokenCap,
@@ -207,6 +226,9 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   if (history.olderNote) facts.push(history.olderNote);
   if (lead) facts.push(`The visitor's details are already saved: name ${lead.name}, phone ${lead.phone}. Don't ask for them again.`);
   if (conversation.status === "handed_off") facts.push("This conversation was already handed to the team; they will contact the visitor.");
+  if (englishQuery && englishQuery.toLowerCase() !== req.message.trim().toLowerCase()) {
+    facts.push(`English wording of the visitor's question, for finding facts only. Do not quote this note, and do not answer in English unless the visitor wrote in English: ${englishQuery}`);
+  }
   const id = req.identity;
   if (id && (id.name || id.phone || id.email)) {
     facts.push(
@@ -228,6 +250,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     pageTitle: req.pageTitle,
     pageUrl: req.pageUrl,
     conversationFacts: facts,
+    replyInstruction: replyInstruction(req.message),
   });
 
   const messages: LlmMessage[] = [...history.messages];
@@ -248,19 +271,51 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   // 5. Model + tool loop ---------------------------------------------------------------
   const tools = toolsForPlan(bot.org.plan);
   const baseMessages = structuredClone(messages);
+  const say = (t: string) => {
+    if (outcome.firstTokenMs === null) outcome.firstTokenMs = Date.now() - started;
+    outcome.text += t;
+    emit("delta", { text: t });
+  };
+  const offerPerson = (kind: "outage" | "cap", retryAfterMs?: number) => {
+    const text = personText(outcome.language, kind);
+    say(text);
+    emit("tool_card", {
+      type: "lead_form",
+      leadType: "other",
+      prefill: { need: req.message.slice(0, 500) },
+    } satisfies ToolCard);
+    const contact = bot.fallback_contact ?? {};
+    if (contact.phone || contact.whatsapp || contact.email) {
+      emit("tool_card", { type: "fallback_contact", reason: kind === "cap" ? "cap" : "busy", contact } satisfies ToolCard);
+    }
+    // The bubble already shows the sentence. ai_unavailable tells safety checks this was not a model answer.
+    if (kind === "outage") emit("error", { code: "ai_unavailable", message: text, retryAfterMs: retryAfterMs && retryAfterMs > 0 ? retryAfterMs : 15_000 });
+  };
   // A reply with neither text nor a card would leave the visitor looking at nothing.
   let cardShown = false;
   const emitTurn: Emit = (event, data) => {
     if (event === "tool_card") cardShown = true;
     emit(event, data);
   };
-  const say = (t: string) => {
-    if (outcome.firstTokenMs === null) outcome.firstTokenMs = Date.now() - started;
-    outcome.text += t;
-    emit("delta", { text: t });
-  };
+  let countTrial = false;
   let rounds = 0;
-  try {
+  const offerKnowledge = `${approvedKnowledgeText}\n${retrievedKnowledge ?? ""}`;
+  const denyOffer = !faqHit && !capped && offerDecision(req.message, offerKnowledge) === "deny";
+  if (faqHit) {
+    say(faqHit.answer);
+    countTrial = true;
+  } else if (capped) {
+    offerPerson("cap");
+  } else if (denyOffer) {
+    await deps.store.mergeUnanswered(bot.id, conversationId, req.message.slice(0, 500), outcome.language);
+    outcome.toolCalls.push({
+      name: "report_unanswered",
+      input: { question: req.message.slice(0, 500), language: outcome.language, reason: "unverified_offer" },
+      result: { ok: true, not_in_knowledge: true, offer_unverified: true },
+    });
+    say(offerDecline(outcome.language));
+    countTrial = true;
+  } else try {
     while (rounds < config.maxToolRounds) {
       rounds++;
       const needsSeparator = outcome.text.length > 0;
@@ -338,22 +393,27 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
         say(emptyReplyText(outcome.language, conversation.status === "handed_off"));
       }
     }
+    countTrial = true;
   } catch (e) {
     const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
     console.error("[chat] model call failed", bot.id, msg);
     outcome.jobs.push(() => reportError("AI replies failing", e, { bot: bot.name, business: bot.org.name, model }).then(() => undefined));
     if (outcome.text.trim() || cardShown) {
       // The visitor already has an answer or a form; a later tool round failing changes nothing for them.
-    } else if (isRateLimited(msg)) {
-      // Provider is saturated for a few seconds (free tiers): asking again shortly works,
-      // so don't send the visitor away to the phone number.
-      const waitMs = rateLimitWaitMs(msg);
-      const when = waitMs && waitMs > 5_000 ? `about ${Math.ceil(waitMs / 5_000) * 5} seconds` : "a few seconds";
-      emit("error", { code: "busy", message: `I'm answering a lot of questions right now. Please send that again in ${when}.`, retryAfterMs: waitMs ?? undefined });
+      countTrial = true;
     } else {
-      emit("tool_card", { type: "fallback_contact", reason: "error", contact: bot.fallback_contact } satisfies ToolCard);
-      emit("error", { code: "llm_error", message: "Sorry, I couldn't reply just now. You can reach the team directly." });
+      offerPerson("outage", rateLimitWaitMs(msg) ?? undefined);
     }
+  }
+
+  // A refusal the model wrote without calling report_unanswered (any language) still lands in Unanswered.
+  if (!faqHit && outcome.text.trim() && !outcome.toolCalls.some((t) => t.name === "report_unanswered") && declinesKnowledge(outcome.text)) {
+    await deps.store.mergeUnanswered(bot.id, conversationId, req.message.slice(0, 500), outcome.language);
+    outcome.toolCalls.push({
+      name: "report_unanswered",
+      input: { question: req.message.slice(0, 500), language: outcome.language, detected: true },
+      result: { ok: true, not_in_knowledge: true },
+    });
   }
 
   // 6. Persist + account ---------------------------------------------------------------
@@ -403,6 +463,10 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     });
   }
 
+  if (countTrial && !gate.counted && bot.org.plan === "trial") {
+    await deps.store.commitReply(bot.org.id).catch((err) => console.error("[chat] commitReply", err instanceof Error ? err.message : err));
+  }
+
   if (ctx.debug) {
     emit("debug", {
       model,
@@ -430,17 +494,35 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   return outcome;
 }
 
-const isRateLimited = (message: string) => /LLM API 429|\b429\b|rate.?limit|tokens per minute|overloaded/i.test(message);
+/** Shown with the lead form and, when the bot has them, WhatsApp / phone / email. */
+function personText(language: string, kind: "outage" | "cap"): string {
+  if (kind === "cap") {
+    if (language === "ta") return "இந்த உரையாடலில் என்னால் மேலும் பதிலளிக்க முடியாது. கீழே உள்ள படிவத்தில் பெயரையும் எண்ணையும் எழுதுங்கள், அல்லது வாட்ஸ்அப், அழைப்பு அல்லது மின்னஞ்சல் மூலம் எங்களைத் தொடர்பு கொள்ளுங்கள். குழு தொடரும்.";
+    if (language === "tanglish") return "Intha chat-la innum reply panna mudiyathu. Keela form-la name-um number-um podunga, illana WhatsApp, call, email-la reach pannunga. Team continue pannum.";
+    if (language === "hi") return "इस बातचीत में मैं और जवाब नहीं दे सकता। नीचे फॉर्म में नाम और फ़ोन लिखें, या WhatsApp, कॉल या ईमेल से जुड़ें। टीम आगे बात करेगी।";
+    if (language === "hinglish") return "Is chat mein main aur jawab nahi de sakta. Neeche form mein naam aur phone likho, ya WhatsApp, call ya email se jud jao. Team aage baat karegi.";
+    return "I've reached the limit for this chat, so a person should take it from here. Leave your name and phone in the form, or reach the team by WhatsApp, phone or email, and they'll follow up.";
+  }
+  if (language === "ta") return "இப்போது பதிலளிக்க முடியவில்லை. கீழே உள்ள படிவத்தில் பெயரையும் எண்ணையும் எழுதுங்கள், அல்லது வாட்ஸ்அப், அழைப்பு அல்லது மின்னஞ்சல் மூலம் எங்களைத் தொடர்பு கொள்ளுங்கள். குழு உங்களைத் தொடர்பு கொள்ளும்.";
+  if (language === "tanglish") return "Ippo reply panna mudiyala. Keela form-la name-um number-um podunga, illana WhatsApp, call, email-la reach pannunga. Team contact pannum.";
+  if (language === "hi") return "अभी जवाब देना मुश्किल है। नीचे फॉर्म में अपना नाम और फ़ोन छोड़ें, या WhatsApp, कॉल या ईमेल से जुड़ें। टीम आपसे संपर्क करेगी।";
+  if (language === "hinglish") return "Abhi jawab dena mushkil hai. Neeche form mein naam aur phone chhodo, ya WhatsApp, call ya email se jud jao. Team aapse contact karegi.";
+  return "I'm having trouble answering right now. Leave your name and phone in the form, or reach the team by WhatsApp, phone or email, and they'll get back to you.";
+}
 
 /** Last resort when the model returns no text: never leave the visitor without a reply. */
 function emptyReplyText(language: string, handedOff: boolean): string {
   if (handedOff) {
     if (language === "ta") return "நன்றி! உங்கள் விவரங்கள் எங்கள் குழுவிடம் உள்ளன; அவர்கள் விரைவில் தொடர்பு கொள்வார்கள். வேறு ஏதாவது கேட்க வேண்டுமா?";
+    if (language === "tanglish") return "Thanks! Unga details team kitta irukku, avanga seekiram contact pannuvaanga. Vera edhavadhu kekkanuma?";
     if (language === "hi") return "धन्यवाद! आपकी जानकारी हमारी टीम के पास है, वे जल्द ही आपसे संपर्क करेंगे। क्या मैं और कुछ मदद कर सकता हूँ?";
+    if (language === "hinglish") return "Thanks! Aapki details team ke paas hain, wo jaldi contact karenge. Aur kuch poochna hai?";
     return "Thanks! The team has your details and will contact you soon. Is there anything else I can help with?";
   }
   if (language === "ta") return "மன்னிக்கவும், எனக்குப் புரியவில்லை. உங்கள் கேள்வியை வேறு விதமாகக் கேட்க முடியுமா?";
+  if (language === "tanglish") return "Sorry, enakku puriyala. Unga kelviya vera maadhiri kekka mudiyuma?";
   if (language === "hi") return "माफ़ कीजिए, मैं समझ नहीं पाया। क्या आप अपना सवाल दूसरे तरीके से पूछ सकते हैं?";
+  if (language === "hinglish") return "Sorry, mujhe samajh nahi aaya. Kya aap apna sawaal doosre tarike se pooch sakte ho?";
   return "Sorry, I didn't catch that. Could you ask it another way? You can also tap “Talk to a person”.";
 }
 
@@ -477,7 +559,8 @@ async function executeTool(use: ToolUsePart, t: ToolCtx): Promise<Record<string,
       return {
         ok: true,
         not_in_knowledge: true,
-        instruction: "Tell the visitor plainly you don't have that information and offer to connect them with the team. Do not guess.",
+        instruction:
+          "The question is not in the knowledge. Tell the visitor plainly, in their language and script, that you don't have that information and that you can connect them with the team for other questions. Do not guess. If they asked for a discount, coupon or offer that is not in the knowledge, say you can't confirm any discount or coupon code. Do not imply a code exists and do not say the team can provide one.",
       };
     }
 

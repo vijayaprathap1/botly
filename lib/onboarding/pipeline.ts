@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { config } from "../config";
-import { crawlSite } from "../crawler/crawl";
+import { crawlSite, normalizeUrl } from "../crawler/crawl";
 import { runSafetyCheck, SAFETY_CASES } from "../eval/run";
 import type { KnowledgeSource } from "../knowledge";
 import { getLlm } from "../llm";
@@ -66,14 +66,21 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
     await db.from("bots").update({ website_url: o.url }).eq("id", botId);
     try {
       const result = await crawlSite(o.url, { maxPages: o.maxPages }, (e) => send(e));
-      pages = result.pages.map((p) => ({ title: p.title, url: p.url, text: p.text }));
+      const seenUrl = new Set<string>();
+      pages = [];
+      for (const p of result.pages) {
+        const url = normalizeUrl(p.url) ?? p.url;
+        if (seenUrl.has(url)) continue;
+        seenUrl.add(url);
+        pages.push({ title: p.title, url, text: p.text });
+      }
       products = result.products;
       siteWide = result.siteWide;
     } catch (e) {
       send({ stage: "skip", message: `Couldn't read the website: ${e instanceof Error ? e.message : "unknown error"}. Continuing with the details you entered.` });
     }
     const { data: existing } = await db.from("knowledge_sources").select("url").eq("bot_id", botId).not("url", "is", null);
-    const have = new Set((existing ?? []).map((r) => r.url as string));
+    const have = new Set((existing ?? []).map((r) => normalizeUrl(r.url as string) ?? (r.url as string)));
     // The site-wide row has no URL to recognise it by: keep one and refresh it on a re-import.
     const SITE_WIDE = "Site-wide details (header and footer)";
     const { data: priorSiteWide } = await db.from("knowledge_sources").select("id").eq("bot_id", botId).eq("type", "page").eq("title", SITE_WIDE).is("url", null).limit(1);
@@ -96,6 +103,7 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
   }
 
   const haveInput = pages.length > 0 || Boolean(o.ownerNotes?.trim());
+  let aiPaused = false;
   if (o.draft && haveInput) {
     send({ stage: "drafting", message: "Writing your business profile, FAQs and policies…" });
     try {
@@ -149,8 +157,19 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
       } else if (d.tone) await db.from("bots").update({ tone_suggestion: d.tone }).eq("id", botId);
       send({ stage: "drafted", message: `Wrote ${d.faqs.length} FAQs${policyToText(d.policy) ? ", a policy summary" : ""}${o.selfServe && d.profile_markdown ? " and your business profile" : ""}`, count: d.faqs.length });
     } catch (e) {
-      console.error("[onboarding] drafting failed", e instanceof Error ? e.message : e);
-      send({ stage: "skip", message: autoApprove ? "Couldn't write the FAQs automatically. Using your website pages directly instead." : "Couldn't write the FAQs automatically. Your website pages are saved as drafts you can approve instead." });
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[onboarding] drafting failed", msg);
+      aiPaused = /AI budget exceeded/i.test(msg);
+      send({
+        stage: "skip",
+        message: aiPaused
+          ? autoApprove
+            ? "Live chats are using the AI capacity right now, so FAQ drafting is paused instead of failing. Your pages are saved. Run the import again in a few minutes."
+            : "Live chats are using the AI capacity right now, so FAQ drafting is paused instead of failing. Your pages are saved as drafts. Run the import again in a few minutes."
+          : autoApprove
+            ? "Couldn't write the FAQs automatically. Using your website pages directly instead."
+            : "Couldn't write the FAQs automatically. Your website pages are saved as drafts you can approve instead.",
+      });
       if (autoApprove) await db.from("knowledge_sources").update({ status: "approved" }).eq("bot_id", botId).eq("type", "page");
     }
   } else if (autoApprove && pages.length) {
@@ -158,7 +177,10 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
   }
 
   let outcome: OnboardEvent["outcome"];
-  if (o.selfServe && !o.skipSafetyCheck) {
+  if (aiPaused) {
+    outcome = "busy";
+    send({ stage: "warn", message: "Safety checks are waiting until AI capacity frees up. Your assistant works in preview; press “Run checks and go live” in a few minutes." });
+  } else if (o.selfServe && !o.skipSafetyCheck) {
     const slow = safetyPaceMs() > 0;
     send({ stage: "checking", message: `Running safety checks (the assistant must refuse fake discounts and prompt tricks)…${slow ? " This takes about two minutes." : ""}` });
     const left = mustEndBy - Date.now();

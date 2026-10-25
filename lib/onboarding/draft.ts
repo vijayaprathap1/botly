@@ -132,8 +132,16 @@ export async function draftKnowledge(args: {
         break;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
+        // Daily budget won't come back inside this request. A per-minute dip: wait once more
+        // (the chat call already waited when it could) rather than failing the whole import.
+        if (/AI budget exceeded \(day\)/i.test(msg)) throw e;
+        if (attempt < 1 && /AI budget exceeded \(minute\)/i.test(msg)) {
+          args.onProgress?.("Live chats are using the AI right now. Waiting a minute before drafting…");
+          await sleep(retryAfterMs(msg));
+          continue;
+        }
         // Rate limit per minute: wait as long as the provider asks, then retry this batch.
-        if (attempt < 3 && /LLM API (429|413)|rate.?limit|tokens per minute|TPM/i.test(msg) && !/per day|TPD|RPD/i.test(msg)) {
+        if (attempt < 3 && /LLM API (429|413)|rate.?limit|tokens per minute|TPM/i.test(msg) && !/per day|TPD|RPD|AI budget exceeded/i.test(msg)) {
           args.onProgress?.("The AI service asked us to slow down, waiting a moment…");
           await sleep(retryAfterMs(msg));
           continue;

@@ -127,19 +127,39 @@ ${para}${stats}${e.bodyHtml ?? ""}${button}${rawLink}${panel}${steps}${note}
 </td></tr>
 </table></td></tr></table></body></html>`;
 
-  const text = [
-    e.heading.toUpperCase(),
-    "",
-    ...(e.paragraphs ?? []),
-    ...(e.stats?.length ? ["", ...e.stats.map((s) => `${s.value} ${s.label}`)] : []),
-    ...(e.cta ? ["", `${e.cta.label}: ${e.cta.url}`] : []),
-    ...(e.secondary ?? []).map((s) => `${s.label}: ${s.url}`),
-    ...(e.panel ? ["", ...(e.panel.title ? [e.panel.title] : []), ...e.panel.rows.map(([k, v]) => `${k}: ${v}`)] : []),
-    ...(e.steps ? ["", ...(e.steps.title ? [e.steps.title] : []), ...e.steps.items.map((s, i) => `${i + 1}. ${s}`)] : []),
-    ...(e.note ? ["", e.note] : []),
-    "",
-    "Botly · https://botly.in · support@botly.in",
-    ...(e.reason ? [e.reason] : []),
-  ].join("\n");
+  const text = decodeEntities(
+    [
+      e.heading.toUpperCase(),
+      "",
+      ...(e.paragraphs ?? []),
+      ...(e.stats?.length ? ["", ...e.stats.map((s) => `${s.value} ${s.label}`)] : []),
+      ...(e.cta ? ["", `${e.cta.label}: ${e.cta.url}`] : []),
+      ...(e.secondary ?? []).map((s) => `${s.label}: ${s.url}`),
+      ...(e.panel ? ["", ...(e.panel.title ? [e.panel.title] : []), ...e.panel.rows.map(([k, v]) => `${k}: ${v}`)] : []),
+      ...(e.steps ? ["", ...(e.steps.title ? [e.steps.title] : []), ...e.steps.items.map((s, i) => `${i + 1}. ${s}`)] : []),
+      ...(e.note ? ["", e.note] : []),
+      "",
+      "Botly · https://botly.in · support@botly.in",
+      ...(e.reason ? [e.reason] : []),
+    ].join("\n"),
+  );
   return { html, text };
+}
+
+/** Plain-text part uses characters, never the HTML entities from the button and footer. */
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&rarr;/g, "→")
+    .replace(/&middot;/g, "·")
+    .replace(/&mdash;/g, "—")
+    .replace(/&ndash;/g, "–")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#(\d+);/g, (_, n) => {
+      const code = Number(n);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : "";
+    })
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"');
 }

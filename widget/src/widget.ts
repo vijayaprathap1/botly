@@ -73,6 +73,8 @@ export class BotlyWidget {
   private nudgeEl: HTMLElement | null = null;
   private isOpen = false;
   private busy = false;
+  /** One message typed while a reply is in flight. Stays in the box until it sends. */
+  private sendAfterReply = false;
   private restored = false;
   private hadUserMessage = false;
   private identity: Identity = {};
@@ -342,8 +344,9 @@ export class BotlyWidget {
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
     const n = el.value.length;
-    this.counter.textContent = n > MAX_LEN - 100 ? `${n}/${MAX_LEN}` : "";
-    this.sendBtn.disabled = this.busy || !el.value.trim();
+    if (this.sendAfterReply && el.value.trim()) this.counter.textContent = "Will send after the reply";
+    else this.counter.textContent = n > MAX_LEN - 100 ? `${n}/${MAX_LEN}` : "";
+    this.sendBtn.disabled = !el.value.trim();
   }
 
   private renderChips(questions: string[]) {
@@ -351,7 +354,15 @@ export class BotlyWidget {
     for (const [i, q] of questions.slice(0, 4).entries()) {
       const b = h("button", { class: "chip", type: "button", text: q });
       b.style.animationDelay = `${i * 60}ms`;
-      b.addEventListener("click", () => this.send(q));
+      b.addEventListener("click", () => {
+        if (this.busy) {
+          if (!this.input.value.trim()) this.input.value = q;
+          this.sendAfterReply = true;
+          this.onInput();
+          return;
+        }
+        void this.send(q);
+      });
       this.chips.append(b);
     }
   }
@@ -424,7 +435,27 @@ export class BotlyWidget {
   // ─── sending ───────────────────────────────────────────────────────────────
   private submit() {
     const text = this.input.value.trim();
-    if (!text || this.busy) return;
+    if (!text) return;
+    if (this.busy) {
+      this.sendAfterReply = true;
+      this.onInput();
+      return;
+    }
+    this.sendAfterReply = false;
+    this.input.value = "";
+    this.onInput();
+    void this.send(text);
+  }
+
+  /** Sends the one message the visitor typed while the previous reply was still coming in. */
+  private flushQueued() {
+    if (!this.sendAfterReply) return;
+    this.sendAfterReply = false;
+    const text = this.input.value.trim();
+    if (!text) {
+      this.onInput();
+      return;
+    }
     this.input.value = "";
     this.onInput();
     void this.send(text);
@@ -493,7 +524,7 @@ export class BotlyWidget {
               this.renderChips(data.questions ?? []);
             } else if (event === "error") {
               typing.remove();
-              if (data.code !== "inactive" && data.code !== "llm_error") this.addEvent(data.message ?? "Something went wrong.");
+              if (data.code !== "inactive" && data.code !== "llm_error" && data.code !== "ai_unavailable") this.addEvent(data.message ?? "Something went wrong.");
             } else if (event === "done") {
               if (data.conversationId) {
                 this.saved.conversationId = data.conversationId;
@@ -518,6 +549,7 @@ export class BotlyWidget {
         if (!full.trim()) b.row.remove();
       }
       this.setBusy(false);
+      this.flushQueued();
     }
     if (failed && !full) {
       const retry = h("button", { class: "retry", type: "button", text: "Couldn't send. Retry" });
@@ -625,7 +657,12 @@ export class BotlyWidget {
     const card = h("div", { class: "card contact" });
     card.append(
       h("h4", {
-        text: reason === "quota" || reason === "inactive" ? "Chat is busy right now. You can reach us directly:" : "You can reach us directly:",
+        text:
+          reason === "cap"
+            ? "Continue with the team:"
+            : reason === "quota" || reason === "inactive" || reason === "busy"
+              ? "Chat is busy right now. You can reach us directly:"
+              : "You can reach us directly:",
       }),
     );
     const line = (label: string, value: string, href: string) =>

@@ -41,6 +41,8 @@ describe("notifiers", () => {
     const m = renderLeadEmail(notice);
     expect(m.html).toContain("Ananya &lt;Handlooms&gt;");
     expect(m.text).toContain("Phone: +91 97900 11223");
+    expect(m.text).not.toMatch(/&(?:rarr|middot|mdash|nbsp);/);
+    expect(m.text).toContain("Sent by Botly for Ananya <Handlooms>.");
   });
 
   it("Resend request shape", async () => {
