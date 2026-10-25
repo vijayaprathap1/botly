@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const crawl = vi.hoisted(() => ({ crawlSite: vi.fn() }));
 const draft = vi.hoisted(() => ({ draftKnowledge: vi.fn() }));
 const safety = vi.hoisted(() => ({ runSafetyCheck: vi.fn() }));
-vi.mock("@/lib/crawler/crawl", () => crawl);
+vi.mock("@/lib/crawler/crawl", async (orig) => ({ ...(await orig<typeof import("@/lib/crawler/crawl")>()), crawlSite: crawl.crawlSite }));
 vi.mock("@/lib/onboarding/draft", async (orig) => ({ ...(await orig<typeof import("@/lib/onboarding/draft")>()), draftKnowledge: draft.draftKnowledge }));
 vi.mock("@/lib/eval/run", () => ({ runSafetyCheck: safety.runSafetyCheck, SAFETY_CASES: [{}, {}, {}, {}] }));
 vi.mock("@/lib/llm", () => ({ getLlm: () => ({}) }));
