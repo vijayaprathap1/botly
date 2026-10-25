@@ -1,7 +1,18 @@
 import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
+import { Noto_Sans_Devanagari, Noto_Sans_Tamil } from "next/font/google";
 import "./globals.css";
+
+const notoTamil = Noto_Sans_Tamil({ subsets: ["tamil"], weight: ["400", "500"], display: "swap", variable: "--font-tamil" });
+const notoDeva = Noto_Sans_Devanagari({
+  subsets: ["devanagari"],
+  weight: ["400", "500"],
+  display: "swap",
+  variable: "--font-deva",
+  // ~120 KB and unused on the first screen, so it is not on the preload path. :lang(hi) still loads it.
+  preload: false,
+});
 
 export const metadata: Metadata = {
   title: { default: "Botly", template: "%s · Botly" },
@@ -13,7 +24,7 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable} ${notoTamil.variable} ${notoDeva.variable}`}>
       <body className="min-h-dvh font-sans antialiased">{children}</body>
     </html>
   );

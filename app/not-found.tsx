@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { btn, Logo } from "@/components/ui";
+import { SupportEmail, SupportPhone, SupportWhatsApp } from "@/components/marketing/support-contact";
 
 export default function NotFound() {
-  const email = process.env.SUPPORT_EMAIL;
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center bg-zinc-50 px-5 text-center">
       <Link href="/" aria-label="Botly home"><Logo className="text-[17px]" /></Link>
@@ -14,7 +14,13 @@ export default function NotFound() {
         <Link href="/" className={btn.secondary}><ArrowLeft className="h-4 w-4" />Home</Link>
         <Link href="/app" className={btn.primary}>Go to your dashboard</Link>
       </div>
-      {email ? <p className="mt-8 text-[13px] text-zinc-500">Need help? <a className="font-medium text-zinc-800 underline underline-offset-4" href={`mailto:${email}`}>{email}</a></p> : null}
+      <p className="mt-8 text-[13px] text-zinc-500">
+        Need help? <SupportEmail className="font-medium text-zinc-800 underline underline-offset-4" />
+        {" · "}
+        <SupportPhone className="font-medium text-zinc-800 underline underline-offset-4" />
+        {" · "}
+        <SupportWhatsApp className="font-medium text-zinc-800 underline underline-offset-4">WhatsApp</SupportWhatsApp>
+      </p>
     </main>
   );
 }

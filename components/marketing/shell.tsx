@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/ui";
+import { SupportEmail, SupportPhone, SupportWhatsApp } from "@/components/marketing/support-contact";
+import { SPOKEN_LANGUAGES } from "@/lib/business";
 
 export function MarketingShell({ children }: { children: React.ReactNode }) {
   return (
@@ -10,7 +12,8 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
           <nav className="flex items-center gap-1 text-[14px]" aria-label="Main">
             <Link href="/#how" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 md:inline">How it works</Link>
             <Link href="/#features" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 md:inline">Features</Link>
-            <Link href="/#pricing" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 min-[400px]:inline">Pricing</Link>
+            <Link href="/#pricing" className="inline-flex min-h-11 items-center px-2 text-sm text-zinc-600 transition hover:text-zinc-950 md:hidden">Pricing</Link>
+            <Link href="/#pricing" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 md:inline">Pricing</Link>
             <Link href="/login" className="rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950">Sign in</Link>
             <Link href="/login?signup=1" className="ml-1 inline-flex h-9 items-center rounded-lg bg-zinc-950 px-4 font-medium text-white shadow-sm transition hover:bg-zinc-800">Start free</Link>
           </nav>
@@ -21,7 +24,14 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 sm:grid-cols-[1.5fr_1fr_1fr]">
           <div>
             <Logo />
-            <p className="mt-3 max-w-xs text-[13.5px] leading-relaxed text-zinc-500">AI customer support for Indian businesses. Answers in English, Tamil and Hindi, and sends you the leads.</p>
+            <p className="mt-3 max-w-xs text-[13.5px] leading-relaxed text-zinc-500">AI customer support for Indian businesses. Answers in {SPOKEN_LANGUAGES}, and sends you the leads.</p>
+            <p className="mt-3 max-w-xs text-[13.5px] leading-relaxed text-zinc-500">
+              <SupportEmail className="hover:text-zinc-900" />
+              <br />
+              <SupportPhone className="hover:text-zinc-900" />
+              {" · "}
+              <SupportWhatsApp className="hover:text-zinc-900">WhatsApp</SupportWhatsApp>
+            </p>
           </div>
           <div className="text-[13.5px]">
             <p className="font-medium text-zinc-900">Product</p>
@@ -37,9 +47,11 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
           <div className="text-[13.5px]">
             <p className="font-medium text-zinc-900">Company</p>
             <ul className="mt-2 space-y-0.5 text-zinc-500">
+              <li><Link className="inline-block py-1 hover:text-zinc-900" href="/about">About</Link></li>
               <li><Link className="inline-block py-1 hover:text-zinc-900" href="/terms">Terms</Link></li>
               <li><Link className="inline-block py-1 hover:text-zinc-900" href="/privacy-policy">Privacy</Link></li>
               <li><Link className="inline-block py-1 hover:text-zinc-900" href="/refund-policy">Refunds &amp; cancellation</Link></li>
+              <li><Link className="inline-block py-1 hover:text-zinc-900" href="/shipping-policy">Shipping &amp; delivery</Link></li>
               <li><Link className="inline-block py-1 hover:text-zinc-900" href="/contact">Contact</Link></li>
             </ul>
           </div>
