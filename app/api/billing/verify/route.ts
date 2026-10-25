@@ -34,7 +34,13 @@ export async function POST(req: Request) {
   }
   // The subscription must be one WE created for this workspace (our notes travel with it).
   if (sub.notes?.org_id !== orgId || !planForRazorpayPlan(sub.plan_id)) return Response.json({ ok: false, error: "Unknown subscription" }, { status: 400 });
-  // Mandate authorised: activate now; the webhook confirms charges and renewals.
-  await activateSubscription(supabaseAdmin(), orgId, sub.status === "created" ? { ...sub, status: "authenticated" } : sub);
-  return Response.json({ ok: true });
+  // Only a charged (active) subscription switches the plan on. If Razorpay hasn't moved it
+  // past "authenticated" yet, the webhook (subscription.activated / charged) finishes the job.
+  // The first charge usually lands within seconds of Checkout closing: look twice more before deferring.
+  for (let i = 0; i < 2 && (sub.status === "created" || sub.status === "authenticated"); i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    sub = await fetchSubscription(razorpay_subscription_id).catch(() => sub!);
+  }
+  const activated = await activateSubscription(supabaseAdmin(), orgId, sub);
+  return Response.json({ ok: true, pending: !activated });
 }
