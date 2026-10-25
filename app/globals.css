@@ -33,6 +33,17 @@ body {
   color: #0a0a0a;
   font-feature-settings: "ss01", "cv11";
 }
+/* Tamil and Hindi use the loaded Noto faces so they match the Latin UI instead of a local display fallback. */
+:lang(ta) {
+  font-family: var(--font-tamil), var(--font-geist-sans), sans-serif;
+  font-size: 0.94em;
+  line-height: 1.65;
+  font-weight: 400;
+}
+:lang(hi) {
+  font-family: var(--font-deva), var(--font-geist-sans), sans-serif;
+  line-height: 1.6;
+}
 ::selection {
   background: var(--color-brand-100);
 }

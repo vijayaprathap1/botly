@@ -7,16 +7,18 @@ import { useEffect, useRef, useState } from "react";
  * does: answer in the customer's language, answer from the shop's facts, admit when it
  * doesn't know, and capture a lead. It is labelled as an example on the page.
  */
-type Line = { from: "user" | "bot"; text: string } | { from: "card"; text: string } | { from: "note"; text: string };
-type Sample = { label: string; lines: Line[] };
+type Lang = "ta" | "hi";
+type Line = { from: "user" | "bot"; text: string; lang?: Lang } | { from: "card"; text: string } | { from: "note"; text: string };
+type Sample = { label: string; lang?: Lang; lines: Line[] };
 
 const COLOR = "#9f1239";
 const SAMPLES: Sample[] = [
   {
     label: "COD இருக்கா?",
+    lang: "ta",
     lines: [
-      { from: "user", text: "பிளவுஸ் தைக்க எவ்வளவு? COD இருக்கா?" },
-      { from: "bot", text: "பிளவுஸ் தைக்க ₹650, 5 வேலை நாட்கள் ஆகும். இந்தியா முழுவதும் COD உண்டு." },
+      { from: "user", lang: "ta", text: "பிளவுஸ் தைக்க எவ்வளவு? COD இருக்கா?" },
+      { from: "bot", lang: "ta", text: "பிளவுஸ் தைக்க ₹650, 5 வேலை நாட்கள் ஆகும். இந்தியா முழுவதும் COD உண்டு." },
     ],
   },
   {
@@ -45,17 +47,26 @@ const SAMPLES: Sample[] = [
   },
 ];
 const GREETING: Line = { from: "bot", text: "Vanakkam! I'm Meera from Ananya Handlooms. Ask me about sarees, delivery, returns or blouse stitching." };
+const INITIAL_LINES: Line[] = [GREETING, ...SAMPLES[0]!.lines];
 
 export function DemoChat() {
-  const [lines, setLines] = useState<Line[]>([GREETING, ...SAMPLES[0]!.lines]);
+  const [lines, setLines] = useState<Line[]>(INITIAL_LINES);
   const [typing, setTyping] = useState(false);
   const [used, setUsed] = useState<Set<number>>(new Set([0]));
   const timers = useRef<number[]>([]);
   const list = useRef<HTMLDivElement>(null);
+  const initialCount = useRef(INITIAL_LINES.length);
 
   useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
   useEffect(() => {
-    list.current?.scrollTo({ top: list.current.scrollHeight, behavior: "smooth" });
+    const el = list.current;
+    if (!el) return;
+    // First paint stays at the greeting. Later questions scroll to the newest line.
+    if (lines.length <= initialCount.current && !typing) {
+      el.scrollTop = 0;
+      return;
+    }
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [lines, typing]);
 
   function play(i: number) {
@@ -78,7 +89,7 @@ export function DemoChat() {
 
   const left = SAMPLES.map((s, i) => ({ s, i })).filter(({ i }) => !used.has(i));
   return (
-    <div className="w-full max-w-[360px] overflow-hidden rounded-2xl border border-zinc-200 bg-white text-left shadow-[var(--shadow-raised)]">
+    <div className="w-full max-w-[560px] overflow-hidden rounded-2xl border border-zinc-200 bg-white text-left shadow-[var(--shadow-raised)]">
       <div className="flex items-center gap-3 px-4 py-3 text-white" style={{ background: COLOR }}>
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-[13px] font-semibold">M</span>
         <div className="min-w-0 flex-1 leading-tight">
@@ -90,9 +101,9 @@ export function DemoChat() {
       <div ref={list} className="h-[300px] space-y-2.5 overflow-y-auto bg-white px-3.5 py-4 text-[13px] leading-relaxed" role="log" aria-live="polite" aria-label="Example conversation">
         {lines.map((l, i) =>
           l.from === "user" ? (
-            <div key={i} className="ml-auto w-fit max-w-[80%] rounded-2xl rounded-br-md px-3 py-2 text-white" style={{ background: COLOR }}>{l.text}</div>
+            <div key={i} lang={l.lang} className="ml-auto w-fit max-w-[80%] rounded-2xl rounded-br-md px-3 py-2 text-white" style={{ background: COLOR }}>{l.text}</div>
           ) : l.from === "bot" ? (
-            <div key={i} className="w-fit max-w-[85%] rounded-2xl rounded-bl-md bg-zinc-100 px-3 py-2 text-zinc-800">{l.text}</div>
+            <div key={i} lang={l.lang} className="w-fit max-w-[85%] rounded-2xl rounded-bl-md bg-zinc-100 px-3 py-2 text-zinc-800">{l.text}</div>
           ) : l.from === "card" ? (
             <div key={i} className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">
               <span className="flex h-4 w-4 flex-none items-center justify-center rounded-full bg-emerald-500 text-[10px] text-white">✓</span>
@@ -111,11 +122,11 @@ export function DemoChat() {
       <div className="border-t border-zinc-100 px-3 py-2.5">
         {left.length ? (
           <>
-            <p className="mb-1.5 text-[11px] font-medium text-zinc-500">Try a question:</p>
+            <p className="mb-2 text-[13px] font-medium text-zinc-600">Try it: tap a question ↓</p>
             <div className="flex flex-wrap gap-1.5">
               {left.map(({ s, i }) => (
-                <button key={i} type="button" disabled={typing} onClick={() => play(i)} className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[12px] font-medium text-zinc-700 transition hover:border-zinc-400 disabled:opacity-50">
-                  {s.label}
+                <button key={i} type="button" disabled={typing} onClick={() => play(i)} className="inline-flex min-h-11 items-center rounded-full border border-zinc-200 bg-white px-3 text-[13px] font-medium text-zinc-700 transition hover:border-zinc-400 disabled:opacity-50 md:min-h-9">
+                  {s.lang ? <span lang={s.lang}>{s.label}</span> : s.label}
                 </button>
               ))}
             </div>

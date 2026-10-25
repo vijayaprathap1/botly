@@ -20,7 +20,7 @@ export default function OpenGraphImage() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div style={{ fontSize: 68, fontWeight: 700, lineHeight: 1.05, letterSpacing: -2, maxWidth: 980 }}>Customer support that knows your business</div>
-          <div style={{ fontSize: 32, color: "#c7d2fe" }}>Answers in English, Tamil and Hindi. Sends you the leads.</div>
+          <div style={{ fontSize: 28, color: "#c7d2fe", maxWidth: 980 }}>Answers in English, Tamil and Hindi, plus Hinglish and Tanglish. Sends you the leads.</div>
         </div>
         <div style={{ display: "flex", gap: 12, fontSize: 24, color: "#a5b4fc" }}>
           <div style={{ display: "flex", padding: "8px 16px", borderRadius: 999, border: "1px solid #4338ca" }}>Free 14-day trial</div>
