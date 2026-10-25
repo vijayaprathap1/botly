@@ -1,253 +1,450 @@
 # Botly
 
-An embeddable AI support assistant, one per client business, installed with one script tag. Multi-tenant: Next.js (App Router) + Supabase (Postgres, Auth, RLS) + Claude (Haiku 4.5 by default).
+**An AI support assistant for Indian small businesses.** Botly learns a business from its website and the profile details the owner gives it, answers visitors in English, Tamil, Hindi, Hinglish and Tanglish, and emails the owner each lead with one-tap WhatsApp and Call buttons. You install it with one `<script>` tag.
 
-**Status: Phases 1, 2 and 3 built.** See [PLAN.md](PLAN.md) for the architecture and every place this build departs from the spec, and [Status](#status) at the bottom.
+- Live site: **https://botly.in**
+- Pricing: **Starter ₹2,999/month**, **Growth ₹9,999/month** (GST extra). New sign-ups get a 14-day free trial with 50 AI replies.
+- Stack: Next.js 16 (App Router) and React 19 on Vercel, Supabase (Postgres, Auth, RLS, pgvector) on the free tier, Groq as the production LLM, Resend for email, Razorpay Subscriptions for billing.
+
+| Live site, desktop (1440 px) | Live site, phone (390 px) |
+|---|---|
+| ![botly.in at 1440 px](docs/images/live-desktop-1440.png) | ![botly.in at 390 px](docs/images/live-mobile-390.png) |
+
+**Guides:** [User guide for business owners](docs/USER-GUIDE.md) · [Admin demo guide](docs/ADMIN-DEMO-GUIDE.md) · [Contributing](CONTRIBUTING.md) · [Roadmap](ROADMAP.md) · [Build plan and spec departures](PLAN.md)
 
 ---
 
-## 1. Run it locally
+## Contents
 
-You need Node 20+ and a Supabase project (a free hosted project is easiest; the Supabase CLI with Docker also works).
+1. [Features](#features)
+2. [Screenshots](#screenshots)
+3. [Architecture](#architecture)
+4. [Local setup](#local-setup)
+5. [Environment variables](#environment-variables)
+6. [Database migrations](#database-migrations)
+7. [Deploy](#deploy)
+8. [Testing and evals](#testing-and-evals)
+9. [Embed the widget](#embed-the-widget)
+10. [Repository layout](#repository-layout)
 
-```bash
-npm install
-cp .env.example .env.local        # fill in the values, see comments in the file
-```
+---
 
-**Database.** Apply the migrations in order, then (optionally) the demo seed:
+## Features
 
-- Supabase CLI: `supabase link --project-ref <ref>` then `supabase db push`
-- or paste `supabase/migrations/0001_schema.sql` … `0005_phase3.sql` into the SQL editor, in order (already ran 0001–0003? just run 0004 and 0005)
-- demo client: run `supabase/seed.sql` the same way. It creates **Ananya Handlooms** with approved knowledge, public key `pk_ananya_demo_0001` and test token `tt_ananya_demo_private_0001_change_me_in_production`. Rotate that test link in Settings if you keep the demo in production.
+Each item below is in the code on `main`. Partial features are marked as partial.
 
-**Auth.** In Supabase → Authentication → URL configuration, set Site URL to `http://localhost:3000` and add `http://localhost:3000/auth/callback` (and later your production URL + `/auth/callback`) to Redirect URLs. Supabase's built-in email sender only allows a few emails per hour; for real use, point Supabase Auth at Resend's SMTP (Authentication → SMTP settings).
+**For visitors (the widget)**
+- A chat bubble from one script tag (`public/widget.js`, built from `widget/src`, about 13 KB gzipped). It runs in a shadow root, so the host site's CSS can't break it, and it stays hidden on domains that aren't allowed.
+- Streams replies (Server-Sent Events), renders safe markdown, offers follow-up chips, and restores the last 24 hours of the chat.
+- Replies in the language and script the visitor used: English, Tamil, Hindi, Hinglish or Tanglish. The system prompt sets this rule (`lib/prompts/assistant.ts`, rule 3) and `lib/language.ts` labels each message for reports. How well the reply matches depends on the model. See [Roadmap](ROADMAP.md) for the native-speaker Hindi check.
+- Answers only from the business's **approved** knowledge. If it doesn't know, it says so, logs the question as unanswered and offers a person.
+- "Talk to a person" and lead capture: a name and Indian or international phone number (validated), plus an optional email and need. The model can also open this form itself (`capture_lead`, `handoff_to_human`).
+- When the trial or monthly quota runs out, the plan lapses or the AI fails, the widget shows the business's phone, WhatsApp and email instead of AI replies.
+- **Growth plan:** order-status lookup for Shopify and WooCommerce, checked against the phone or email on the order (5 lookups per 10 minutes per visitor). Also callback booking with a date and time-slot card.
 
-```bash
-npm run check                      # setup doctor: tests .env.local, Supabase, migrations, RLS, Anthropic, Resend
-npm run dev                        # builds public/widget.js, then starts Next.js on :3000
-```
+**For business owners (dashboard at `/app`)**
+- Self-serve sign-up (`/login` with an email magic link or the OAuth providers listed in `NEXT_PUBLIC_AUTH_PROVIDERS`), then `/start`: business details, website, social profile links, pasted bios, contact details and hours.
+- Onboarding reads up to 15 public pages on the trial (40 on Starter, 100 on Growth, capped by `CRAWL_MAX_PAGES`), following `robots.txt` and `sitemap.xml`, plus `/products.json` on Shopify stores. The LLM then drafts FAQs, a policy summary, a tone of voice and a one-page business profile.
+- **Instagram, Facebook, LinkedIn and Google profiles are not scraped.** Their terms forbid it, so the owner pastes the bio or About text and Botly stores the links (`app/start/start-form.tsx`).
+- Prompt-injection safety checks run before a bot goes live. Self-serve bots go live on their own when the checks pass.
+- Knowledge editor: drafts, approved and archived sources; FAQ, policy, product, page, file and note types; product CSV import; PDF, DOCX, TXT and MD upload.
+- Preview (the real widget in an iframe), Conversations (filters, CSV and JSON export), Leads (status pipeline, WhatsApp link, CSV), an Unanswered inbox, a monthly report (printable, CSV) and Settings (branding, greeting, chips, hours, allowed domains, lead emails and WhatsApp numbers, fallback contact).
+- Plan and billing: Razorpay Checkout (UPI, cards, net banking), GSTIN and billing name for invoices, and cancellation.
+- Emails through Resend: a lead or handoff email with **WhatsApp {name}**, **Call** and **Read the chat** buttons, an 80% quota warning, trial lifecycle emails, and a Monday summary for Growth.
+- Optional WhatsApp Cloud API alerts to the owner (partial: needs an approved Meta template; until then each lead is logged as "WhatsApp pending" and email still goes out).
 
-If something is missing, `npm run check` says exactly what and where to get it, and the dashboard shows a **Finish setting up** page instead of crashing. After editing `.env.local`, always stop and restart `npm run dev`. `GET /api/health` returns 200 when config, database and AI are all working (use it for uptime monitoring).
+**For the platform owner (super admin, `ADMIN_EMAILS`)**
+- `/app/admin`: MRR, active trials, trial-to-paid conversion, AI cost and estimated margin, plus extend trial, set plan and suspend actions. Latest Razorpay billing events.
+- `/app/admin/demos`: private pitch demos on a copy of a prospect's homepage. See the [Admin demo guide](docs/ADMIN-DEMO-GUIDE.md).
+- Done-for-you clients: create an organization and bot, review the drafted knowledge, invite the client by email, and see cost, model and eval details on every bot.
 
-Open http://localhost:3000, sign in with an address listed in `ADMIN_EMAILS`. The first sign-in makes you the platform admin.
+## Screenshots
 
-### Free LLM for testing
+These are from a local run on the seeded demo business (Ananya Handlooms, fake data) with the scripted test model. They contain no real customer data, and email addresses on the dashboard pages are replaced with "[email hidden]".
 
-Botly can run on a free OpenAI-compatible API instead of Claude while you test. Put two lines in
-`.env.local` (and in Vercel → Settings → Environment Variables, then redeploy):
+| Widget on a site (desktop) | Widget on a phone | Lead form |
+|---|---|---|
+| ![Widget answering on a demo store](docs/images/widget-desktop.png) | ![Widget full-screen on a 390 px phone](docs/images/widget-mobile.png) | ![Talk to a person form](docs/images/widget-lead-form.png) |
 
-| Provider | `LLM_PROVIDER=` | Get the key | Free tier (check current limits) |
-|---|---|---|---|
-| **Google Gemini** (recommended) | `gemini` | https://aistudio.google.com/apikey | Best Tamil/Hindi, large token allowance, no card. Free tier may train on data |
-| Cerebras (fastest) | `cerebras` | https://cloud.cerebras.ai | Trial credit (30 days), ~1M tokens/day, 5 req/min |
-| Mistral | `mistral` | https://console.mistral.ai/api-keys | "Experiment" plan, generous monthly tokens, needs phone verification, may train on data |
-| Groq | `groq` | https://console.groq.com/keys | Very fast, ~1,000 req/day but ~8k tokens/min: small knowledge bases only |
-| GitHub Models | `github` | https://github.com/settings/personal-access-tokens (fine-grained, "Models: read") | ~150 req/day, ~8k input tokens per request |
-| OpenRouter | `openrouter` + `LLM_MODEL=<id>:free` | https://openrouter.ai/keys | ~50 req/day (1,000 after a $10 top-up) |
-| NVIDIA | `nvidia` | https://build.nvidia.com | Shared queue; big models (Llama 3.3 70B) often time out |
-
-Put the key in `LLM_API_KEY`. NVIDIA models that respond quickly (try in this order): `qwen/qwen3-next-80b-a3b-instruct` (default),
-`openai/gpt-oss-120b` (add `LLM_REASONING_EFFORT=low`), `openai/gpt-oss-20b`, `nvidia/nemotron-3.5-lightning-30b-a3b`.
-Avoid 70B+ dense models and "thinking" variants on the free queue.
-
-Optional: `LLM_MODEL` to pick another model (confirm the exact id in the provider's console),
-`LLM_REASONING_EFFORT=off|low|medium` for thinking models (Gemini and Groq presets use `low`),
-`LLM_TIMEOUT_MS` (default 25000) before a slow reply gives up and shows the contact card.
-
-Then run `npm run llm:check`. It tests streaming, tool calling ("I don't know" reporting) and a Tamil reply, with timings.
-
-What changes with a free tier:
-- Replies stream the same way, and every tool works (leads, handoff, unanswered, follow-ups). Cost shows $0.
-- No Claude prompt caching, and free tiers are rate-limited, so replies can be slower than Claude's ~2 seconds.
-- Other models may follow the grounding and language rules less reliably, and the go-live safety check may fail more often.
-- Free tiers are for testing. Gemini's free tier may use prompts to improve Google's products, so don't send real customer
-  conversations through it. Switch back with `LLM_PROVIDER=anthropic` (or a paid key) before you sell.
-
-## 2. Deploy to Vercel
-
-1. Push this repo to GitHub and import it in Vercel (framework: Next.js; the default `npm run build` also builds the widget).
-2. Add every variable from `.env.example` in Project → Settings → Environment Variables. Set `NEXT_PUBLIC_APP_URL` to your production URL (e.g. `https://app.botly.in`).
-3. Add `https://YOUR_DOMAIN/auth/callback` to Supabase Auth redirect URLs.
-4. Deploy. The widget is served from `https://YOUR_DOMAIN/widget.js`.
-
-Notes: notifications run with `after()` so they never slow the chat stream. Onboarding (crawl + drafting) can take 1–3 minutes; its route asks for 300 s. If your Vercel plan caps functions lower, reduce `CRAWL_MAX_PAGES`.
-
-## 3. Migrations
-
-| File | What it does |
+| Owner overview | Lead email with WhatsApp and Call buttons |
 |---|---|
-| `0001_schema.sql` | All tables (§3 of the spec) plus `rate_limits`, `notifications` (delivery log), `eval_runs` (go-live gate). RLS enabled everywhere. |
-| `0002_functions.sql` | Atomic rate limiter, quota-checked `begin_conversation`, usage/cost accounting, 80% warning claim, unanswered-question merging (trigram similarity). Callable only by the service role. |
-| `0003_rls.sql` | `admin` sees everything; `owner` reads their own org (and may change a lead's status); `anon` sees nothing. |
-| `0004_phase2.sql` | Client invites, owner answer suggestions (a trigger limits owners to suggesting), token/cost columns hidden from owners, `knowledge_chunks` with pgvector + full-text for retrieval mode, `bot_report()` for monthly reports, `delete_visitor_data()` and `purge_expired_data()`. Enables the `vector` extension. |
-| `0005_phase3.sql` | `bot_integrations` for Shopify/WooCommerce order lookup. Credentials are encrypted in the app; browser roles can't read even the ciphertext. |
-| `seed.sql` | Generated from `evals/ananya-handlooms.yaml` by `npm run seed:gen`. Don't edit by hand. |
+| ![Owner overview with preview, profile, install code and go-live](docs/images/owner-overview.png) | ![Lead email](docs/images/lead-email.png) |
 
-Add new migrations as `0004_…sql` and so on.
+| Knowledge | Conversations | Leads |
+|---|---|---|
+| ![Knowledge editor](docs/images/dashboard-knowledge.png) | ![Conversations list](docs/images/dashboard-conversations.png) | ![Leads list](docs/images/dashboard-leads.png) |
 
-## 4. Onboard a new client (about 15 minutes)
+More screenshots: [admin bot overview](docs/images/dashboard-overview.png), [monthly report](docs/images/dashboard-reports.png), [plan and billing](docs/images/owner-billing.png), [sign-up form](docs/images/signup-start.png), [super admin](docs/images/admin-overview.png), [demos](docs/images/admin-demos.png).
 
-1. **Clients → New client.** Business name, type (used in the assistant's intro), plan, monthly conversations, timezone, the assistant's display name and their website. The website's domain is added to the allowed domains automatically.
-2. **Onboarding.** Paste the website URL and press Start. Botly reads `robots.txt`, then `sitemap.xml` (or follows links), up to 40 pages, and pulls the product catalogue from `/products.json` on Shopify stores. Claude then drafts 20–40 FAQs, a policy summary and a tone-of-voice line. Everything lands as **draft**.
-3. **Knowledge.** Filter to Drafts, read through, untick anything wrong, **Approve**. Fix gaps by editing a source or adding one (FAQ, policy, product, note). Import a product CSV (`name, price, sizes, stock note, url`) or upload PDF/DOCX price lists. Click **Use this tone** if the suggested tone fits. Only approved knowledge reaches the assistant, and edits apply to the next message.
-4. **Settings.** Colour, avatar, greeting, suggested questions, business hours, lead emails and WhatsApp numbers, fallback contact (shown when chat is unavailable), privacy link. Add `http://localhost:3000` to allowed domains if you want to test the script tag on your machine.
-5. **Playground.** Ask what customers ask. Use the English / Tamil / Hindi / Hinglish buttons. Click a reply to see tokens, cost, latency, tool calls and which knowledge was in the prompt.
-6. **Private test link.** Overview → Copy test link, and send it to the client ("ask it anything"). It works while the bot is still a draft and isn't indexed.
-7. **Eval, then go live.** `npm run eval -- --bot <bot-id>`. Every prompt-injection case must pass before **Go live** is allowed. For a client's own in-knowledge cases, copy `evals/ananya-handlooms.yaml` to `evals/<bot-id>.yaml` and change the questions; otherwise `evals/generic.yaml` is used.
-8. **Install.** Send the client the one-line snippet (below). Check Conversations and Leads after the first day.
+## Architecture
 
-### Give the client their own login
-Bot → Overview → **Client access** → enter their email → **Give access**. They get an email with the sign-in link (or send them `/login`). They see only their business: Conversations, Leads, Unanswered (they can suggest answers, which you approve with one click), Reports and the install snippet. No cost, model settings or other clients.
+```mermaid
+flowchart LR
+  subgraph Client["Business website"]
+    V["Visitor browser<br/>widget.js (shadow DOM)"]
+  end
+  O["Owner / super admin browser<br/>/app dashboard, /start, /login"]
 
-### Growth plan: order lookup and callbacks
-1. Settings → **Plan** → Growth.
-2. Settings → **Order lookup** → Shopify (store URL + Admin API token from a custom app with `read_orders`, plus `read_all_orders` for orders older than 60 days) or WooCommerce (site URL + a **Read** REST API key/secret). Botly tests the connection before saving and stores the credentials encrypted (`ENCRYPTION_KEY`).
-3. Visitors can then ask "where is my order #1042?". The assistant asks for the phone or email used on the order and shows status, courier, tracking link and expected date only if they match. Wrong details get the same "couldn't find it" answer as a wrong number, and each visitor gets 5 lookups per 10 minutes.
-4. "Can someone call me tomorrow evening?" opens a booking form (date + slot). It's saved as a `callback` lead and the owner is notified.
-5. Growth clients get a summary email every Monday at 09:00 IST.
+  subgraph Vercel["Next.js 16 on Vercel"]
+    W["Public widget API<br/>/api/widget/config<br/>/api/chat (SSE)<br/>/api/widget/lead, /history"]
+    D["Dashboard pages and<br/>Server Actions"]
+    ON["Onboarding<br/>crawler + LLM drafts<br/>/api/admin/onboard"]
+    E["Chat engine lib/chat<br/>origin check, rate limit,<br/>trial/quota gate, tools"]
+    B["/api/billing/verify<br/>/api/billing/webhook"]
+    C["/api/cron/retention (daily)<br/>/api/cron/weekly (Mon)"]
+    H["/api/health"]
+    DM["/demo/[slug]<br/>demo pages"]
+  end
 
-## Selling it as self-serve SaaS
+  subgraph Supa["Supabase (free tier)"]
+    PG[("Postgres + RLS<br/>knowledge_sources,<br/>conversations, leads,<br/>usage, billing_events")]
+    VEC[("knowledge_chunks<br/>pgvector + full-text<br/>(retrieval mode)")]
+    AU["Supabase Auth<br/>magic link / OAuth"]
+  end
 
-Anyone can now sign up at your site, build an assistant from their public profiles, try it free, and pay monthly.
+  LLM["LLM provider<br/>Groq in production<br/>(OpenAI-compatible);<br/>Anthropic is the code default"]
+  VO["Voyage AI embeddings<br/>(optional)"]
+  RS["Resend<br/>lead, trial, alert emails"]
+  WA["WhatsApp Cloud API<br/>(optional)"]
+  RZ["Razorpay<br/>Checkout + Subscriptions"]
+  ST["Shopify / WooCommerce<br/>order lookup (Growth)"]
+  SITE["Public websites<br/>robots, sitemap, Shopify products.json"]
 
-**Roles**
-- **Super admin** (you): every address in `ADMIN_EMAILS`. Sees `/app/admin`: MRR, active trials, trial→paid conversion, AI cost and estimated margin, and can extend a trial, set a plan for offline/done-for-you clients, or suspend an account. Also sees cost, model and eval details on every bot.
-- **Owner** (a customer): signs up with Google or email, or is invited by you. Manages only their own business: knowledge, settings, preview, conversations, leads, unanswered questions, reports and billing. Never sees model, cost, quotas or other customers.
+  V -->|"script src=/widget.js data-key"| W
+  W --> E
+  E -->|"service role, after key + origin check"| PG
+  E -->|"over the knowledge cap"| VEC
+  E <-->|"streaming + tool calls"| LLM
+  E -.->|"lookup_order"| ST
+  E -.->|"after(): notify"| RS
+  E -.->|"after(): notify"| WA
+  VEC -.-> VO
+  O --> D
+  D -->|"RLS-scoped session"| PG
+  D --> AU
+  O -->|"Checkout"| RZ
+  RZ -->|"payment signature"| B
+  RZ -->|"subscription.* webhook"| B
+  B --> PG
+  ON --> SITE
+  ON --> LLM
+  ON --> PG
+  C --> PG
+  C --> RS
+  DM --> PG
+  H --> PG
+```
 
-**Customer journey**
-1. Landing page `/` → **Start free** → `/login` (Google or email link).
-2. First sign-in goes to `/start`: business name and type, website, social profile links and pasted bios, contact details and hours.
-3. Botly reads up to 15 public pages (plus Shopify products), Claude writes a **business profile document**, FAQs and a policy summary (all approved automatically for self-serve), picks a greeting, suggested questions and tone, then runs the 4 prompt-injection safety checks. If they pass, the bot goes live.
-4. The customer lands on their Overview: trial meter, live preview, their business profile (edit/download), the install snippet and a Go live / Pause switch.
-5. Free trial: `TRIAL_DAYS` days and `TRIAL_REPLIES` AI replies (preview replies count), once per email. When it ends, visitors see the business's phone/WhatsApp/email instead of AI replies, and the owner sees "Choose a plan".
-6. `/app/billing` → Razorpay Checkout (UPI, cards, net banking) → subscription active → plan quota applies. Renewals, failures and cancellations arrive by webhook.
+How a reply happens (`app/api/chat/route.ts` → `lib/chat/engine.ts`):
 
-**Why social profiles aren't scraped:** Instagram, Facebook, LinkedIn and Google Maps forbid automated reading of their pages, and Google's Places API terms don't allow storing its data. Customers paste their bios instead; the links are kept in their profile.
+1. The widget posts the message with the bot's public key. The engine checks the bot is active and the request `Origin` is in `bots.allowed_origins` (or a valid private test token is present), then applies the per-visitor and per-bot rate limits (Postgres RPC).
+2. Plan gate: an expired trial, used-up trial replies, a suspended account or an exhausted monthly quota returns the fallback contact card, not an AI reply.
+3. The prompt is the static rules plus `<knowledge>` (approved sources only, up to `KNOWLEDGE_TOKEN_CAP`), then the time, business hours and page. On Groq the cap is about 4,000 tokens. When approved knowledge is bigger than the cap, **retrieval mode** pins policies and picks chunks with hybrid search: pgvector with Voyage embeddings when `VOYAGE_API_KEY` is set, otherwise Postgres full-text. Tamil, Hindi and mixed-language questions are rewritten into English for the search.
+4. The LLM streams the answer and can call tools: `capture_lead`, `handoff_to_human`, `report_unanswered`, `suggest_followups`, and on Growth `lookup_order` and `request_callback`.
+5. Usage, cost and the conversation are logged. Lead and handoff notifications go out in `after()`, so they never slow the stream.
 
-**Setup for payments and sign-in**
-1. Run `supabase/migrations/0006_saas.sql` in the Supabase SQL Editor.
-2. **Google sign-in:** Google Cloud Console → APIs & Services → Credentials → OAuth client ID (Web). Authorised redirect URI: `https://<your-project>.supabase.co/auth/v1/callback`. Paste the client ID and secret in Supabase → Authentication → Sign In / Providers → Google, and enable it. Other providers (Microsoft, GitHub, Facebook, LinkedIn) work the same way; list them in `NEXT_PUBLIC_AUTH_PROVIDERS`.
-3. **Razorpay** (full steps below in "Payments (Razorpay)").
-4. Fill `BUSINESS_LEGAL_NAME`, `SUPPORT_EMAIL`, `GRIEVANCE_OFFICER` for the Terms and Privacy Policy pages (templates: have a lawyer review them).
+The dashboard reads through the user's RLS-scoped Supabase session. Owners see only their own organization and never see cost or model fields. Writes go through Server Actions that check access (`lib/bot-access.ts`) and whitelist fields.
 
-## Pitching with a demo
+## Local setup
 
-Super admin → **Demos**. Paste a business's website and, two to four minutes later, you get a private link (`/demo/<long-random-id>`) showing a copy of their homepage with a Botly assistant trained on their site. Send it to the owner or open it on a call.
+You need Node 20 or newer (these docs were checked with Node 20.19) and npm.
 
-- **What the page is.** A static copy of their homepage: their images, styles and fonts load from their own servers, none of their scripts run (the page's Content-Security-Policy only allows Botly's widget and bar), forms and cart/login links do nothing, and other links open the real site in a new tab. A bar says "Preview made by Botly… Not the official website". The page isn't indexed.
-- **JavaScript-built sites** (React, some Wix and Shopify themes) arrive empty when downloaded. Those are opened in a headless browser instead (`@sparticuz/chromium` on Vercel, your own Chrome locally), which also reads a few of their pages for the assistant. `DEMO_RENDER=off` switches this off.
-- **Limits.** Each demo gets `DEMO_REPLY_LIMIT` AI replies (150) and expires after `DEMO_DEFAULT_DAYS` (14); both are enforced by the same gate as free trials. When either runs out the chat shows your contact details (`DEMO_CONTACT_*`). Leads and "talk to a person" requests from a demo are emailed to you, marked `[DEMO]`.
-- **You're told when it's opened.** The first view by someone who isn't a signed-in admin sends you an email.
-- **Housekeeping.** The daily job expires demos past their date and deletes them, with their conversations, 30 days later. Delete removes one immediately.
-- **Use.** Only to pitch that business's owner. Not for advertising or showing to the public.
+```bash
+git clone https://github.com/vijayaprathap1/botly.git
+cd botly
+npm ci
+cp .env.example .env.local     # fill in values; see "Environment variables"
+```
 
-Setup: run `supabase/migrations/0009_demos.sql` in the Supabase SQL editor and set `DEMO_CONTACT_PHONE` / `DEMO_CONTACT_WHATSAPP` on Vercel. Demos are separate organizations flagged `is_demo`, left out of the client list, revenue numbers and trial emails.
+There are two ways to get a database.
 
-## Payments (Razorpay)
+### A. A Supabase project (day-to-day development)
 
-1. **Account:** sign up at razorpay.com and complete KYC (PAN, bank account, business details). Ask support to enable **Subscriptions** if it isn't in the menu.
-2. **Business details on your site** (Razorpay reviews these pages before approving live payments): set `BUSINESS_LEGAL_NAME`, `SUPPORT_EMAIL`, `SUPPORT_PHONE`, `BUSINESS_ADDRESS`, `BUSINESS_CITY`, `GRIEVANCE_OFFICER`. They appear on `/contact`, `/terms`, `/privacy-policy` and `/refund-policy` (all linked in the footer).
-3. **Test mode first:** Account & Settings → API Keys → generate test keys → `RAZORPAY_KEY_ID` (`rzp_test_…`) and `RAZORPAY_KEY_SECRET`.
-4. **Plans:** Subscriptions → Plans → create "Botly Starter" (monthly, every 1 month, ₹2,999) and "Botly Growth" (monthly, ₹9,999). Copy the `plan_…` ids into `RAZORPAY_PLAN_STARTER` / `RAZORPAY_PLAN_GROWTH`. The amounts must match `PRICE_STARTER_INR` / `PRICE_GROWTH_INR` (the site shows prices "+ GST"; if you want GST included in the charge, put the GST-inclusive amount in the plan and on the site).
-5. **Webhook:** Account & Settings → Webhooks → Add. URL `https://YOUR_DOMAIN/api/billing/webhook`, a secret you make up (put the same value in `RAZORPAY_WEBHOOK_SECRET`), events: all `subscription.*`.
-6. **Check:** `npm run check` confirms the keys work, both plans exist in the same mode, they're monthly INR, and their prices match the website.
-7. **Try it:** sign in as a customer → Plan & billing → Choose Starter → pay with a Razorpay test card or test UPI id → the plan turns Starter within seconds, and the payment appears in Super admin → Latest billing events.
-8. **Go live:** after KYC approval, switch the dashboard to Live mode and repeat steps 3–5 there (live keys, live plans, live webhook — ids differ between modes). Update the environment and redeploy.
+Use a free hosted Supabase project, or the Supabase CLI (`supabase start`, which needs Docker).
 
-How it behaves:
-- Nothing changes until Razorpay confirms payment. Closing the checkout never touches the customer's current plan.
-- Switching plans: the new plan starts once paid, and the old subscription is cancelled at that moment, so nobody is billed twice.
-- Renewal fails → status "past due", service stays on while Razorpay retries. Retries exhausted ("halted"), cancelled or ended → the widget shows contact details instead of AI replies.
-- Every webhook is stored in `billing_events` (visible in Super admin). A webhook that can't be applied returns 500 so Razorpay retries it.
+1. Apply `supabase/migrations/0001_schema.sql` through `0010_demos_upgrade.sql` **in order**, either with `supabase db push` on a linked project or by pasting each file into the SQL editor. See [Database migrations](#database-migrations).
+2. Optional demo data: run `supabase/seed.sql`. It creates the fake business **Ananya Handlooms** (public key `pk_ananya_demo_0001`) with approved knowledge. `seed.sql` is generated from `evals/ananya-handlooms.yaml` by `npm run seed:gen`, so don't edit it by hand.
+3. In Supabase → Authentication → URL configuration, set the Site URL to `http://localhost:3000` and add `http://localhost:3000/auth/callback` to the redirect URLs.
+4. Fill in `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_EMAILS` and an LLM key in `.env.local`.
 
-## Alerts, trial emails and updates
+```bash
+npm run check    # setup doctor: env, Supabase, migrations, RLS, LLM, Resend, Razorpay
+npm run dev      # builds public/widget.js, runs a quick check, starts Next.js on :3000
+```
 
-- **Error alerts:** every server error and every AI-provider failure emails `ALERT_EMAIL` (or the first `ADMIN_EMAILS` address), at most once per 15 minutes per kind of error. Needs `RESEND_API_KEY`. For uptime, point a free monitor (UptimeRobot, Better Stack) at `https://YOUR_DOMAIN/api/health?deep=1`.
-- **Trial emails:** the daily job (9 am IST) sends each trial one welcome, one "80% of replies used", one "2 days left" and one "trial ended" email.
-- **Migration 0007** (billing name, GSTIN, trial email log): run `supabase/migrations/0007_billing_details.sql` in the Supabase SQL editor after pulling this update.
-- **Migration 0010** (only if you ran an earlier draft of 0009 and see "cannot change return type of existing function"): run `supabase/migrations/0010_demos_upgrade.sql`. It is safe to run on any database.
-- **Migration 0008** (business hours "not set" instead of a made-up Mon–Sat 10–7 default): run `supabase/migrations/0008_hours_not_set.sql` the same way. It also resets existing bots that still carry the untouched old default; a business that really keeps those hours re-enters them in Settings.
+Sign in at http://localhost:3000/login with an address listed in `ADMIN_EMAILS`. Your first sign-in makes you the platform admin. `npm run llm:check` tests streaming, tool calling and a Tamil reply against the configured LLM.
 
-## 5. Install the widget
+### B. Local harness without Supabase (`scripts/local-db.sh` + `scripts/local-stack`)
 
-The whole install is one line. Put it just before `</body>`:
+This runs the real app against plain Postgres, PostgREST and a small auth stand-in that **writes magic links to a file** instead of emailing them. It is built for tests and screenshots. No external accounts are needed when you pair it with the scripted test model.
+
+Requirements: a local Postgres 15+ with the `vector` and `pg_trgm` extensions, `psql`, and a [PostgREST](https://github.com/PostgREST/postgrest/releases) binary.
+
+```bash
+# 1. Fresh database: Supabase shim + every migration + seed (default DB name botly_test)
+DB=botly_test bash scripts/local-db.sh          # or: npm run db:reset:local
+#    It runs psql as `sudo -u postgres` by default; override with PSQL="psql -U postgres -v ON_ERROR_STOP=1 -q"
+
+# 2. PostgREST (:54330) + auth gateway (:54321); writes .env.local-stack with the three Supabase vars
+POSTGREST_BIN=/path/to/postgrest bash scripts/local-stack/start.sh
+
+# 3. .env.local for the harness: copy the three lines from .env.local-stack, then add
+#      NEXT_PUBLIC_APP_URL=http://localhost:3000
+#      ADMIN_EMAILS=admin@botly.test
+#      BOTLY_TEST_SCRIPTED_LLM=1          # scripted model, no API key; refused on Vercel
+#    Optional fake email capture: node tests/e2e/fake-resend.mjs (port 54340), then set
+#      RESEND_API_URL=http://localhost:54340 and a dummy RESEND_API_KEY that starts with re_
+
+# 4. Build and start
+npm run build && npx next start -p 3000
+```
+
+Open http://localhost:3000/login, enter `admin@botly.test`, and open the link that appears in `/tmp/botly-magic-links.log`. For the widget, serve any page from `http://localhost:4173` (an allowed origin in the seed) with:
 
 ```html
-<script src="https://YOUR_DOMAIN/widget.js" data-key="BOT_PUBLIC_KEY" async></script>
+<script src="http://localhost:3000/widget.js" data-key="pk_ananya_demo_0001" async></script>
 ```
 
-The client's domain must be in the bot's **allowed domains** (Settings). On any other domain the widget stays silent: no bubble and no console errors.
+`scripts/local-stack/e2e.sh` does all of the above and then runs Playwright (see [Testing and evals](#testing-and-evals)). The ports in `start.sh` are fixed. If something else already uses 54321 (for example a running Supabase CLI stack), start PostgREST and `node scripts/local-stack/gateway.mjs` yourself with `GATEWAY_PORT`, `POSTGREST_URL`, `DATABASE_URL`, `JWT_SECRET` and `MAGIC_LINK_LOG`. The screenshots in this README were made that way.
 
-**Shopify.** Online Store → Themes → ⋯ → Edit code → `layout/theme.liquid`. Paste the line just above `</body>` and save. Add both the store domain and `your-store.myshopify.com` (or `*.myshopify.com`) to allowed domains.
+## Environment variables
 
-**WordPress.** Easiest: install the free "WPCode" (Insert Headers and Footers) plugin → Code Snippets → Header & Footer → paste into **Footer** → Save. Or, in a child theme, paste it before `</body>` in `footer.php`.
+These are names only. **Never commit values.** `.env.local`, `.env` and `.env.local-stack` are gitignored. Comments in [`.env.example`](.env.example) explain where each value comes from. Production values live in Vercel → Project → Settings → Environment Variables.
 
-**Wix.** Settings → Custom code (under Advanced; needs a paid plan with a connected domain) → Add custom code → paste → Place code in **Body – end** → Apply to **All pages** → Load code **once**. Add both your custom domain and `*.wixsite.com` if you use the free subdomain for testing.
+**App and access**
 
-**Any other site.** Paste before `</body>` in the shared layout/footer template.
+| Name | Purpose |
+|---|---|
+| `NEXT_PUBLIC_APP_URL` | Public base URL with no trailing slash. Used in emails, the install snippet and test links. |
+| `ADMIN_EMAILS` | Comma-separated emails that become platform super admins on first sign-in. |
+| `NEXT_PUBLIC_AUTH_PROVIDERS` | OAuth buttons on `/login` (`google`, `azure`, `github`, `facebook`, `linkedin_oidc`, `apple`). Defaults to `google` when unset. Each must be enabled in Supabase. |
+| `CRON_SECRET` | Shared secret that Vercel Cron sends. Without it the scheduled jobs refuse to run. |
+| `ENCRYPTION_KEY` | 32-byte key that encrypts Shopify and WooCommerce credentials. Never rotate it after stores are connected. |
 
-Power users can drive it from the page:
+**Supabase**
+
+| Name | Purpose |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Project URL. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser (anon or publishable) key. RLS protects the data. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only key, used by public widget endpoints after the key and origin checks. Never expose it. |
+
+**LLM**
+
+| Name | Purpose |
+|---|---|
+| `LLM_PROVIDER` | `anthropic` (code default) or an OpenAI-compatible preset: `groq` (production), `gemini`, `cerebras`, `mistral`, `github`, `openrouter`, `nvidia`, `openai`. |
+| `LLM_API_KEY` | Key for an OpenAI-compatible provider. The code also accepts `GROQ_API_KEY`, `GEMINI_API_KEY`, `CEREBRAS_API_KEY`, `MISTRAL_API_KEY`, `GITHUB_TOKEN`, `OPENROUTER_API_KEY` or `NVIDIA_API_KEY` as fallbacks. |
+| `LLM_BASE_URL` | Overrides the preset's API base URL. |
+| `LLM_MODEL` | Overrides the preset's model (Groq preset: `openai/gpt-oss-120b`). |
+| `LLM_FALLBACK_MODELS` | Models to try, in order, when the main one is overloaded (Groq preset: `openai/gpt-oss-20b`). |
+| `LLM_REASONING_EFFORT` | `off`, `low` or `medium` for thinking models. |
+| `LLM_TIMEOUT_MS` | How long a reply may take before the contact card is shown (default 25000). |
+| `LLM_REQUEST_TOKEN_LIMIT` | Largest single request for small free tiers (Groq preset: 7500). It also sizes the knowledge cap. |
+| `LLM_PRICING_JSON` | Per-model USD prices for cost accounting. |
+| `ANTHROPIC_API_KEY` | Key when `LLM_PROVIDER=anthropic`. |
+| `ANTHROPIC_DEFAULT_MODEL` | Default Claude model for new bots. |
+| `ONBOARDING_MODEL` | Model for onboarding drafts. A Claude id maps to the configured provider's model. |
+| `VOYAGE_API_KEY` | Optional multilingual embeddings for retrieval mode. Without it, retrieval uses keyword search. |
+| `VOYAGE_MODEL` | Overrides the Voyage model (code only, not in `.env.example`). |
+
+**Email and WhatsApp**
+
+| Name | Purpose |
+|---|---|
+| `RESEND_API_KEY` | Resend key for lead, invite, trial, report and alert emails. Without it, leads are saved but nobody is emailed. |
+| `EMAIL_FROM` | Sender, for example `Botly <...>` on a domain verified in Resend. |
+| `ALERT_EMAIL` | Who receives error alerts (defaults to the first `ADMIN_EMAILS` address). |
+| `WHATSAPP_ACCESS_TOKEN` | Meta System User token for WhatsApp Cloud API owner alerts (optional). |
+| `WHATSAPP_PHONE_NUMBER_ID` | WhatsApp sender phone number ID. |
+| `WHATSAPP_TEMPLATE_NAME` | Approved utility template with 4 body variables (default `new_lead`). |
+| `WHATSAPP_TEMPLATE_LANG` | Template language (default `en`). |
+
+**Billing (Razorpay) and plans**
+
+| Name | Purpose |
+|---|---|
+| `RAZORPAY_KEY_ID` | Razorpay API key id (test or live). |
+| `RAZORPAY_KEY_SECRET` | Razorpay API secret. Also verifies Checkout signatures. |
+| `RAZORPAY_PLAN_STARTER` | `plan_…` id of the monthly Starter plan. |
+| `RAZORPAY_PLAN_GROWTH` | `plan_…` id of the monthly Growth plan. |
+| `RAZORPAY_WEBHOOK_SECRET` | Secret for `/api/billing/webhook` (`subscription.*` events). |
+| `PRICE_STARTER_INR` | Starter price shown on the site (default 2999). Must match the Razorpay plan. |
+| `PRICE_GROWTH_INR` | Growth price shown on the site (default 9999). Must match the Razorpay plan. |
+| `TRIAL_DAYS` | Free-trial length (default 14). |
+| `TRIAL_REPLIES` | AI replies in the trial (default 50). Preview replies count. |
+| `TRIAL_CRAWL_PAGES` | Pages read during trial onboarding (default 15). |
+| `USD_INR` | Exchange rate for the super-admin margin estimate. |
+
+**Limits**
+
+| Name | Purpose |
+|---|---|
+| `KNOWLEDGE_TOKEN_CAP` | Most approved knowledge per prompt before retrieval mode (default 25000, lower on small free tiers). |
+| `RATE_LIMIT_VISITOR_PER_10MIN` | Messages per visitor per 10 minutes (default 20). |
+| `RATE_LIMIT_BOT_PER_MIN` | Messages per bot per minute (default 120). |
+| `DEFAULT_QUOTA_STARTER` | Monthly conversations on Starter (default 2000). |
+| `DEFAULT_QUOTA_GROWTH` | Monthly conversations on Growth (default 10000). |
+| `CRAWL_MAX_PAGES` | Upper bound on pages read by the crawler (default 40). |
+| `SHOPIFY_API_VERSION` | Shopify Admin API version for order lookup. |
+
+**Public business details (legal pages, footer, contact)**
+
+| Name | Purpose |
+|---|---|
+| `BUSINESS_LEGAL_NAME` | Legal name on Terms, Privacy and Refund pages (defaults to "Botly"). |
+| `BUSINESS_CITY` | City shown on legal pages. |
+| `BUSINESS_ADDRESS` | Registered address (Razorpay's website review asks for it). |
+| `SUPPORT_EMAIL` | Public support mailbox (code default `support@botly.in`). |
+| `SUPPORT_PHONE` | Public phone and WhatsApp (code has a default). |
+| `GRIEVANCE_OFFICER` | Grievance officer named on the Privacy Policy. |
+| `NEXT_PUBLIC_DEMO_BOT_KEY` | Optional bot key for a live demo chat on the landing page. |
+
+**Demo builder**
+
+| Name | Purpose |
+|---|---|
+| `DEMO_CONTACT_PHONE` | Phone a prospect sees when a demo runs out (falls back to `SUPPORT_PHONE`). |
+| `DEMO_CONTACT_WHATSAPP` | WhatsApp a prospect sees when a demo runs out. |
+| `DEMO_CONTACT_EMAIL` | Email a prospect sees (falls back to `SUPPORT_EMAIL`, then the first admin). |
+| `DEMO_REPLY_LIMIT` | AI replies per demo (default 150). |
+| `DEMO_DEFAULT_DAYS` | Default demo lifetime in days (default 14). |
+| `DEMO_RENDER` | `auto` opens JavaScript-built sites in headless Chromium; `off` makes plain copies only. |
+| `DEMO_CHROME_PATH` | Local development only: path to Chrome for rendering. |
+
+**Tests and local harness only (never set in production)**
+
+| Name | Purpose |
+|---|---|
+| `BOTLY_TEST_SCRIPTED_LLM` | `1` switches to a scripted model for tests. The app refuses it on Vercel. |
+| `RESEND_API_URL`, `RAZORPAY_API_URL`, `VOYAGE_API_URL`, `WHATSAPP_API_URL` | Point the API clients at local fakes. |
+| `DATABASE_URL` | Postgres URL for `npm run test:db` and the harness gateway. |
+| `JWT_SECRET`, `GATEWAY_PORT`, `POSTGREST_URL`, `MAGIC_LINK_LOG` | Local auth gateway settings (`scripts/local-stack`). |
+
+`VERCEL`, `AWS_LAMBDA_FUNCTION_NAME` and `NEXT_RUNTIME` are read but set by the platform.
+
+## Database migrations
+
+Apply these once each, in filename order (`supabase/migrations/`). `scripts/local-db.sh` applies them all to a fresh local database.
+
+| # | File | What it adds |
+|---|---|---|
+| 1 | `0001_schema.sql` | All core tables (organizations, bots, knowledge, conversations, messages, leads, usage, notifications, `eval_runs`, `rate_limits`) with RLS enabled everywhere. |
+| 2 | `0002_functions.sql` | Atomic rate limiter, quota-checked conversation start, usage and cost accounting, unanswered-question merging. Service role only. |
+| 3 | `0003_rls.sql` | Policies: admin sees everything, owners see their own organization, anon sees nothing. |
+| 4 | `0004_phase2.sql` | Client invites, owner answer suggestions, cost columns hidden from owners, `knowledge_chunks` (pgvector + full-text), `bot_report()`, visitor data deletion, retention purge. |
+| 5 | `0005_phase3.sql` | `bot_integrations` for Shopify and WooCommerce order lookup (credentials encrypted in the app). |
+| 6 | `0006_saas.sql` | Self-serve: trial, plans, Razorpay subscription fields, `billing_events`, business profile. |
+| 7 | `0007_billing_details.sql` | Billing name, GSTIN and the trial email log. |
+| 8 | `0008_hours_not_set.sql` | Business hours default to "not set" instead of a made-up Mon–Sat schedule. |
+| 9 | `0009_demos.sql` | Demo builder: `demo_sites` and the `is_demo` organization flag. |
+| 10 | `0010_demos_upgrade.sql` | Brings an early draft of the demo tables in line with the code. Safe to re-run. |
+
+**Pending in open pull requests (not on `main` yet):**
+
+| File | PR | Notes |
+|---|---|---|
+| `0011_launch_guards.sql` | [#1](https://github.com/vijayaprathap1/botly/pull/1) | Counts a trial reply only after it succeeds, adds a shared AI budget across bots, dedupes alerts. |
+| `0012_analytics.sql` | [#3](https://github.com/vijayaprathap1/botly/pull/3) | Growth analytics (a `metrics` schema the Data API can't read). Apply after 0011 when both exist; it also applies on 0001–0010 alone. |
+| `0013_demo_guards.sql` | [#5](https://github.com/vijayaprathap1/botly/pull/5) | Demo slice of the AI budget and a flagged-draft count. **Requires 0011.** |
+
+Order once merged: 0011 → 0012 → 0013. New migrations take the next free number.
+
+## Deploy
+
+Botly is hosted on **Vercel**. **Production deploys come from `main`**: merging a pull request into `main` ships it to https://botly.in. Pull requests get Vercel preview deployments.
+
+- Build command: the default `npm run build`, which also builds `public/widget.js`. The widget is served from `https://botly.in/widget.js`. Use the bare domain, because `www` redirects and the redirect breaks CORS.
+- Environment variables: set them in Vercel for Production (and Preview if you test payments there). See [Environment variables](#environment-variables).
+- Supabase Auth: add `https://YOUR_DOMAIN/auth/callback` to the redirect URLs. For sign-in emails at volume, point Supabase Auth's SMTP at Resend.
+- Razorpay: create the monthly plans and a webhook to `https://YOUR_DOMAIN/api/billing/webhook` with `subscription.*` events. `npm run check` checks that the keys, plans and prices match.
+- Cron (`vercel.json`): `/api/cron/retention` runs daily at 03:30 UTC (09:00 IST). It runs the retention purge, trial lifecycle emails and the demo expiry sweep. `/api/cron/weekly` runs Mondays at 03:30 UTC (09:00 IST) and sends the Growth weekly summary.
+- Long-running routes ask for up to 300 seconds (onboarding, go-live checks, demos). On a plan with lower limits, reduce `CRAWL_MAX_PAGES`.
+- Monitoring: `GET /api/health` returns 200 when config, database and AI config are fine. `?deep=1` also makes a real LLM call, so don't poll it often on a free LLM tier.
+- Migrations are not run by the deploy. Apply new files in the Supabase SQL editor before or with the merge that needs them.
+
+## Testing and evals
+
+```bash
+npm run typecheck        # tsc --noEmit
+npm test                 # unit tests (Vitest, tests/unit): prompt, language detection, quota, rate limits,
+                         # origin check, crawler, CSV, billing, orders, notifiers, demo snapshot, ...
+npm run widget:size      # builds the widget and prints raw/gzipped size against the 35 KB budget
+```
+
+On `main` at the time of writing, `npm test` passes 212 tests in 27 files.
+
+**Database tests** (RLS and SQL functions) run against a local Postgres made by `scripts/local-db.sh`:
+
+```bash
+DB=botly_test bash scripts/local-db.sh
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/botly_test npm run test:db
+```
+
+**End-to-end** (Playwright, `tests/e2e`): the widget on hostile host pages (global CSS resets, a huge z-index sticky header, a disallowed origin, a 375 px phone), the lead form and handoff, the dashboard flow (knowledge, settings, playground, conversations, leads, onboarding crawl) and self-serve sign-up. They need the local harness:
+
+```bash
+npm run build                                          # with the harness .env.local (see Local setup B)
+POSTGREST_BIN=/path/to/postgrest bash scripts/local-stack/e2e.sh
+# or against a running app with the seed loaded:
+E2E_APP_URL=http://localhost:3000 npm run test:e2e
+```
+
+If Playwright's bundled browser isn't installed, set `PW_CHROMIUM_PATH=/usr/bin/google-chrome`.
+
+**Evals** (`scripts/eval.ts`, cases in `evals/*.yaml`):
+
+```bash
+npm run eval -- --fixture evals/ananya-handlooms.yaml   # no database; uses the active LLM key
+npm run eval -- --bot <bot-id>                          # a real bot; records eval_runs (gates "Go live")
+npm run eval -- --scripted --fixture evals/ananya-handlooms.yaml   # harness self-test, scores meaningless
+```
+
+Every prompt-injection case must pass before a bot can go live. `evals/generic.yaml` is used when there's no `evals/<bot-id>.yaml`.
+
+**Language eval:** `npm run eval:languages` (a live check of English, Hindi, Hinglish, Tamil and Tanglish replies on an in-memory fixture) is **not on `main` yet**. It arrives with [PR #4](https://github.com/vijayaprathap1/botly/pull/4). Until that merges, use `npm run llm:check`, which includes a Tamil reply, and the Tamil, Hindi and Hinglish buttons in the Playground.
+
+## Embed the widget
+
+The install code is one line, taken from the bot's **Overview → Install on your website** card (`installSnippet()` in `lib/dashboard.ts`):
+
+```html
+<script src="https://botly.in/widget.js" data-key="YOUR_BOT_PUBLIC_KEY" async></script>
+```
+
+Put it just before `</body>`. The site's domain must be listed in **Settings → Allowed domains**. On any other domain the widget stays silent: no bubble and no console errors. The bot also has to be live and active.
+
+**Plain HTML.** Paste the line before `</body>` on every page, or in the shared footer or layout template.
+
+**Shopify.** Online Store → Themes → ⋯ → Edit code → `layout/theme.liquid`. Paste the line just above `</body>` and save. Add the store domain and `your-store.myshopify.com` (or `*.myshopify.com`) to the allowed domains.
+
+**WordPress.** Install the free WPCode plugin (Insert Headers and Footers) → Code Snippets → Header & Footer → paste into **Footer** → Save. Or, in a child theme, paste the line before `</body>` in `footer.php`.
+
+**Wix.** Settings → Custom code (under Advanced; needs a paid plan with a connected domain) → Add custom code → paste → place the code in **Body – end** → apply to **All pages** → load the code **once**. Add your domain, and `*.wixsite.com` if you test on the free subdomain.
+
+**JavaScript API** (optional, from `widget/src/index.ts`). Calls made before the widget loads are queued:
 
 ```js
-Botly.open(); Botly.close();
+Botly.open();
+Botly.close();
 Botly.sendMessage("Do you ship to Dubai?");
 Botly.identify({ name: "Priya", phone: "9876543210", email: "priya@example.com" }); // prefills the lead form
 ```
 
-To switch a client off (cancellation), untick **Active** in Settings: the bubble disappears from their site on the next page load. Nothing to remove on their side.
+The widget only reads `data-key`. `data-mode="fullscreen"` and `data-test-token` are used by the private test page `/t/<token>`; don't put them on a public site. To switch a bot off, untick **Active** in Settings (super admin) or **Pause** it from the Overview. The bubble disappears on the next page load, and the snippet can stay on the site.
 
-## 6. Tests
+## Repository layout
 
-```bash
-npm test                 # unit tests (Vitest): prompt builder, knowledge cap, quota, rate limiter, origin
-                         # check, markdown sanitiser, phone validation, chat engine, crawler, CSV, eval checks
-npm run widget:size      # builds the widget and prints raw/gzipped size (fails over 35 KB gzipped)
-npm run eval -- --fixture evals/ananya-handlooms.yaml   # 34 eval cases against real Claude, no database needed
-npm run eval -- --bot <bot-id>                          # same, against a bot in Supabase; records the result
 ```
-
-The eval needs the active provider's key (`ANTHROPIC_API_KEY`, or `LLM_API_KEY` with `LLM_PROVIDER=nvidia`). `--scripted` runs the harness with a fake model to check the plumbing; its scores mean nothing.
-
-**Database and end-to-end tests without Supabase.** A local test harness runs the real app against plain Postgres + PostgREST, with a minimal auth stand-in that writes magic links to a file and a fake Resend that records emails. It is for automated tests only; use the Supabase CLI for day-to-day local development.
-
-```bash
-DB=botly_test bash scripts/local-db.sh                         # migrations + seed into local Postgres
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/botly_test npm run test:db   # RLS + SQL function tests
-# End-to-end (needs a PostgREST binary and a build made with the harness env; see scripts/local-stack/start.sh):
-POSTGREST_BIN=/path/to/postgrest bash scripts/local-stack/e2e.sh
+app/                 Next.js routes: marketing pages, /login, /start, /app dashboard, /app/admin,
+                     /t/[testToken] test page, /demo/[slug], and /api/* (chat, widget, billing, cron, health)
+components/          UI: dashboard shell, home page sections, marketing
+lib/                 chat engine and tools, LLM providers, prompts, crawler, onboarding, retrieval,
+                     notify (Resend, WhatsApp), billing (Razorpay), orders (Shopify/WooCommerce), demo builder
+widget/src/          framework-free TypeScript widget → esbuild → public/widget.js
+supabase/            migrations, seed.sql, auth email templates
+scripts/             build-widget, check, eval, llm-check, gen-seed, local-db.sh, local-stack/
+tests/               unit (Vitest), db (Vitest + Postgres), e2e (Playwright) with fixtures
+evals/               eval cases (YAML)
+docs/                guides and screenshots
 ```
-
-Playwright embeds the widget on hostile pages served from a different origin: aggressive global CSS (`* { all: unset }`, `button { background: red !important }`), a sticky header with a huge z-index, a plain page, a disallowed origin, and a 375 px phone. It also signs in to the dashboard and walks through knowledge, settings, playground, conversations, leads and an onboarding crawl.
-
-**Measured in this build:** widget 10.4 KB gzipped (budget 35 KB). Lighthouse performance on a plain host page: 100 without the widget, 100 with it (3 runs each, CLS 0).
-
-## Scheduled jobs
-
-`vercel.json` schedules two Vercel Cron jobs; set `CRON_SECRET` so only Vercel can call them:
-- `/api/cron/retention` nightly at 03:00 IST: deletes conversations and leads older than each client's retention setting (default 12 months).
-- `/api/cron/weekly` Mondays at 09:00 IST: weekly summary email for Growth clients.
-
-## 7. Credentials you need to create
-
-| What | Where | Used for |
-|---|---|---|
-| Supabase project | supabase.com | Database, auth. `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
-| Anthropic API key | console.anthropic.com | Chat replies, onboarding drafts, evals. `ANTHROPIC_API_KEY` |
-| Resend API key + verified domain | resend.com | Lead emails. Until a domain is verified you can only send to your own Resend address. `RESEND_API_KEY`, `EMAIL_FROM` |
-| WhatsApp Cloud API (Phase 2) | developers.facebook.com → WhatsApp | A permanent System User token, phone number ID, and an **approved utility template** named `new_lead` with 4 body variables, e.g. *"New lead for {{1}}: {{2}}, {{3}}. Need: {{4}}"*. Until then each lead logs "WhatsApp pending" and email still goes out. |
-| `CRON_SECRET` | any long random string | Protects the scheduled jobs |
-| `ENCRYPTION_KEY` (Growth) | `openssl rand -base64 32` | Encrypts store credentials. Never change it after connecting stores. |
-| Voyage AI key (optional) | voyageai.com | Semantic search when a client's knowledge exceeds 25k tokens. Without it, retrieval uses keyword search. |
-| Shopify custom app / WooCommerce API key (Growth, per client) | the client's store admin | Order lookup |
-| Vercel project + domain | vercel.com | Hosting the app and `widget.js` |
-
-## Status
-
-**Phase 1:** migrations + RLS; clients and bots; knowledge editor with approve flow, CSV/PDF/DOCX import; website crawler with Claude-drafted FAQ/policy/tone; the widget; streaming `/api/chat` with prompt caching and the four core tools; email notifications; private test page; playground; conversations; leads; usage and cost logging; quotas; eval runner and the Ananya Handlooms eval set; go-live gate.
-
-**Phase 2:** unanswered inbox with one-step answering and owner suggestions; client (owner) logins and views, with cost hidden at the database level; WhatsApp Cloud API notifications (active once `WHATSAPP_*` is set); monthly reports with printable view and CSV; retrieval mode for large knowledge bases (pinned policies + hybrid vector/keyword search, English rewrite for Tamil/Hindi questions); conversation export; visitor data deletion; nightly retention clean-up; 80% quota warning.
-
-**Phase 3:** Shopify and WooCommerce order lookup with customer verification and encrypted per-bot credentials; callback/appointment booking with a date/slot card; weekly report email.
-
-**Needs your accounts to run for real:** Anthropic (replies, evals), Resend (emails), WhatsApp Cloud API (template approval), Voyage (optional), a client's Shopify/WooCommerce store. Everything else is tested end to end on a local harness.
