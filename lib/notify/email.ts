@@ -21,7 +21,7 @@ export function renderLeadEmail(n: LeadNotice): { subject: string; html: string;
         { value: `${n.quota.used}`, label: "conversations used" },
         { value: `${Math.max(0, n.quota.limit - n.quota.used)}`, label: "left this month" },
       ],
-      reason: `Sent by Botly for ${n.botName}.`,
+      reason: `Sent by Botly for ${n.businessName || n.botName}.`,
     });
     return { subject, html, text };
   }
@@ -39,18 +39,19 @@ export function renderLeadEmail(n: LeadNotice): { subject: string; html: string;
   ];
   // The owner acts on this from their phone: the first button should start the conversation.
   const call = { label: "Call", url: `tel:${l.phone}` };
+  const phoneLine = `Phone: ${l.phoneDisplay}`;
   const { html, text } = brandEmail({
     tone: handoff ? "warning" : "success",
     badge: handoff ? "&#128587;" : "&#127919;",
     eyebrow: handoff ? "Needs a person" : l.type === "callback" ? "Callback request" : "New lead",
     preheader: `${l.name} \u00b7 ${l.phoneDisplay}${l.need ? ` \u00b7 ${l.need}` : ""}`,
     heading: handoff ? `${l.name} wants to talk to a person` : l.type === "callback" ? `${l.name} asked for a callback` : `New lead: ${l.name}`,
-    paragraphs: [`${l.name} ${label} on ${n.businessName}.`, ...n.summary.split("\n").filter(Boolean)],
+    paragraphs: [`${l.name} ${label} on ${n.businessName}.`, phoneLine, ...n.summary.split("\n").filter(Boolean)],
     cta: n.whatsappUrl ? { label: `WhatsApp ${l.name}`, url: n.whatsappUrl } : call,
     secondary: [...(n.whatsappUrl ? [call] : []), ...(n.transcriptUrl ? [{ label: "Read the chat", url: n.transcriptUrl }] : [])],
     panel: { title: "Contact details", rows },
     note: "Leads who hear back within a few minutes are far more likely to buy. Reply while they are still on your website.",
-    reason: `Sent by Botly for ${n.botName}.`,
+    reason: `Sent by Botly for ${n.businessName || n.botName}.`,
   });
   return { subject, html, text };
 }

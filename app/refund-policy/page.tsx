@@ -19,7 +19,7 @@ export default function RefundPolicy() {
         <p>Every new account gets a free trial of {TRIAL.days} days including {TRIAL.replies} AI replies, with no card required, so you can check the assistant on your own business before paying.</p>
 
         <h2 className="mt-6 text-lg font-semibold">How billing works</h2>
-        <p>Paid plans are monthly subscriptions, charged in advance through Razorpay (cards, UPI AutoPay or netbanking e-mandate), plus applicable GST. Each plan renews automatically every month until you cancel. Razorpay emails you a receipt for every charge.</p>
+        <p>Paid plans are monthly subscriptions, charged in advance through Razorpay (cards, UPI AutoPay or netbanking e-mandate) at the price shown. Each plan renews automatically every month until you cancel. Razorpay emails you a receipt for every charge.</p>
 
         <h2 className="mt-6 text-lg font-semibold">Cancelling</h2>
         <ul className="ml-5 list-disc space-y-1">

@@ -23,8 +23,7 @@ export function Hero() {
       />
       <div className={`${wrap} relative z-[1] grid items-center gap-12 wlg:grid-cols-[1.02fr_1fr] wlg:gap-14`}>
         <div>
-          <p className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-line bg-white py-1.5 pl-1.5 pr-3.5 text-[13px] font-semibold text-ink-2 wsm:text-[14px]">
-            <b className="rounded-full bg-leaf-t px-2.5 py-[3px] text-[12.5px] text-leaf">₹ pricing</b>
+          <p className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-line bg-white px-3.5 py-1.5 text-[13px] font-semibold text-ink-2 wsm:text-[14px]">
             AI support for Indian businesses
           </p>
           <h1
@@ -43,7 +42,7 @@ export function Hero() {
             <span className={`${peek} border-ink bg-white`}>{HINGLISH.peek}</span>
           </div>
           <p className="max-w-[540px] text-[16.5px] leading-[1.6] text-ink-2 wsm:text-[19px]">
-            Botly learns your business from your website and Instagram or Google profile, replies in English, Tamil, Hindi, Hinglish and
+            Botly learns your business from your website, plus anything you paste from your Instagram or Google profile, replies in English, Tamil, Hindi, Hinglish and
             Tanglish, and emails you each lead with one tap to WhatsApp or call them back.
           </p>
           <div className="mt-[30px] flex flex-wrap gap-3.5">
@@ -55,7 +54,7 @@ export function Hero() {
             </a>
           </div>
           <ul className="mt-[22px] flex flex-wrap gap-x-4 gap-y-1.5 text-[14.5px] text-ink-2">
-            {[`${TRIAL.days}-day free trial`, `${TRIAL.replies} AI replies`, "No card needed", `From ${from}/month + GST`].map((t) => (
+            {[`${TRIAL.days}-day free trial`, `${TRIAL.replies} AI replies`, "No card needed", `From ${from}/month`].map((t) => (
               <li key={t} className="inline-flex items-center gap-1.5">
                 <CircleCheck className="h-4 w-4 text-leaf" aria-hidden /> {t}
               </li>

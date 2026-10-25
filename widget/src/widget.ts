@@ -118,6 +118,8 @@ export class BotlyWidget {
   private offline = false;
   /** No more AI replies for now (quota or cap). The composer is paused; handoff still works. */
   private limited = false;
+  /** One message typed while a reply is in flight. Stays in the box until it sends. */
+  private sendAfterReply = false;
   private restored = false;
   private hadUserMessage = false;
   private identity: Identity = {};
@@ -457,8 +459,10 @@ export class BotlyWidget {
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
     const n = el.value.length;
-    this.counter.textContent = n > MAX_LEN - 100 ? `${n}/${MAX_LEN}` : "";
-    this.sendBtn.disabled = this.busy || this.offline || this.limited || !el.value.trim();
+    if (this.sendAfterReply && el.value.trim()) this.counter.textContent = "Will send after the reply";
+    else this.counter.textContent = n > MAX_LEN - 100 ? `${n}/${MAX_LEN}` : "";
+    // Typing stays possible while a reply streams in (it queues); offline or paused stops sending.
+    this.sendBtn.disabled = this.offline || this.limited || !el.value.trim();
     this.langFor(el, el.value);
   }
 
@@ -469,7 +473,15 @@ export class BotlyWidget {
       const b = h("button", { class: "chip", type: "button", text: q });
       this.langFor(b, q);
       b.style.animationDelay = `${i * 60}ms`;
-      b.addEventListener("click", () => this.send(q));
+      b.addEventListener("click", () => {
+        if (this.busy) {
+          if (!this.input.value.trim()) this.input.value = q;
+          this.sendAfterReply = true;
+          this.onInput();
+          return;
+        }
+        void this.send(q);
+      });
       this.chips.append(b);
     }
   }
@@ -551,7 +563,27 @@ export class BotlyWidget {
   // ─── sending ───────────────────────────────────────────────────────────────
   private submit() {
     const text = this.input.value.trim();
-    if (!text || this.busy || this.offline || this.limited) return;
+    if (!text || this.offline || this.limited) return;
+    if (this.busy) {
+      this.sendAfterReply = true;
+      this.onInput();
+      return;
+    }
+    this.sendAfterReply = false;
+    this.input.value = "";
+    this.onInput();
+    void this.send(text);
+  }
+
+  /** Sends the one message the visitor typed while the previous reply was still coming in. */
+  private flushQueued() {
+    if (!this.sendAfterReply) return;
+    this.sendAfterReply = false;
+    const text = this.input.value.trim();
+    if (!text || this.offline || this.limited) {
+      this.onInput();
+      return;
+    }
     this.input.value = "";
     this.onInput();
     void this.send(text);
@@ -650,6 +682,7 @@ export class BotlyWidget {
         if (!full.trim()) b.row.remove();
       }
       this.setBusy(false);
+      this.flushQueued();
     }
     if (failed && !full) {
       const why = this.offline || !failed.status ? "Not sent. Check your connection." : "Not sent. Something went wrong on our side.";

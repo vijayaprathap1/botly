@@ -40,8 +40,14 @@ export function PlanButtons({ orgId, plan, current, cancelling }: { orgId: strin
       theme: { color: "#4f46e5" },
       handler: async (res: RzpResponse) => {
         const v = await fetch("/api/billing/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orgId, ...res }) });
-        const j = (await v.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-        setMsg(j.ok ? { tone: "green", text: "Payment successful. Your plan is active." } : { tone: "red", text: j.error ?? "We couldn't confirm the payment yet. It will update within a few minutes." });
+        const j = (await v.json().catch(() => ({}))) as { ok?: boolean; pending?: boolean; error?: string };
+        setMsg(
+          j.ok
+            ? j.pending
+              ? { tone: "green", text: "Payment authorised. Your plan switches on as soon as Razorpay confirms the charge, usually within a few minutes." }
+              : { tone: "green", text: "Payment successful. Your plan is active." }
+            : { tone: "red", text: j.error ?? "We couldn't confirm the payment yet. It will update within a few minutes." },
+        );
         setBusy(false);
         router.refresh();
       },

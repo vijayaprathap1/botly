@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { KnowledgeSource } from "../knowledge";
 import type { BotWithOrg, ConversationRow, LeadRow, MessageRow } from "../types";
-import type { ChatStore, NewLead, NewMessage, NotificationLog } from "./store";
+import type { ChatStore, NewLead, NewMessage, NotificationLog, ReplyGate, ReplyStatus } from "./store";
 
 function must<T>(res: { data: T; error: { message: string } | null }, what: string): T {
   if (res.error) throw new Error(`[store] ${what}: ${res.error.message}`);
@@ -101,13 +101,50 @@ export class SupabaseStore implements ChatStore {
     if (res.error) console.error("[store] logNotification", res.error.message);
   }
 
-  async consumeReply(orgId: string) {
+  async countAiReplies(conversationId: string) {
+    const { count, error } = await this.db
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("conversation_id", conversationId)
+      .eq("role", "assistant")
+      .or("input_tokens.gt.0,output_tokens.gt.0");
+    if (error) {
+      console.error("[store] countAiReplies", error.message);
+      return 0;
+    }
+    return count ?? 0;
+  }
+
+  async checkReply(orgId: string): Promise<ReplyGate> {
+    const { data, error } = await this.db.rpc("check_reply", { p_org_id: orgId });
+    if (error) {
+      if (missingRpc(error.message, "check_reply")) {
+        console.error("[store] check_reply is not installed; counting this reply up front. Run migration 0011.");
+        const status = await this.consumeReply(orgId);
+        return { status, counted: status === "ok" };
+      }
+      console.error("[store] checkReply", error.message);
+      return { status: "ok", counted: false };
+    }
+    return { status: data as ReplyStatus, counted: false };
+  }
+
+  async commitReply(orgId: string) {
+    const { error } = await this.db.rpc("commit_reply", { p_org_id: orgId });
+    if (error && !missingRpc(error.message, "commit_reply")) console.error("[store] commitReply", error.message);
+  }
+
+  async consumeReply(orgId: string): Promise<ReplyStatus> {
     const { data, error } = await this.db.rpc("consume_reply", { p_org_id: orgId });
     if (error) {
       // Fail open for paying customers if the gate itself errors; log loudly.
       console.error("[store] consumeReply", error.message);
-      return "ok" as const;
+      return "ok";
     }
-    return data as "ok" | "expired" | "limit" | "suspended";
+    return data as ReplyStatus;
   }
+}
+
+function missingRpc(message: string, name: string): boolean {
+  return message.includes(name) && /does not exist|schema cache|PGRST202|42883|could not find/i.test(message);
 }

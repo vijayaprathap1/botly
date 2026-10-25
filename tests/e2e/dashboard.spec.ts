@@ -54,6 +54,8 @@ test("admin: sign in, review bot, edit knowledge and settings, playground, conve
     const title = `Aaa gift wrapping ${Date.now()}`;
     await page.getByLabel("Title").fill(title);
     await page.getByLabel("Content", { exact: true }).fill("- Gift wrapping costs ₹120 per saree.");
+    await expect(page.getByLabel("Status")).toHaveValue("draft"); // new sources start as drafts (QA R24)
+    await page.getByLabel("Status").selectOption("approved");
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page).toHaveURL(/\/knowledge$/);
     await expect(page.getByRole("link", { name: title })).toBeVisible();

@@ -42,12 +42,12 @@ export default async function BillingPage() {
                   ? "Your free trial has ended. Visitors see your contact details instead of AI replies until you choose a plan."
                   : `${trial.left} of ${trial.limit} AI replies and ${trial.daysLeft} days left in your free trial.`
                 : invoiced
-                  ? `${fmtInr(current.priceInr)}/month + GST, billed by invoice. To change your plan, contact us${support ? ` at ${support}` : ""}.`
+                  ? `${fmtInr(current.priceInr)}/month, billed by invoice. To change your plan, contact us${support ? ` at ${support}` : ""}.`
                   : org.cancel_at_period_end
                   ? `Cancelled. Your plan stays active until ${org.current_period_end ? fmtDate(org.current_period_end, org.timezone) : "the end of this billing period"}.`
                   : org.current_period_end
-                    ? `Renews on ${fmtDate(org.current_period_end, org.timezone)} · ${fmtInr(current.priceInr)}/month + GST.`
-                    : `${fmtInr(current.priceInr)}/month + GST.`}
+                    ? `Renews on ${fmtDate(org.current_period_end, org.timezone)} · ${fmtInr(current.priceInr)}/month.`
+                    : `${fmtInr(current.priceInr)}/month.`}
             </p>
           </div>
         </div>
@@ -77,11 +77,11 @@ export default async function BillingPage() {
           </Card>
         ))}
       </div>
-      <Card title="Billing details" sub="Printed on your invoices. Add your GSTIN to claim input tax credit.">
-        <BillingDetailsForm orgId={orgId} billingName={org.billing_name ?? null} gstin={org.gstin ?? null} email={org.billing_email ?? session.email ?? null} />
+      <Card title="Billing details" sub="Printed on your invoices.">
+        <BillingDetailsForm orgId={orgId} billingName={org.billing_name ?? null} email={org.billing_email ?? session.email ?? null} />
       </Card>
       <p className="text-xs text-zinc-500">
-        Payments by Razorpay (UPI, cards, net banking). Prices exclude 18% GST. Cancel any time; your plan runs until the end of the paid month.
+        Payments by Razorpay (UPI, cards, net banking). Prices are as shown, with nothing added at checkout. Cancel any time; your plan runs until the end of the paid month.
         The free trial includes {TRIAL.replies} AI replies over {TRIAL.days} days, once per email address.
       </p>
     </div>

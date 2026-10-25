@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { updateBotSettings, type ActionState } from "@/app/app/actions";
 import { SubmitButton, useFormAction } from "@/components/client";
 import { Card, Field, inputClass, Notice } from "@/components/ui";
@@ -11,6 +11,24 @@ const DAY_LABEL = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thurs
 
 export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin?: boolean }) {
   const [state, action, actionPending] = useFormAction<ActionState>(updateBotSettings.bind(null, bot.id), null);
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    const flag = sessionStorage.getItem("botly-settings-saved");
+    if (flag === bot.id) {
+      sessionStorage.removeItem("botly-settings-saved");
+      setToast("Saved");
+    }
+  }, [bot.id]);
+  useEffect(() => {
+    if (!state?.ok) return;
+    sessionStorage.setItem("botly-settings-saved", bot.id);
+    setToast("Saved");
+    const id = window.setTimeout(() => {
+      setToast(null);
+      sessionStorage.removeItem("botly-settings-saved");
+    }, 2800);
+    return () => window.clearTimeout(id);
+  }, [state, bot.id]);
   const [color, setColor] = useState(bot.branding.primary_color);
   const [name, setName] = useState(bot.branding.assistant_name);
   const [theme, setTheme] = useState(bot.branding.theme);
@@ -20,6 +38,12 @@ export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin
   const validColor = /^#[0-9a-f]{6}$/i.test(color) ? color : "#C2410C";
 
   return (
+    <>
+    {toast ? (
+      <div role="status" className="fixed bottom-4 right-4 z-50 rounded-lg bg-zinc-950 px-4 py-2 text-sm font-medium text-white shadow-lg">
+        {toast}
+      </div>
+    ) : null}
     <form onSubmit={action} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <div className="grid content-start gap-4">
         <Card title="Assistant">
@@ -194,5 +218,6 @@ export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin
         </Card>
       </div>
     </form>
+    </>
   );
 }

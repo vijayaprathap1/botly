@@ -126,7 +126,8 @@ export default async function KnowledgePage({ params, searchParams }: { params: 
         {sources.length === 0 ? (
           <Empty title="Nothing here">Try another filter, run onboarding, or add a source.</Empty>
         ) : (
-          <form action={bulkSources.bind(null, bot.id)}>
+          // Keyed on what's listed so ticks and "select all" reset once the list changes.
+          <form key={sources.map((s) => `${s.id}:${s.status}`).join(",")} action={bulkSources.bind(null, bot.id)}>
             <input type="hidden" name="back" value={back} />
             <div className="sticky top-14 z-10 -mx-4 mb-2 flex flex-wrap items-center gap-2 border-b border-zinc-100 bg-white px-4 py-2 sm:-mx-5 sm:px-5">
               <SelectAll name="ids" />

@@ -16,12 +16,26 @@ export type CrawlResult = { pages: ExtractedPage[]; siteWide: string; products: 
 const UA = "Mozilla/5.0 (compatible; BotlyBot/1.0; +https://botly.app/bot)";
 const SKIP = /\.(jpe?g|png|gif|webp|svg|ico|pdf|zip|mp4|mp3|css|js|xml|json|woff2?)$|\/(cart|checkout|account|login|register|search|wishlist|cdn-cgi)(\/|$)|\/collections\/[^/]+\/products\//i;
 
+/** Query keys that only identify a campaign or click, not a page. */
+const TRACKING_PARAM = /^(?:utm(?:_.+)?|fbclid|gclid|gbraid|wbraid|mc_cid|mc_eid|_ga|_gl|igshid|msclkid|twclid|ttclid|yclid|srsltid|ref|ref_src|spm)$/i;
+
+/**
+ * One address per page. Index files, trailing slashes, fragments and tracking
+ * parameters collapse, so "/" and "/index.html?utm=1#top" are the same page.
+ * Other query parameters (a catalogue page number, for example) are kept.
+ */
 export function normalizeUrl(u: string): string | null {
   try {
     const url = new URL(u);
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
     url.hash = "";
-    url.search = "";
+    const kept = new URLSearchParams();
+    for (const [k, v] of url.searchParams) {
+      if (TRACKING_PARAM.test(k)) continue;
+      kept.append(k, v);
+    }
+    url.search = kept.toString();
+    url.pathname = url.pathname.replace(/\/(?:index|default)\.(?:html?|php|aspx?)$/i, "/");
     url.pathname = url.pathname.replace(/\/+$/, "") || "/";
     return url.toString();
   } catch {

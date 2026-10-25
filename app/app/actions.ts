@@ -263,8 +263,10 @@ export async function bulkSources(botId: string, form: FormData) {
     else if (["approved", "archived", "draft"].includes(action)) await db.from("knowledge_sources").update({ status: action }).eq("bot_id", botId).in("id", ids);
     after(() => afterKnowledgeChange(botId));
   }
-  revalidatePath(`/app/bots/${botId}/knowledge`);
-  redirect(back.startsWith(`/app/bots/${botId}/knowledge`) ? back : `/app/bots/${botId}/knowledge`);
+  // Re-render the list in place. Redirecting to the URL we're already on left the
+  // buttons stuck on "…" with the old list until a manual reload (QA R24).
+  revalidatePath(`/app/bots/${botId}/knowledge`, "layout");
+  if (!back.startsWith(`/app/bots/${botId}/knowledge`)) redirect(`/app/bots/${botId}/knowledge`);
 }
 
 export async function importProducts(botId: string, _: ActionState, form: FormData): Promise<ActionState> {

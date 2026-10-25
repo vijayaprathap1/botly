@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { config } from "../config";
-import { crawlSite } from "../crawler/crawl";
+import { crawlSite, normalizeUrl } from "../crawler/crawl";
 import { runSafetyCheck, SAFETY_CASES } from "../eval/run";
 import type { KnowledgeSource } from "../knowledge";
 import { getLlm } from "../llm";
@@ -25,7 +25,7 @@ export type OnboardOptions = {
   url?: string | null;
   maxPages: number;
   draft: boolean;
-  /** Self-serve: approve drafts, fill greeting/suggestions/tone, save the business profile, run the safety check and go live. */
+  /** Self-serve: fill greeting/suggestions/tone, save the business profile, run the safety check and go live. Drafted knowledge stays draft for the owner to approve (demo workspaces excepted). */
   selfServe: boolean;
   /** Details the owner typed in the sign-up form. */
   ownerNotes?: string;
@@ -47,7 +47,10 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
   const { data: botRow } = await db.from("bots").select("*, org:organizations(*)").eq("id", botId).single();
   if (!botRow) throw new Error("Bot not found");
   const bot = botRow as BotWithOrg;
-  const status = o.selfServe ? "approved" : "draft";
+  // AI-drafted knowledge always waits for the owner's approval. Only throwaway demo
+  // workspaces (admin-built sales previews, no owner to review) are approved straight away.
+  const autoApprove = o.selfServe && Boolean(bot.org.is_demo);
+  const status = autoApprove ? "approved" : "draft";
   const stamp = (r: { type: string; title: string; url: string | null; content: string }, st = status) => ({
     ...r,
     bot_id: botId,
@@ -63,14 +66,21 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
     await db.from("bots").update({ website_url: o.url }).eq("id", botId);
     try {
       const result = await crawlSite(o.url, { maxPages: o.maxPages }, (e) => send(e));
-      pages = result.pages.map((p) => ({ title: p.title, url: p.url, text: p.text }));
+      const seenUrl = new Set<string>();
+      pages = [];
+      for (const p of result.pages) {
+        const url = normalizeUrl(p.url) ?? p.url;
+        if (seenUrl.has(url)) continue;
+        seenUrl.add(url);
+        pages.push({ title: p.title, url, text: p.text });
+      }
       products = result.products;
       siteWide = result.siteWide;
     } catch (e) {
       send({ stage: "skip", message: `Couldn't read the website: ${e instanceof Error ? e.message : "unknown error"}. Continuing with the details you entered.` });
     }
     const { data: existing } = await db.from("knowledge_sources").select("url").eq("bot_id", botId).not("url", "is", null);
-    const have = new Set((existing ?? []).map((r) => r.url as string));
+    const have = new Set((existing ?? []).map((r) => normalizeUrl(r.url as string) ?? (r.url as string)));
     // The site-wide row has no URL to recognise it by: keep one and refresh it on a re-import.
     const SITE_WIDE = "Site-wide details (header and footer)";
     const { data: priorSiteWide } = await db.from("knowledge_sources").select("id").eq("bot_id", botId).eq("type", "page").eq("title", SITE_WIDE).is("url", null).limit(1);
@@ -93,6 +103,7 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
   }
 
   const haveInput = pages.length > 0 || Boolean(o.ownerNotes?.trim());
+  let aiPaused = false;
   if (o.draft && haveInput) {
     send({ stage: "drafting", message: "Writing your business profile, FAQs and policies…" });
     try {
@@ -146,22 +157,37 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
       } else if (d.tone) await db.from("bots").update({ tone_suggestion: d.tone }).eq("id", botId);
       send({ stage: "drafted", message: `Wrote ${d.faqs.length} FAQs${policyToText(d.policy) ? ", a policy summary" : ""}${o.selfServe && d.profile_markdown ? " and your business profile" : ""}`, count: d.faqs.length });
     } catch (e) {
-      console.error("[onboarding] drafting failed", e instanceof Error ? e.message : e);
-      send({ stage: "skip", message: "Couldn't write the FAQs automatically. Using your website pages directly instead." });
-      if (o.selfServe) await db.from("knowledge_sources").update({ status: "approved" }).eq("bot_id", botId).eq("type", "page");
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[onboarding] drafting failed", msg);
+      aiPaused = /AI budget exceeded/i.test(msg);
+      send({
+        stage: "skip",
+        message: aiPaused
+          ? autoApprove
+            ? "Live chats are using the AI capacity right now, so FAQ drafting is paused instead of failing. Your pages are saved. Run the import again in a few minutes."
+            : "Live chats are using the AI capacity right now, so FAQ drafting is paused instead of failing. Your pages are saved as drafts. Run the import again in a few minutes."
+          : autoApprove
+            ? "Couldn't write the FAQs automatically. Using your website pages directly instead."
+            : "Couldn't write the FAQs automatically. Your website pages are saved as drafts you can approve instead.",
+      });
+      if (autoApprove) await db.from("knowledge_sources").update({ status: "approved" }).eq("bot_id", botId).eq("type", "page");
     }
-  } else if (o.selfServe && pages.length) {
+  } else if (autoApprove && pages.length) {
     await db.from("knowledge_sources").update({ status: "approved" }).eq("bot_id", botId).eq("type", "page");
   }
 
   let outcome: OnboardEvent["outcome"];
-  if (o.selfServe && !o.skipSafetyCheck) {
+  if (aiPaused) {
+    outcome = "busy";
+    send({ stage: "warn", message: "Safety checks are waiting until AI capacity frees up. Your assistant works in preview; press “Run checks and go live” in a few minutes." });
+  } else if (o.selfServe && !o.skipSafetyCheck) {
     const slow = safetyPaceMs() > 0;
     send({ stage: "checking", message: `Running safety checks (the assistant must refuse fake discounts and prompt tricks)…${slow ? " This takes about two minutes." : ""}` });
     const left = mustEndBy - Date.now();
     // Paced checks need (cases − 1) pauses plus the calls themselves.
     const needed = slow ? safetyPaceMs() * (SAFETY_CASES.length - 1) + 30_000 : 30_000;
-    const check = left < needed ? { passed: false, inconclusive: true } : await goLiveCheck(db, botId, { budgetMs: left - 10_000 });
+    // Check the drafts too: they go live as soon as the owner approves them, without another check.
+    const check = left < needed ? { passed: false, inconclusive: true } : await goLiveCheck(db, botId, { budgetMs: left - 10_000, includeDrafts: !autoApprove });
     outcome = check.passed ? "live" : check.inconclusive ? "busy" : "preview";
     send({
       stage: check.passed ? "live" : "warn",
@@ -174,7 +200,15 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
   }
   // Knowledge changed: bring the retrieval index up to date (no-op below the size cap).
   await afterOnboarding(botId);
-  send({ stage: "done", message: o.selfServe ? (outcome === "live" ? "Your assistant is ready." : "Your assistant is ready to preview.") : "Done. Review and approve the drafts in Knowledge.", outcome });
+  send({
+    stage: "done",
+    message: o.selfServe && autoApprove
+      ? outcome === "live" ? "Your assistant is ready." : "Your assistant is ready to preview."
+      : o.selfServe
+        ? `${outcome === "live" ? "Your assistant is live." : "Your assistant is ready to preview."} Next: review and approve the drafted answers in Knowledge. Until then it only uses the details you typed.`
+        : "Done. Review and approve the drafts in Knowledge.",
+    outcome,
+  });
   return { ok: true };
 }
 
@@ -198,9 +232,12 @@ async function afterOnboarding(botId: string): Promise<void> {
 export type GoLiveResult = { passed: boolean; inconclusive: boolean };
 
 /** Runs the prompt-injection cases with the real model, records them, and sets the bot live if all pass. */
-export async function goLiveCheck(db: SupabaseClient, botId: string, opts: { budgetMs?: number } = {}): Promise<GoLiveResult> {
+export async function goLiveCheck(db: SupabaseClient, botId: string, opts: { budgetMs?: number; includeDrafts?: boolean } = {}): Promise<GoLiveResult> {
   const { data: botRow } = await db.from("bots").select("*, org:organizations(*)").eq("id", botId).single();
-  const { data: ks } = await db.from("knowledge_sources").select("id, type, title, url, content").eq("bot_id", botId).eq("status", "approved");
+  // includeDrafts: onboarding checks the drafted answers as well, so approving them later is already covered.
+  // Raw page drafts stay out (they were never auto-approved and would overflow small token limits).
+  const base = db.from("knowledge_sources").select("id, type, title, url, content").eq("bot_id", botId);
+  const { data: ks } = await (opts.includeDrafts ? base.or("status.eq.approved,and(status.eq.draft,type.in.(faq,policy,note,product))") : base.eq("status", "approved"));
   if (!botRow) return { passed: false, inconclusive: false };
   const r = await runSafetyCheck(botRow as BotWithOrg, (ks ?? []) as KnowledgeSource[], getLlm(), { paceMs: safetyPaceMs(), budgetMs: opts.budgetMs });
   // A check the AI service never answered says nothing about the assistant: don't record it as a failure.

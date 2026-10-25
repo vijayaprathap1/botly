@@ -41,7 +41,19 @@ export const config = {
     return int("RATE_LIMIT_VISITOR_PER_10MIN", 20);
   },
   get botLimitPerMin() {
-    return int("RATE_LIMIT_BOT_PER_MIN", 120);
+    return int("RATE_LIMIT_BOT_PER_MIN", 30);
+  },
+  /**
+   * AI replies (model calls) allowed in one conversation. 0 disables the cap.
+   * MAX_AI_REPLIES_PER_CONVERSATION_TRIAL / _STARTER / _GROWTH override the shared value.
+   */
+  maxAiReplies(plan?: string) {
+    const specific = plan ? process.env[`MAX_AI_REPLIES_PER_CONVERSATION_${plan.toUpperCase()}`] : undefined;
+    const raw = specific !== undefined && specific.trim() !== "" ? specific : process.env.MAX_AI_REPLIES_PER_CONVERSATION;
+    if (raw === undefined || raw.trim() === "") return 30;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return 30;
+    return Math.floor(n);
   },
   get crawlMaxPages() {
     return int("CRAWL_MAX_PAGES", 40);

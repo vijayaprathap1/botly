@@ -11,7 +11,7 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
           <Link href="/" aria-label="Botly home"><Logo className="text-[17px]" /></Link>
           <nav className="flex items-center gap-1 text-[14px]" aria-label="Main">
             <Link href="/#how" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 md:inline">How it works</Link>
-            <Link href="/#features" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 md:inline">Features</Link>
+            <Link href="/#how" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 md:inline">Features</Link>
             <Link href="/#pricing" className="inline-flex min-h-11 items-center px-2 text-sm text-zinc-600 transition hover:text-zinc-950 md:hidden">Pricing</Link>
             <Link href="/#pricing" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 md:inline">Pricing</Link>
             <Link href="/login" className="rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950">Sign in</Link>
@@ -37,7 +37,7 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
             <p className="font-medium text-zinc-900">Product</p>
             <ul className="mt-2 space-y-0.5 text-zinc-500">
               <li><Link className="inline-block py-1 hover:text-zinc-900" href="/#how">How it works</Link></li>
-              <li><Link className="inline-block py-1 hover:text-zinc-900" href="/#features">Features</Link></li>
+              <li><Link className="inline-block py-1 hover:text-zinc-900" href="/#how">Features</Link></li>
               <li><Link className="inline-block py-1 hover:text-zinc-900" href="/#pricing">Pricing</Link></li>
               <li><Link className="inline-block py-1 hover:text-zinc-900" href="/#faq">Questions</Link></li>
               <li><Link className="inline-block py-1 hover:text-zinc-900" href="/login?signup=1">Start free</Link></li>

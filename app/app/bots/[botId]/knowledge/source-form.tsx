@@ -22,9 +22,9 @@ export function SourceForm({ botId, source }: { botId: string; source: Source | 
             </select>
           </Field>
           <Field label="Status" htmlFor="status">
-            <select id="status" name="status" defaultValue={source?.status ?? "approved"} className={inputClass}>
+            <select id="status" name="status" defaultValue={source?.status ?? "draft"} className={inputClass}>
+              <option value="draft">draft (not used until approved)</option>
               <option value="approved">approved (live on next message)</option>
-              <option value="draft">draft</option>
               <option value="archived">archived</option>
             </select>
           </Field>

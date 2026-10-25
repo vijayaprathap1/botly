@@ -12,7 +12,7 @@ export function Pricing() {
       <div className={wrap}>
         <SectionHead center eyebrow="Pricing" eyebrowClass="text-saffron-d" title={<span id="pricing-title">Start free. Pick a plan when it&apos;s working.</span>}>
           <p>
-            Monthly plans in rupees, prices exclude GST. Every plan starts with a {TRIAL.days}-day free trial. No card needed, cancel any time.
+            Simple monthly plans in rupees. Every plan starts with a {TRIAL.days}-day free trial. No card needed, cancel any time.
           </p>
         </SectionHead>
         <div className="grid items-stretch gap-[30px] wmd:grid-cols-3 wmd:gap-[22px]">
@@ -25,8 +25,8 @@ export function Pricing() {
             cta="Start free"
             href="/login?signup=1&plan=trial"
           />
-          <PlanCard plan={starter} price={fmtInr(starter.priceInr)} perMonth detail={`+ GST · ${trialLine}`} cta={`Try ${starter.name} free for ${TRIAL.days} days`} href="/login?signup=1&plan=starter" />
-          <PlanCard plan={growth} hot price={fmtInr(growth.priceInr)} perMonth detail={`+ GST · ${trialLine}`} cta={`Try ${growth.name} free for ${TRIAL.days} days`} href="/login?signup=1&plan=growth" />
+          <PlanCard plan={starter} price={fmtInr(starter.priceInr)} perMonth detail={trialLine} cta={`Try ${starter.name} free for ${TRIAL.days} days`} href="/login?signup=1&plan=starter" />
+          <PlanCard plan={growth} hot price={fmtInr(growth.priceInr)} perMonth detail={trialLine} cta={`Try ${growth.name} free for ${TRIAL.days} days`} href="/login?signup=1&plan=growth" />
         </div>
         <p className="mt-[30px] text-center text-[15.5px] text-ink-2">
           You choose {starter.name} or {growth.name} when the trial ends, and nothing is charged before that.

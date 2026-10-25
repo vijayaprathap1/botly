@@ -5,6 +5,7 @@
  * No SDK: plain fetch + SSE parsing, so it runs anywhere (Vercel, Node, tests).
  */
 import type { LlmClient, LlmMessage, LlmRequest, LlmTurn, TextPart, ToolDef, ToolUsePart } from "./types";
+import { acquireAiBudget, adjustAiBudget, AiBudgetError, estimateRequestTokens, holdReservation, noteAiUsage, onboardingReserveTokens } from "./budget";
 import { openaiCompat } from "./provider";
 import { rateLimitWaitMs } from "./rate-limit";
 import { parseTextToolCalls, TextToolFilter } from "./text-tool-filter";
@@ -75,21 +76,45 @@ export function salvageTextToolCalls(text: string, toolNames: string[]): ToolUse
   return calls.length ? calls : null;
 }
 
+const loggedMissingModels = new Set<string>();
+
+/** 404, or a body that says this model id is gone. Not a transient overload. */
+function missingModel(message: string): boolean {
+  return /LLM API 404\b|model_not_found|does not exist|do not exist|decommissioned|unknown model|model .* not found|no such model/i.test(message);
+}
+
+function noteMissingModel(model: string, message: string) {
+  if (loggedMissingModels.has(model)) return;
+  loggedMissingModels.add(model);
+  console.warn(`[llm] model ${model} is not available (${message.slice(0, 140)}); trying the next configured model`);
+}
+
 /** Adds reasoning_effort when configured; retries once without it if the server rejects it. */
 async function postChat(body: Record<string, unknown>, signal?: AbortSignal, timeoutMs?: number): Promise<Response> {
   const effort = openaiCompat.reasoningEffort();
   let payload: Record<string, unknown> = effort ? { ...body, reasoning_effort: effort } : body;
-  // Busy free tiers answer 503/429 within a second: retry once, then walk the fallback
-  // models. (Timeouts are not retried: there's no time left inside the 60 s limit.)
-  const models = [String(body.model), ...openaiCompat.fallbackModels().filter((m) => m !== body.model)];
+  // Requested id, then the configured default, then fallbacks. A 404 skips the busy retry.
+  const models = [...new Set([String(body.model), openaiCompat.model(), ...openaiCompat.fallbackModels()].filter(Boolean))];
   let modelIdx = 0;
   let busyRetried = false;
   let waited = false;
   let fieldDrops = 0;
+  const callTimeout = timeoutMs ?? chatTimeoutMs();
+  // Onboarding drafts use a long timeout. Wait out a per-minute budget dip instead of failing the import.
+  const onboarding = callTimeout >= 60_000;
+  const estimate = estimateRequestTokens(body, Number(body.max_tokens) || 400) + (onboarding ? onboardingReserveTokens() : 0);
+  const reserved = await acquireAiBudget({ tokens: estimate, waitMs: onboarding ? Math.min(45_000, callTimeout - 30_000) : 0 });
+  const releaseIfMissing = async (e: unknown) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (reserved > 0 && missingModel(msg)) await adjustAiBudget(-reserved);
+  };
   for (;;) {
     try {
-      return await post("/chat/completions", payload, signal, timeoutMs);
+      const res = await post("/chat/completions", payload, signal, timeoutMs);
+      holdReservation(res, reserved);
+      return res;
     } catch (e) {
+      if (e instanceof AiBudgetError) throw e;
       const msg = e instanceof Error ? e.message : "";
       // Optional extras some providers reject (Mistral, GitHub Models…): drop the one named in the error.
       const field = fieldDrops < 2 && /LLM API (400|422)/.test(msg) ? OPTIONAL_FIELDS.find((f) => f in payload && new RegExp(f.split("_")[0]!, "i").test(msg)) : undefined;
@@ -97,6 +122,17 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
         fieldDrops++;
         const { [field]: _dropped, ...rest } = payload;
         payload = rest;
+        continue;
+      }
+      // Unknown or retired id: do not retry it. Walk default + fallbacks once.
+      if (missingModel(msg) && !signal?.aborted) {
+        noteMissingModel(String(payload.model), msg);
+        if (++modelIdx >= models.length) {
+          await releaseIfMissing(e);
+          throw e;
+        }
+        payload = { ...payload, model: models[modelIdx] };
+        busyRetried = false;
         continue;
       }
       if (!/LLM API (429|500|502|503|504|529)/.test(msg) || signal?.aborted) throw e;
@@ -271,6 +307,7 @@ export class OpenAiCompatLlm implements LlmClient {
     if (visibleText.trim()) content.push({ type: "text", text: visibleText });
     content.push(...toolUses);
     if (!usage.output) usage.output = Math.ceil(text.length / 4); // providers that omit usage
+    await noteAiUsage(res, usage.input + usage.output + usage.cacheRead + usage.cacheWrite);
     return { content, stopReason: mapStop(finish, toolUses.length > 0), usage, firstTokenMs };
   }
 }
@@ -306,6 +343,7 @@ export async function openAiForcedToolCall(args: {
     choices?: { message?: { content?: string | null; tool_calls?: OaiToolCall[] } }[];
     usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
+  await noteAiUsage(res, (j.usage?.prompt_tokens ?? 0) + (j.usage?.completion_tokens ?? 0));
   const msg = j.choices?.[0]?.message;
   const call = msg?.tool_calls?.find((c) => c.function?.name === args.tool.name) ?? msg?.tool_calls?.[0];
   let input = call ? parseArgs(call.function.arguments) : null;

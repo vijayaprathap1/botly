@@ -28,6 +28,19 @@ const LANG_TESTS = [
 
 const newVisitor = () => "play" + Math.random().toString(36).slice(2, 14);
 
+/** The public widget draws these cards itself. Preview must not print the raw event. */
+function cardNote(type: string, card?: Record<string, unknown>): string {
+  if (type === "lead_saved") {
+    const name = typeof card?.name === "string" && card.name ? ` · ${card.name}` : "";
+    return `Lead saved${name}`;
+  }
+  if (type === "lead_form") return "Contact form";
+  if (type === "fallback_contact") return "Contact details";
+  if (type === "order_status") return "Order status";
+  if (type === "callback_form") return "Callback form";
+  return type.replaceAll("_", " ");
+}
+
 export function Playground(props: { botKey: string; testToken: string; testUrl: string; snippet: string; greeting: string; isAdmin?: boolean }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -135,8 +148,8 @@ export function Playground(props: { botKey: string; testToken: string; testUrl: 
                 ) : null}
               </button>
             ) : m.role === "card" ? (
-              <div key={i} className="max-w-[85%] rounded-lg border border-dashed border-brand-600 bg-brand-50 px-3 py-2 text-xs text-brand-700">
-                tool card: <b>{m.text}</b> {JSON.stringify(m.card)}
+              <div key={i} className="max-w-[85%] rounded-lg border border-dashed border-brand-600 bg-brand-50 px-3 py-2 text-xs text-brand-700" role="status">
+                {cardNote(m.text, m.card)}
               </div>
             ) : (
               <div key={i} className="max-w-[85%] rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">

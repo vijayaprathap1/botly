@@ -78,7 +78,7 @@ export function HomeFooter() {
         </div>
         <div className="mt-11 flex flex-wrap justify-between gap-4 border-t border-white/14 pt-6 text-[14px] text-[#D9C7B2]">
           <p>© {new Date().getFullYear()} Botly. Made in India.</p>
-          <p>Prices in ₹, exclude GST.</p>
+          <p>Prices in ₹.</p>
         </div>
       </div>
     </footer>
