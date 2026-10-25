@@ -36,14 +36,15 @@ export type BrandEmail = {
   /** One character or emoji drawn in the round badge (text, so it never gets blocked). */
   badge?: string;
   heading: string;
-  /** Plain paragraphs (escaped here). */
-  paragraphs?: string[];
+  /** Plain paragraphs (escaped here). A paragraph with href is one link (e.g. tel:). */
+  paragraphs?: (string | { text: string; href: string })[];
   /** The one thing we want the reader to do. */
   cta?: { label: string; url: string };
   /** Extra links beside the main button (e.g. WhatsApp, Call). */
   secondary?: { label: string; url: string }[];
   /** A boxed list of facts: label → value. */
-  panel?: { title?: string; rows: [string, string][] };
+  /** Rows of label/value; an optional third item links the value (tel:, mailto:). */
+  panel?: { title?: string; rows: ([string, string] | [string, string, string])[] };
   /** Numbered "what happens next". */
   steps?: { title?: string; items: string[] };
   /** Big numbers side by side, e.g. replies used / days left. */
@@ -60,7 +61,14 @@ export type BrandEmail = {
 
 export function brandEmail(e: BrandEmail): { html: string; text: string } {
   const t = TONES[e.tone ?? "brand"];
-  const para = (e.paragraphs ?? []).map((l) => `<p style="margin:0 0 14px;font-size:15px;line-height:24px;color:${BODY}">${escapeHtml(l)}</p>`).join("");
+  const para = (e.paragraphs ?? [])
+    .map(
+      (l) =>
+        `<p style="margin:0 0 14px;font-size:15px;line-height:24px;color:${BODY}">${
+          typeof l === "string" ? escapeHtml(l) : `<a href="${escapeHtml(l.href)}" style="color:${t.solid};font-weight:600;text-decoration:none">${escapeHtml(l.text)}</a>`
+        }</p>`,
+    )
+    .join("");
 
   const badge = e.badge
     ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px"><tr><td width="52" height="52" align="center" valign="middle" style="width:52px;height:52px;border-radius:14px;background:${t.soft};font-size:24px;line-height:52px;color:${t.text}">${e.badge}</td></tr></table>`
@@ -90,7 +98,7 @@ export function brandEmail(e: BrandEmail): { html: string; text: string } {
     ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 0;background:#f8fafc;border:1px solid ${LINE};border-radius:12px"><tr><td style="padding:16px 18px">${
         e.panel.title ? `<div style="margin:0 0 8px;font-size:12px;line-height:16px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${MUTED}">${escapeHtml(e.panel.title)}</div>` : ""
       }<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${e.panel.rows
-        .map(([k, v]) => `<tr><td valign="top" style="padding:5px 14px 5px 0;font-size:13.5px;line-height:20px;color:${MUTED};white-space:nowrap">${escapeHtml(k)}</td><td valign="top" style="padding:5px 0;font-size:13.5px;line-height:20px;color:${INK};font-weight:600">${escapeHtml(v)}</td></tr>`)
+        .map(([k, v, href]) => `<tr><td valign="top" style="padding:5px 14px 5px 0;font-size:13.5px;line-height:20px;color:${MUTED};white-space:nowrap">${escapeHtml(k)}</td><td valign="top" style="padding:5px 0;font-size:13.5px;line-height:20px;color:${INK};font-weight:600">${href ? `<a href="${escapeHtml(href)}" style="color:${INK};text-decoration:underline">${escapeHtml(v)}</a>` : escapeHtml(v)}</td></tr>`)
         .join("")}</table></td></tr></table>`
     : "";
 
@@ -131,7 +139,7 @@ ${para}${stats}${e.bodyHtml ?? ""}${button}${rawLink}${panel}${steps}${note}
     [
       e.heading.toUpperCase(),
       "",
-      ...(e.paragraphs ?? []),
+      ...(e.paragraphs ?? []).map((l) => (typeof l === "string" ? l : l.text)),
       ...(e.stats?.length ? ["", ...e.stats.map((s) => `${s.value} ${s.label}`)] : []),
       ...(e.cta ? ["", `${e.cta.label}: ${e.cta.url}`] : []),
       ...(e.secondary ?? []).map((s) => `${s.label}: ${s.url}`),

@@ -19,10 +19,20 @@ export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin
       setToast("Saved");
     }
   }, [bot.id]);
+  const [toastTone, setToastTone] = useState<"ok" | "error">("ok");
   useEffect(() => {
+    if (state?.error) {
+      // Failures (validation, a dropped connection, a stale page after a deploy) are shown
+      // in the same corner as "Saved", not only next to the button at the bottom of the page.
+      setToastTone("error");
+      setToast(state.error);
+      const id = window.setTimeout(() => setToast(null), 8000);
+      return () => window.clearTimeout(id);
+    }
     if (!state?.ok) return;
+    setToastTone("ok");
     sessionStorage.setItem("botly-settings-saved", bot.id);
-    setToast("Saved");
+    setToast(state.message ?? "Saved");
     const id = window.setTimeout(() => {
       setToast(null);
       sessionStorage.removeItem("botly-settings-saved");
@@ -40,7 +50,11 @@ export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin
   return (
     <>
     {toast ? (
-      <div role="status" className="fixed bottom-4 right-4 z-50 rounded-lg bg-zinc-950 px-4 py-2 text-sm font-medium text-white shadow-lg">
+      <div
+        role={toastTone === "error" ? "alert" : "status"}
+        aria-live={toastTone === "error" ? "assertive" : "polite"}
+        className={`fixed bottom-4 right-4 z-50 max-w-sm rounded-lg px-4 py-2 text-sm font-medium text-white shadow-lg ${toastTone === "error" ? "bg-red-700" : "bg-zinc-950"}`}
+      >
         {toast}
       </div>
     ) : null}

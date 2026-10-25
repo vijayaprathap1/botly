@@ -20,6 +20,24 @@ export function isLoopback(origin: string | null): boolean {
 }
 
 /**
+ * A developer's own machine or LAN: loopback (any 127.x address, ::1, *.localhost),
+ * private IPv4 ranges, and .local / .test / .internal hostnames. Only used to decide
+ * whether the widget config may say WHY it is off (a console hint for the developer);
+ * access rules use isLoopback.
+ */
+export function isDevOrigin(origin: string | null): boolean {
+  const o = normalizeOrigin(origin);
+  if (!o) return false;
+  const h = new URL(o).hostname.replace(/^\[|\]$/g, "");
+  if (h === "localhost" || h.endsWith(".localhost") || h === "::1") return true;
+  if (/\.(?:local|test|internal|lan|home\.arpa)$/.test(h)) return true;
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 127 || a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254) || h === "0.0.0.0";
+}
+
+/**
  * Who may talk to a bot:
  *  - Private test link / playground (valid test token): always, even draft or inactive.
  *  - Embedded widget: Origin must be in allowed_origins, bot must be active, and

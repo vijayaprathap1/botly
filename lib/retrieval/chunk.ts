@@ -7,8 +7,12 @@ export type Chunk = { index: number; content: string; tokens: number };
  * prefixed with the source type and title so a chunk stands on its own.
  */
 export function chunkSource(src: { type: string; title: string; content: string }, maxTokens = 350, overlapLines = 1): Chunk[] {
-  const header = `[${src.type}] ${src.title}`.trim();
-  const lines = src.content.replace(/\r\n?/g, "\n").split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  let lines = src.content.replace(/\r\n?/g, "\n").split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  // A crawled page's "Category: Books > Poetry" line goes into every chunk's header, so the
+  // genre or category stays searchable in the later chunks of a long listing page too.
+  const category = lines[0]?.startsWith("Category: ") && lines[0].length <= 300 ? lines[0] : "";
+  if (category) lines = lines.slice(1);
+  const header = `[${src.type}] ${src.title}${category ? `\n${category}` : ""}`.trim();
   // Split overly long lines on sentence boundaries.
   const units: string[] = [];
   for (const l of lines) {

@@ -191,6 +191,9 @@ svg{flex:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 .count{font-size:12px;font-weight:600;color:var(--ink2);text-align:right;margin-top:3px}
 .count:empty{display:none}
+.count.queued{color:var(--p);text-align:left}
+.composer.queued{border-style:dashed}
+.composer.queued .send{opacity:.6}
 .meta{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:2px}
 .human{display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:0 12px 0 8px;border-radius:12px;font-weight:800;font-size:14px;color:var(--ink)}
 .human svg{width:18px;height:18px;color:var(--leaf)}

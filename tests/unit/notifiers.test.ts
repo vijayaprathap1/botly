@@ -69,3 +69,21 @@ describe("notifiers", () => {
     expect(r.sent).toBe(true);
   }, 10_000);
 });
+
+describe("QA retest 2026-10-25: lead email entities and tel: link", () => {
+  it("plain text uses characters, and the HTML phone line and Call button are tel: links", () => {
+    const m = renderLeadEmail(notice);
+    expect(m.text).not.toMatch(/&[a-z]+;|&#\d+;/);
+    expect(m.text).toContain("Phone: +91 97900 11223");
+    expect(m.text).toContain("Call +91 97900 11223: tel:+919790011223");
+    expect(m.text).toContain("Botly · https://botly.in");
+    expect(m.html).toMatch(/<a href="tel:\+919790011223"[^>]*>Phone: \+91 97900 11223<\/a>/);
+    expect(m.html).toMatch(/<a href="tel:\+919790011223"[^>]*>\+91 97900 11223<\/a>/);
+    expect(m.html).toContain(">Call +91 97900 11223</a>");
+  });
+  it("without WhatsApp the main button calls", () => {
+    const m = renderLeadEmail({ ...notice, whatsappUrl: undefined });
+    expect(m.text).toContain("Call +91 97900 11223: tel:+919790011223");
+    expect(m.html).toContain('href="tel:+919790011223"');
+  });
+});

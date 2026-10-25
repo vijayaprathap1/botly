@@ -43,15 +43,31 @@ export function replyInstruction(text: string): string {
     return "The visitor wrote in Tamil using Tamil script. Reply in Tamil using Tamil script only. Do not answer in English or in Roman letters, except for product names, prices and order numbers copied from the knowledge.";
   }
   if (lang === "hinglish") {
-    return "The visitor wrote in Hinglish (Hindi mixed with English) using Roman letters. Reply in Hinglish using Roman letters only. Do not use Devanagari or Tamil script.";
+    return "The visitor wrote in Hinglish (Hindi mixed with English) using Roman letters. Reply in Hinglish using Roman letters only. Do not use Devanagari or Tamil script, even if earlier messages in this chat used them.";
   }
   if (lang === "tanglish") {
-    return "The visitor wrote in Tanglish (Tamil mixed with English) using Roman letters. Reply in Tanglish using Roman letters only. Do not use Tamil script or Devanagari.";
+    return "The visitor wrote in Tanglish (Tamil mixed with English) using Roman letters. Reply in Tanglish using Roman letters only (for example: \"Aama, philosophy books irukku. Price…\"). Do not use Tamil script or Devanagari, even if earlier messages in this chat used them.";
   }
   if (lang === "en" || script === "latin") {
     return "The visitor wrote in English using Roman letters. Reply in English. Do not switch to Hindi, Tamil, Devanagari or Tamil script.";
   }
   return "Reply in the same language and the same script as the visitor's latest message.";
+}
+
+/**
+ * One-line reminder placed right after the visitor's latest message. The system prompt
+ * already says this, but a chat that switched language (Tamil script, then Tanglish)
+ * pulls open models back to the earlier script; the reminder next to the message wins.
+ * Empty for English (the default needs no nudge).
+ */
+export function replyReminder(text: string): string {
+  const lang = detectLanguage(text);
+  const script = dominantScript(text);
+  if (lang === "tanglish" && script === "latin") return "(Reply language: Tanglish in Roman letters only, no Tamil script.)";
+  if (lang === "hinglish" && script === "latin") return "(Reply language: Hinglish in Roman letters only, no Devanagari.)";
+  if (lang === "hi" || script === "devanagari") return "(Reply language: Hindi in Devanagari script.)";
+  if (lang === "ta" || script === "tamil") return "(Reply language: Tamil in Tamil script.)";
+  return "";
 }
 
 /**
@@ -129,17 +145,19 @@ export function offerDecline(language: Lang | string): string {
  * Coupon declines are not refusals of a factual question.
  */
 const REFUSAL: RegExp[] = [
-  /don'?t have (?:the |that |any |this )?(?:information|info)\b/i,
-  /do not have (?:the |that |any )?(?:information|info)\b/i,
+  /(?:don'?t|do not|doesn'?t|does not) have (?:the |that |any |this |specific |more |much )?(?:information|info|details)\b/i,
+  /(?:couldn'?t|could not|can'?t|cannot) find (?:any |the )?(?:information|info|details)\b/i,
   /no information (?:about|on|regarding)\b/i,
   /not (?:in|among) (?:my |our |the )?(?:knowledge|information)\b/i,
   /जानकारी नहीं/,
   /मुझे नहीं पता/,
   /यह जानकारी/,
-  /தகவல் (?:இல்லை|கிடையாது)/,
+  // Tamil: "தகவல் இல்லை", but also with words in between: "…விலை பற்றிய தகவல் எனக்கு இல்லை".
+  /தகவல்(?:கள்)?(?:\s+\S+){0,3}\s+(?:இல்லை|கிடையாது|இல்லை\.)/,
+  /(?:விவரம்|விவரங்கள்)(?:\s+\S+){0,3}\s+(?:இல்லை|கிடையாது)/,
   /தெரியவில்லை/,
   /எனக்குத் தெரியாது/,
-  /\b(?:information|info|jaankari|jankari) (?:illa|illai|nahi|nahin|ledhu)\b/i,
+  /\b(?:information|info|details?|jaankari|jankari|vivaram)(?:\s+\w+){0,2}\s+(?:illa|illai|nahi|nahin|ledhu|kidaiyathu|kedayathu)\b/i,
   /\b(?:enakku |naan )?(?:theriyala|theriyathu|therila)\b/i,
   /\b(?:mujhe |mujko )?(?:nahi|nahin) pata\b/i,
   /\bpata nahi\b/i,

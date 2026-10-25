@@ -5,11 +5,11 @@
  */
 export type Lang = "en" | "ta" | "hi" | "hinglish" | "tanglish" | "other";
 
-const HINGLISH = new Set(
+export const HINGLISH = new Set(
   "hai hain kya nahi nahin mujhe chahiye chaiye kitna kitne kitni milega milegi kab kaise kaisa aap aapko aapka hum humko bhai bhaiya bhaisahab ka ki ke mein tak se hoga hogi karo karna kar wala wali accha acha achha theek thik bata batao batana haan han ji hoti hota jata jaata jayega lagega lagenge din wapas paisa paise chahte sakte sakta sakti kuch koi kaun kyun kyu abhi yeh ye woh wo raha rahi dena dijiye bhej bhejo mera meri mere tum tumhara".split(" "),
 );
-const TANGLISH = new Set(
-  "enna epdi eppadi eppo irukka irukku iruku irukkum venum vendum venam sollunga sollu pannunga panna pannalama anna akka evlo evalavu evvalavu romba konjam illa illai iruka kidaikuma kidaikum aagum aaguma naal naalil vaanga podunga seri sari da ma ungal unga enaku enakku naan neenga theriyuma theriyum vandhu varum varuma edhuku yenna kaasu thirumba mudiyuma mudiyum".split(" "),
+export const TANGLISH = new Set(
+  "enna epdi eppadi eppo irukka irukku iruku irukkum venum vendum venam sollunga sollu pannunga panna pannalama anna akka evlo evalavu evvalavu romba konjam illa illai iruka kidaikuma kidaikum aagum aaguma naal naalil vaanga podunga seri sari da ma ungal unga enaku enakku naan neenga theriyuma theriyum vandhu varum varuma edhuku yenna kaasu thirumba mudiyuma mudiyum evalo evvalo yevlo iruke irukka irukkaa kedaikuma kidaikkuma venuma enga pathi patthi kudunga thaanga solunga".split(" "),
 );
 
 export function detectLanguage(text: string): Lang {

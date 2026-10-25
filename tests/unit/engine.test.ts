@@ -423,3 +423,25 @@ describe("chat engine: the visitor always gets a reply", () => {
     expect(bot.org.trial_replies_used).toBe(1);
   });
 });
+
+describe("QA retest 2026-10-25: Tanglish after Tamil script", () => {
+  it("reminds the model to answer Tanglish in Roman letters and logs a Tamil-script 'no info' reply as unanswered", async () => {
+    const tamilReply =
+      "மன்னிக்கவும், philosophy புத்தகங்கள் மற்றும் அவற்றின் விலை பற்றிய தகவல் எனக்கு இல்லை. வேறு ஏதாவது உதவி வேண்டுமா?";
+    const llm = new QueueLlm([{ text: "delivery to Madurai" }, { text: "மதுரைக்கு டெலிவரி உண்டு." }, { text: "philosophy books price" }, { text: tamilReply }]);
+    await runChat(deps(llm), req("மதுரைக்கு டெலிவரி உண்டா?"), ctx, emit);
+    const conversationId = events.find((e) => e.event === "meta")!.data.conversationId;
+    const out = await runChat(deps(llm), req("Anna, philosophy books irukka? Price evlo?", { conversationId }), ctx, emit);
+    expect(out.language).toBe("tanglish");
+    const answerCall = llm.calls.at(-1)!;
+    const lastUser = answerCall.messages.at(-1)!;
+    expect(String(lastUser.content)).toContain("Anna, philosophy books irukka? Price evlo?");
+    expect(String(lastUser.content)).toMatch(/Tanglish in Roman letters only, no Tamil script/);
+    expect(answerCall.system[1]!.text).toMatch(/Reply in Tanglish using Roman letters only/);
+    // Stored message is the visitor's text only (no reminder).
+    expect(store.messages.filter((m) => m.role === "user").at(-1)!.content).toBe("Anna, philosophy books irukka? Price evlo?");
+    expect(store.unanswered).toHaveLength(1);
+    expect(store.unanswered[0]!.question).toBe("Anna, philosophy books irukka? Price evlo?");
+    expect(store.unanswered[0]!.language).toBe("tanglish");
+  });
+});

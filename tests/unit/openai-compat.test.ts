@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { OpenAiCompatLlm, openAiForcedToolCall, salvageTextToolCalls, toOpenAiMessages } from "../../lib/llm/openai-compat";
+import { OpenAiCompatLlm, chatTimeoutMs, firstByteTimeoutMs, openAiForcedToolCall, salvageTextToolCalls, toOpenAiMessages } from "../../lib/llm/openai-compat";
 import { llmProvider, resolveModel } from "../../lib/llm/provider";
 import { pricingFor } from "../../lib/cost";
 import type { ToolDef } from "../../lib/llm/types";
@@ -231,5 +231,64 @@ describe("rateLimitWaitMs", () => {
     expect(rateLimitWaitMs("Please try again in 1m2.5s")).toBe(62750);
     expect(rateLimitWaitMs("Please try again in 850ms.")).toBe(1100);
     expect(rateLimitWaitMs("LLM API 429: quota exceeded")).toBeNull();
+  });
+});
+
+describe("QA retest 2026-10-25: per-call timeout falls back to the smaller model", () => {
+  const ask = () => new OpenAiCompatLlm().stream({ model: "openai/gpt-oss-120b", system: [], messages: [{ role: "user", content: "नमस्ते" }], tools: [], maxTokens: 50 }, () => {});
+  const hangUntilAbort = (init: RequestInit) =>
+    new Promise<Response>((_r, rej) => init.signal!.addEventListener("abort", () => rej(init.signal!.reason)));
+
+  it("budgets: first model gets about half, onboarding waits the full time", () => {
+    expect(firstByteTimeoutMs(25_000, 25_000)).toBe(12_500);
+    expect(firstByteTimeoutMs(20_000, 20_000)).toBe(10_000);
+    expect(firstByteTimeoutMs(5_000, 5_000)).toBeNull();
+    expect(firstByteTimeoutMs(180_000, 180_000)).toBeNull();
+    expect(chatTimeoutMs()).toBe(25_000);
+    vi.stubEnv("LLM_TIMEOUT_MS", "90000");
+    expect(chatTimeoutMs()).toBe(50_000); // always under the 60 s function limit
+  });
+
+  it("a stuck gpt-oss-120b is abandoned after its first-byte window and gpt-oss-20b answers", async () => {
+    vi.stubEnv("LLM_PROVIDER", "groq");
+    vi.stubEnv("LLM_TIMEOUT_MS", "20000");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const models: string[] = [];
+      vi.stubGlobal("fetch", (_u: string, init: RequestInit) => {
+        const body = JSON.parse(String(init.body));
+        models.push(body.model);
+        if (body.model === "openai/gpt-oss-120b") return hangUntilAbort(init);
+        return Promise.resolve(sse([delta({ content: "नमस्ते! कैसे मदद करूँ?" }, "stop")]));
+      });
+      const p = ask();
+      await vi.advanceTimersByTimeAsync(10_050);
+      const turn = await p;
+      expect(models).toEqual(["openai/gpt-oss-120b", "openai/gpt-oss-20b"]);
+      expect(turn.content[0]).toMatchObject({ type: "text", text: "नमस्ते! कैसे मदद करूँ?" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives up with a timeout error inside the budget when every model is stuck", async () => {
+    vi.stubEnv("LLM_PROVIDER", "groq");
+    vi.stubEnv("LLM_TIMEOUT_MS", "20000");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const models: string[] = [];
+      vi.stubGlobal("fetch", (_u: string, init: RequestInit) => {
+        models.push(JSON.parse(String(init.body)).model);
+        return hangUntilAbort(init);
+      });
+      const p = ask();
+      const caught = p.catch((e: Error) => e);
+      await vi.advanceTimersByTimeAsync(20_100);
+      const err = await caught;
+      expect(String(err)).toMatch(/timed out after 10 s/);
+      expect(models).toEqual(["openai/gpt-oss-120b", "openai/gpt-oss-20b"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

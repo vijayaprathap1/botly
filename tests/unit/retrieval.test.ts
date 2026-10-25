@@ -43,7 +43,9 @@ describe("query rewrite", () => {
     const prepared = await prepareSearch(llm, "m", "பிளவுஸ் தைக்க எவ்வளவு?", "ta");
     expect(prepared.english).toBe("blouse stitching price");
     expect(await rewriteQuery(llm, "m", "பிளவுஸ் தைக்க எவ்வளவு?", "ta")).toBe("blouse stitching price");
-    expect(queriesForRetrieval("பிளவுஸ் தைக்க எவ்வளவு?", prepared.english)).toEqual(["பிளவுஸ் தைக்க எவ்வளவு?", "blouse stitching price"]);
+    const qs = queriesForRetrieval("பிளவுஸ் தைக்க எவ்வளவு?", prepared.english);
+    expect(qs.slice(0, 2)).toEqual(["பிளவுஸ் தைக்க எவ்வளவு?", "blouse stitching price"]);
+    expect(qs[2]).toContain("blouse or stitching");
     expect(llm.calls[0]!.tools).toEqual([]);
     expect(llm.calls[0]!.maxTokens).toBeLessThanOrEqual(48);
   });
