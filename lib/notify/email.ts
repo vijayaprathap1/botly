@@ -29,17 +29,19 @@ export function renderLeadEmail(n: LeadNotice): { subject: string; html: string;
   const handoff = n.kind === "handoff";
   const label = handoff ? "wants to talk to a person" : l.type === "callback" ? "asked for a callback" : `new ${l.type} lead`;
   const subject = `${l.name} ${handoff ? "wants to talk to a person" : "\u2014 new lead"} \u00b7 ${n.businessName}`;
-  const rows: [string, string][] = [
+  const tel = `tel:${l.phone.replace(/[^\d+]/g, "")}`;
+  const rows: ([string, string] | [string, string, string])[] = [
     ["Name", l.name],
-    ["Phone", l.phoneDisplay],
-    ...(l.email ? ([["Email", l.email]] as [string, string][]) : []),
+    ["Phone", l.phoneDisplay, tel],
+    ...(l.email ? ([["Email", l.email, `mailto:${l.email}`]] as [string, string, string][]) : []),
     ...(l.need ? ([["Need", l.need]] as [string, string][]) : []),
     ["Type", l.type],
     ...(l.preferredTime ? ([["Preferred time", l.preferredTime]] as [string, string][]) : []),
   ];
   // The owner acts on this from their phone: the first button should start the conversation.
-  const call = { label: "Call", url: `tel:${l.phone}` };
-  const phoneLine = `Phone: ${l.phoneDisplay}`;
+  const call = { label: `Call ${l.phoneDisplay}`, url: tel };
+  // HTML: the phone line is a tap-to-call link. Plain text: "Phone: +91 … (tel:+91…)".
+  const phoneLine = { text: `Phone: ${l.phoneDisplay}`, href: tel };
   const { html, text } = brandEmail({
     tone: handoff ? "warning" : "success",
     badge: handoff ? "&#128587;" : "&#127919;",

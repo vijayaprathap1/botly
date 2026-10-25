@@ -5,8 +5,8 @@ import { buildKnowledgeBlock } from "../knowledge";
 import type { Retriever } from "../retrieval/retriever";
 import { toCard, verifyCustomer, type OrderProvider, type OrderStatusCard } from "../orders/types";
 import { detectLanguage } from "../language";
-import { declinesKnowledge, offerDecision, offerDecline, replyInstruction } from "../reply-style";
-import { needsQueryRewrite, prepareSearch } from "../retrieval/retriever";
+import { declinesKnowledge, dominantScript, offerDecision, offerDecline, replyInstruction, replyReminder } from "../reply-style";
+import { needsQueryRewrite, prepareSearch, queriesForRetrieval } from "../retrieval/retriever";
 import type { LlmClient, LlmMessage, TextPart, ToolResultPart, ToolUsePart } from "../llm/types";
 import { matchApprovedFaq } from "../faq-match";
 import { resolveModel } from "../llm/provider";
@@ -181,7 +181,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   const lastUser = [...rows].reverse().find((r) => r.role === "user")?.content ?? "";
 
   // Non-English questions are rewritten once, on the small fallback model, and only for search.
-  let searchQueries = [req.message.slice(0, 500)];
+  let searchQueries = queriesForRetrieval(req.message, null);
   let englishQuery = "";
   if (!faqHit && !capped && needsQueryRewrite(outcome.language, req.message)) {
     const prepared = await prepareSearch(deps.llm, model, req.message, outcome.language);
@@ -256,8 +256,13 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   const messages: LlmMessage[] = [...history.messages];
   // The current message is always last and from the user.
   const last = messages[messages.length - 1];
-  if (last?.role === "user" && typeof last.content === "string") last.content += "\n\n" + req.message;
-  else messages.push({ role: "user", content: req.message });
+  // A short reply-language note right after the message: earlier turns in another script
+  // (Tamil script, then Tanglish) otherwise pull the model back to that script.
+  const switchedFromScript = rows.some((r) => r.role === "user" && dominantScript(r.content) !== dominantScript(req.message));
+  const reminder = replyReminder(req.message) || (switchedFromScript && outcome.language === "en" ? "(Reply language: English.)" : "");
+  const current = reminder ? `${req.message}\n\n${reminder}` : req.message;
+  if (last?.role === "user" && typeof last.content === "string") last.content += "\n\n" + current;
+  else messages.push({ role: "user", content: current });
 
   // Text the visitor has typed (plus website identity) — the only place lead details may come from.
   const visitorDigits = digits(
@@ -357,6 +362,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
           emit: emitTurn,
           outcome,
           lead,
+          message: req.message,
         });
         outcome.toolCalls.push({ name: use.name, input: use.input, result });
         results.push({ type: "tool_result", tool_use_id: use.id, content: JSON.stringify(result) });
@@ -537,7 +543,20 @@ type ToolCtx = {
   emit: Emit;
   outcome: ChatOutcome;
   lead: Awaited<ReturnType<ChatStore["getLead"]>>;
+  /** The visitor's latest message (used to keep a "thanks" from re-opening the lead form). */
+  message?: string;
 };
+
+const THANKS = /\b(?:thanks?|thank\s*(?:you|u)|thx|tq|ty|nandri|nanri|dhanyavaa?d|shukriya)\b|धन्यवाद|शुक्रिया|நன்றி/i;
+const WANTS_CONTACT =
+  /\b(?:call|phone|number|contact|person|human|agent|team|staff|owner|bulk|order|buy|purchase|book|callback|whatsapp|talk|speak|connect|quote)\b|बात|संपर्क|फोन|பேச|தொடர்பு/i;
+
+/** "Thanks", "Thanks, one more question": gratitude, not a request to be contacted. */
+export function isThanksOnly(message: string): boolean {
+  const m = message.trim();
+  if (!THANKS.test(m) || WANTS_CONTACT.test(m)) return false;
+  return (m.match(/\S+/g)?.length ?? 0) <= 8;
+}
 
 const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const LEAD_TYPES: LeadType[] = ["purchase", "human", "bulk", "callback", "other"];
@@ -582,6 +601,18 @@ async function executeTool(use: ToolUsePart, t: ToolCtx): Promise<Record<string,
       };
 
       if (!name || !phone) {
+        // Details already saved in this conversation: never ask again with a second form.
+        if (t.lead && !handoff) {
+          return {
+            ok: true,
+            already_saved: true,
+            instruction: "The visitor's details are already saved and the team has them. Do not ask for them again; just answer or say the team will be in touch.",
+          };
+        }
+        // A thank-you is not a request to be contacted.
+        if (t.message && isThanksOnly(t.message)) {
+          return { ok: false, form_not_shown: true, instruction: "The visitor only said thanks. Reply briefly and ask what else they need. Do not ask for contact details." };
+        }
         showForm();
         return {
           ok: false,

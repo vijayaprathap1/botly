@@ -109,11 +109,27 @@ export class Api {
 export function widgetDisabledWarning(reason: string, origin: string): string | null {
   if (reason !== "origin") return null;
   const where = origin || "this page";
-  return `[Botly] This domain isn't allowed (${where}). Add it in Botly → Settings → Allowed domains.`;
+  let host = "";
+  try {
+    host = origin ? new URL(origin).hostname : "";
+  } catch {
+    /* keep generic wording */
+  }
+  const isIp = /^\d{1,3}(?:\.\d{1,3}){3}$|^\[.*\]$/.test(host);
+  const add = host ? (isIp ? `Add ${host} (or open the page on localhost)` : `Add ${host}`) : "Add it";
+  return `[Botly] This ${isIp ? "address" : "domain"} isn't allowed (${where}). ${add} in Botly → Settings → Allowed domains.`;
 }
 
-/** Only reached on localhost pages (the server sends a reason only to loopback origins). */
-function devHint(reason: string, origin: string) {
+const hinted = new Set<string>();
+
+/**
+ * Only reached on developer pages: localhost, 127.x, LAN IPs, .local/.test hosts (the
+ * server sends a reason only to those). Warns once per page for each reason and origin.
+ */
+export function devHint(reason: string, origin: string) {
+  const k = `${reason}|${origin}`;
+  if (hinted.has(k)) return;
+  hinted.add(k);
   const why: Record<string, string> = {
     unknown_key: "The data-key doesn't match any bot. Copy the install snippet from the bot's Overview page.",
     inactive: "The bot is switched off (Settings → Active).",
@@ -125,3 +141,6 @@ function devHint(reason: string, origin: string) {
     /* console can be missing in a locked-down page */
   }
 }
+
+/** How long the widget waits for a reply before giving up. Longer than /api/chat's maxDuration (60 s). */
+export const CLIENT_REPLY_TIMEOUT_MS = 65_000;

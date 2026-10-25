@@ -11,6 +11,8 @@ export function MarkdownLite({ text }: { text: string }) {
         <br key={i} />
       ) : it.t === "b" ? (
         <strong key={i}>{inl(it.c)}</strong>
+      ) : it.t === "i" ? (
+        <em key={i}>{inl(it.c)}</em>
       ) : (
         <a key={i} href={it.href} target="_blank" rel="noopener noreferrer nofollow">
           {inl(it.c)}

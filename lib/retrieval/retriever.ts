@@ -3,6 +3,7 @@ import { emptyUsage, type Usage } from "../cost";
 import { buildKnowledgeBlock, neutralise, type KnowledgeSource } from "../knowledge";
 import { openaiCompat } from "../llm/provider";
 import type { LlmClient } from "../llm/types";
+import { HINGLISH, TANGLISH } from "../language";
 import { estimateTokens } from "../tokens";
 import { fuseRanks } from "./chunk";
 import { getEmbedder, toVector, type EmbeddingProvider } from "./embed";
@@ -59,9 +60,40 @@ export function cleanRewrite(raw: string): string {
 export function queriesForRetrieval(original: string, rewritten: string | null | undefined): string[] {
   const a = original.replace(/\s+/g, " ").trim().slice(0, 500);
   const b = (rewritten ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
-  if (!a) return b ? [b] : [];
-  if (!b || b.toLowerCase() === a.toLowerCase()) return [a];
-  return [a, b];
+  const out = !a ? (b ? [b] : []) : !b || b.toLowerCase() === a.toLowerCase() ? [a] : [a, b];
+  const kw = keywordQuery([a, b]);
+  if (kw && !out.some((q) => q.toLowerCase() === kw)) out.push(kw);
+  return out;
+}
+
+const STOPWORDS = new Set(
+  (
+    "a an the and or but if of to in on at by for from with about into over under is are was were be been being am do does did have has had " +
+    "i me my we our you your he she it its they them their this that these those there here what which who whom whose when where why how " +
+    "can could will would shall should may might must please tell know want need get got any some all much many more most very just also " +
+    "hi hello hey thanks thank ok okay yes no not dont don't is it's im i'm sir madam bro one".toLowerCase()
+  ).split(" "),
+);
+
+/**
+ * Keyword search (websearch_to_tsquery) ANDs every word, so "Anna, philosophy books irukka?
+ * Price evlo?" finds nothing even when a "Philosophy" page exists. This builds an OR query of
+ * the content words ("philosophy or books or book or price"): any match counts and ts_rank
+ * puts chunks that match more of them first. Filler words (English, Hinglish, Tanglish) are dropped.
+ */
+export function keywordQuery(texts: string[]): string {
+  const terms: string[] = [];
+  for (const t of texts) {
+    for (const w of t.toLowerCase().match(/\p{L}[\p{L}\p{M}\p{N}'-]*/gu) ?? []) {
+      const word = w.replace(/'s$/, "").replace(/['-]+$/, "");
+      if (word.length < 3 || STOPWORDS.has(word) || HINGLISH.has(word) || TANGLISH.has(word)) continue;
+      terms.push(word);
+      // The 'simple' text config does not stem: also try the singular.
+      if (/^[a-z]{4,}s$/.test(word) && !word.endsWith("ss")) terms.push(word.slice(0, -1));
+    }
+  }
+  const unique = [...new Set(terms)].slice(0, 10);
+  return unique.length >= 2 ? unique.join(" or ") : "";
 }
 
 /**
@@ -89,7 +121,9 @@ export async function prepareSearch(
         model: rewriteModel,
         maxTokens: 48,
         tools: [],
-        system: [{ text: "Rewrite the customer's message as a short English search query for a shop knowledge base. Keep product names, numbers and places. Output only the query." }],
+        // A search rewrite is optional: never let it eat the reply's time budget.
+        signal: AbortSignal.timeout(REWRITE_TIMEOUT_MS),
+        system: [{ text: "Rewrite the customer's message as a short English search query for a shop knowledge base. Keep product names, categories and genres (for example \"philosophy books\"), numbers and places. Drop greetings and filler words like anna, bhai, irukka, evlo, kitna. Output only the query." }],
         messages: [{ role: "user", content: original }],
       },
       (t) => (out += t),
@@ -97,9 +131,11 @@ export async function prepareSearch(
     const english = cleanRewrite(out) || original;
     return { english, queries: queriesForRetrieval(original, english), usage: turn.usage };
   } catch {
-    return { english: original, queries: [original], usage: emptyUsage() };
+    return { english: original, queries: queriesForRetrieval(original, null), usage: emptyUsage() };
   }
 }
+
+const REWRITE_TIMEOUT_MS = 8_000;
 
 type Row = { id: string; source_id: string; content: string; score: number };
 
@@ -123,7 +159,7 @@ export class SupabaseRetriever implements Retriever {
 
     const pinned = buildKnowledgeBlock(sources.filter((s) => s.type === "policy"), Math.floor(cap * 0.4));
     const pinnedIds = new Set(pinned.includedIds);
-    const queries = (given?.length ? given : (await prepareSearch(this.llm, model, query, language)).queries).map((q) => q.trim()).filter(Boolean).slice(0, 4);
+    const queries = (given?.length ? given : (await prepareSearch(this.llm, model, query, language)).queries).map((q) => q.trim()).filter(Boolean).slice(0, 5);
     const vectors = this.embedder ? await this.embedder.embed(queries, "query").catch(() => null) : null;
     const groups: Row[][] = [];
     await Promise.all(

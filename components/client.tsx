@@ -1,7 +1,8 @@
 "use client";
-import { startTransition, useActionState, useState } from "react";
+import { startTransition, useActionState, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { btn } from "./ui";
+import { withActionFallback } from "@/lib/action-safety";
 
 export function CopyButton({ text, label = "Copy", className }: { text: string; label?: string; className?: string }) {
   const [done, setDone] = useState(false);
@@ -63,7 +64,10 @@ export function SelectAll({ name }: { name: string }) {
  * afterwards: when validation fails, everything the user typed is still there.
  */
 export function useFormAction<S>(fn: (state: Awaited<S>, form: FormData) => S | Promise<S>, initial: Awaited<S>) {
-  const [state, action, pending] = useActionState(fn, initial);
+  // A dropped connection, a stale action after a deploy, or a hung request becomes an
+  // inline { error } instead of the route error boundary or a "Saving…" that never ends.
+  const safe = useMemo(() => withActionFallback(fn) as unknown as (state: Awaited<S>, form: FormData) => Promise<Awaited<S>>, [fn]);
+  const [state, action, pending] = useActionState(safe, initial);
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);

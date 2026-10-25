@@ -37,7 +37,7 @@ describe("origin check", () => {
 
   it("logs one warning when the widget is disabled for the origin", () => {
     expect(widgetDisabledWarning("origin", "http://localhost:8765")).toBe(
-      "[Botly] This domain isn't allowed (http://localhost:8765). Add it in Botly → Settings → Allowed domains.",
+      "[Botly] This domain isn't allowed (http://localhost:8765). Add localhost in Botly → Settings → Allowed domains.",
     );
     expect(widgetDisabledWarning("inactive", "http://localhost:8765")).toBeNull();
   });

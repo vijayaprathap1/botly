@@ -1,5 +1,5 @@
 /**
- * Markdown-lite for model output: paragraphs, line breaks, **bold**, bullet and
+ * Markdown-lite for model output: paragraphs, line breaks, **bold**, *italic*, bullet and
  * numbered lists, [links](https://…) and bare URLs. Everything else is text.
  *
  * Output is a small tree rendered with createElement/textContent — never innerHTML —
@@ -8,6 +8,7 @@
 export type Inline =
   | { t: "text"; v: string }
   | { t: "b"; c: Inline[] }
+  | { t: "i"; c: Inline[] }
   | { t: "a"; href: string; c: Inline[] }
   | { t: "br" };
 export type Block = { t: "p"; c: Inline[] } | { t: "ul"; items: Inline[][] } | { t: "ol"; items: Inline[][] };
@@ -76,6 +77,19 @@ export function parseInline(s: string): Inline[] {
         continue;
       }
     }
+    // *italic* / _italic_: the marker hugs the text ("*A Light in the Attic*"), so "2 * 3"
+    // and snake_case words stay literal.
+    if ((s[i] === "*" || s[i] === "_") && s[i + 1] !== s[i] && s[i + 1] && !/\s/.test(s[i + 1]!) && (s[i] === "*" || !/[\p{L}\p{N}]/u.test(s[i - 1] ?? ""))) {
+      const m = s[i]!;
+      let end = s.indexOf(m, i + 1);
+      while (end > 0 && (s[end + 1] === m || /\s/.test(s[end - 1]!) || (m === "_" && /[\p{L}\p{N}]/u.test(s[end + 1] ?? "")))) end = s.indexOf(m, end + 2);
+      if (end > i + 1) {
+        pushText();
+        out.push({ t: "i", c: parseInline(s.slice(i + 1, end)) });
+        i = end + 1;
+        continue;
+      }
+    }
     if (s[i] === "[") {
       const close = s.indexOf("](", i);
       const endParen = close >= 0 ? matchParen(s, close + 1) : -1;
@@ -138,8 +152,8 @@ export function renderBlocks(blocks: Block[], doc: Document): DocumentFragment {
     for (const it of items) {
       if (it.t === "text") parent.appendChild(doc.createTextNode(it.v));
       else if (it.t === "br") parent.appendChild(doc.createElement("br"));
-      else if (it.t === "b") {
-        const el = doc.createElement("strong");
+      else if (it.t === "b" || it.t === "i") {
+        const el = doc.createElement(it.t === "b" ? "strong" : "em");
         inl(el, it.c);
         parent.appendChild(el);
       } else {
@@ -183,6 +197,8 @@ export function toSafeHtml(blocks: Block[]): string {
             ? "<br>"
             : it.t === "b"
               ? `<strong>${inl(it.c)}</strong>`
+              : it.t === "i"
+                ? `<em>${inl(it.c)}</em>`
               : `<a href="${esc(it.href)}" target="_blank" rel="noopener noreferrer nofollow">${inl(it.c)}</a>`,
       )
       .join("");
@@ -191,4 +207,14 @@ export function toSafeHtml(blocks: Block[]): string {
       b.t === "p" ? `<p>${inl(b.c)}</p>` : `<${b.t}>${b.items.map((i) => `<li>${inl(i)}</li>`).join("")}</${b.t}>`,
     )
     .join("");
+}
+
+/**
+ * Text that is still streaming in: close an unfinished **bold** and hide the opening
+ * marker of an unfinished *italic*, so raw asterisks never flash in the bubble.
+ */
+export function streamSafe(full: string): string {
+  let s = (full.match(/\*\*/g)?.length ?? 0) % 2 ? full.replace(/\s+$/, "") + "**" : full;
+  s = s.replace(/(^|[^*\p{L}\p{N}])\*(?=[^\s*])([^*\n]*)$/u, "$1$2");
+  return s;
 }

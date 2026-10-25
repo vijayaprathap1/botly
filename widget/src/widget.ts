@@ -1,7 +1,7 @@
-import { Api, type WidgetConfig } from "./api";
+import { Api, CLIENT_REPLY_TIMEOUT_MS, type WidgetConfig } from "./api";
 import { themeVars } from "./color";
 import { FontLoader } from "./fonts";
-import { parseMarkdownLite, renderBlocks } from "./markdown";
+import { parseMarkdownLite, renderBlocks, streamSafe } from "./markdown";
 import { getJSON, randomId, setJSON } from "./storage";
 import { CSS } from "./styles";
 import { normalizePhone, isValidEmail } from "../../lib/validation/phone";
@@ -459,8 +459,12 @@ export class BotlyWidget {
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
     const n = el.value.length;
-    if (this.sendAfterReply && el.value.trim()) this.counter.textContent = "Will send after the reply";
+    const queued = this.sendAfterReply && Boolean(el.value.trim());
+    if (queued) this.counter.textContent = "Queued. Sends when this reply finishes.";
     else this.counter.textContent = n > MAX_LEN - 100 ? `${n}/${MAX_LEN}` : "";
+    this.counter.classList.toggle("queued", queued);
+    this.input.parentElement?.classList.toggle("queued", queued);
+    this.sendBtn.setAttribute("aria-label", queued ? "Queued, sends after the reply" : "Send message");
     // Typing stays possible while a reply streams in (it queues); offline or paused stops sending.
     this.sendBtn.disabled = this.offline || this.limited || !el.value.trim();
     this.langFor(el, el.value);
@@ -608,7 +612,7 @@ export class BotlyWidget {
       raf = 0;
       if (!bot) return;
       // While streaming, close an unfinished **bold** so raw asterisks never flash.
-      const shown = (full.match(/\*\*/g)?.length ?? 0) % 2 ? full.replace(/\s+$/, "") + "**" : full;
+      const shown = streamSafe(full);
       bot.bubble.replaceChildren(renderBlocks(parseMarkdownLite(shown), document));
       this.langFor(bot.bubble, full);
       this.scroll();
@@ -623,7 +627,10 @@ export class BotlyWidget {
     };
 
     this.abort = new AbortController();
-    const timer = window.setTimeout(() => this.abort?.abort(), 45_000);
+    // Must outlast the server: /api/chat has maxDuration 60 s and the LLM call itself gives
+    // up (and falls back to the smaller model) well before that. 45 s here used to abort
+    // replies the server was still about to deliver (QA retest 2026-10-25, Hindi first send).
+    const timer = window.setTimeout(() => this.abort?.abort(), CLIENT_REPLY_TIMEOUT_MS);
     let failed: { status?: number } | null = null;
     try {
       if (this.offline) throw new Error("offline");

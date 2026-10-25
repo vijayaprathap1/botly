@@ -1,4 +1,4 @@
-import { isLoopback, resolveAccess } from "@/lib/chat/access";
+import { isDevOrigin, resolveAccess } from "@/lib/chat/access";
 import { SupabaseStore } from "@/lib/chat/supabase-store";
 import { config } from "@/lib/config";
 import { isOpenNow } from "@/lib/hours";
@@ -28,9 +28,10 @@ export async function GET(req: Request) {
 async function handle(req: Request) {
   const url = new URL(req.url);
   const parsed = configQuerySchema.safeParse({ key: url.searchParams.get("key"), testToken: url.searchParams.get("t") });
-  // Local testing only: tell a developer on localhost WHY the widget is off. Client sites get no detail.
+  // Local testing only: tell a developer on localhost, a LAN IP or a .local/.test host WHY the
+  // widget is off (one console line). Public client sites get no detail.
   const origin = req.headers.get("origin");
-  const devPage = isLoopback(origin);
+  const devPage = isDevOrigin(origin);
   const off = (reason?: string) =>
     json(req, devPage && reason ? { enabled: false, reason, origin } : { enabled: false }, 200, { "Cache-Control": devPage ? "no-store" : "private, max-age=60" });
   if (!parsed.success) return off();
