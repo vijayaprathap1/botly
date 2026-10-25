@@ -1,3 +1,4 @@
+import { track } from "../analytics/track";
 import { config } from "../config";
 import { dispatchNotice } from "../notify/dispatch";
 import type { Notifier } from "../notify/types";
@@ -79,6 +80,9 @@ export async function saveLead(args: {
       lead_id: lead.id,
       ...(args.handoff ? { status: "handed_off" as const } : {}),
     });
+  }
+  if (!duplicate && !args.isTest) {
+    await track({ name: "lead_captured", orgId: bot.org.id, botId: bot.id, properties: { bot_id: bot.id } });
   }
 
   // Notify on a new lead, or when an existing lead now asks for a human.

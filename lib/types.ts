@@ -41,6 +41,15 @@ export type OrgRow = {
   created_by?: string | null;
   /** A pitch preview built by the super admin (see lib/demo). Never a customer. */
   is_demo?: boolean;
+  /** Operator or QA workspace. Excluded from growth metrics. */
+  is_internal?: boolean;
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
+  utm_content?: string | null;
+  utm_term?: string | null;
+  referrer?: string | null;
+  landing_path?: string | null;
 };
 
 export type DemoSiteRow = {
@@ -93,6 +102,9 @@ export type BotRow = {
   website_url: string | null;
   updated_at: string;
   created_at: string;
+  /** First customer-site hostname that loaded the embed. Null until then. */
+  first_seen_origin?: string | null;
+  first_seen_at?: string | null;
 };
 
 export type BotWithOrg = BotRow & { org: OrgRow };

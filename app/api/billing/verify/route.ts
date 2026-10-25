@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { trackAppliedBillingEvent } from "@/lib/analytics/billing";
 import { getSession } from "@/lib/auth";
 import { activateSubscription, planForRazorpayPlan } from "@/lib/billing/apply";
 import { fetchSubscription, verifyPaymentSignature } from "@/lib/billing/razorpay";
@@ -35,6 +36,14 @@ export async function POST(req: Request) {
   // The subscription must be one WE created for this workspace (our notes travel with it).
   if (sub.notes?.org_id !== orgId || !planForRazorpayPlan(sub.plan_id)) return Response.json({ ok: false, error: "Unknown subscription" }, { status: 400 });
   // Mandate authorised: activate now; the webhook confirms charges and renewals.
-  await activateSubscription(supabaseAdmin(), orgId, sub.status === "created" ? { ...sub, status: "authenticated" } : sub);
+  const activated = sub.status === "created" ? { ...sub, status: "authenticated" as const } : sub;
+  await activateSubscription(supabaseAdmin(), orgId, activated);
+  await trackAppliedBillingEvent({
+    event: "subscription.activated",
+    orgId,
+    orgPlan: planForRazorpayPlan(sub.plan_id),
+    subscriptionId: sub.id,
+    razorpayPlanId: sub.plan_id,
+  });
   return Response.json({ ok: true });
 }

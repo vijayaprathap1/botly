@@ -167,6 +167,7 @@ How it behaves:
 - **Trial emails:** the daily job (9 am IST) sends each trial one welcome, one "80% of replies used", one "2 days left" and one "trial ended" email.
 - **Migration 0007** (billing name, GSTIN, trial email log): run `supabase/migrations/0007_billing_details.sql` in the Supabase SQL editor after pulling this update.
 - **Migration 0010** (only if you ran an earlier draft of 0009 and see "cannot change return type of existing function"): run `supabase/migrations/0010_demos_upgrade.sql`. It is safe to run on any database.
+- **Migration 0012** (growth analytics): run `supabase/migrations/0012_analytics.sql` after `0011_launch_guards.sql`. It does not use anything from that file, so it also applies on a database that has not run 0011 yet. When both are pending, apply 0011 first, then 0012.
 - **Migration 0008** (business hours "not set" instead of a made-up Mon–Sat 10–7 default): run `supabase/migrations/0008_hours_not_set.sql` the same way. It also resets existing bots that still carry the untouched old default; a business that really keeps those hours re-enters them in Settings.
 
 ## 5. Install the widget

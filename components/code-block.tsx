@@ -1,9 +1,10 @@
 "use client";
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
+import { trackEmbedCopied } from "@/app/app/analytics-actions";
 
 /** Dark code panel with a copy button, used for the install snippet. */
-export function CodeBlock({ code, label = "HTML" }: { code: string; label?: string }) {
+export function CodeBlock({ code, label = "HTML", botId }: { code: string; label?: string; botId?: string }) {
   const [done, setDone] = useState(false);
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
@@ -17,6 +18,7 @@ export function CodeBlock({ code, label = "HTML" }: { code: string; label?: stri
             } catch {}
             setDone(true);
             setTimeout(() => setDone(false), 1500);
+            if (botId) void trackEmbedCopied(botId).catch(() => {});
           }}
           className="inline-flex items-center gap-1.5 rounded px-1.5 py-1 text-[11.5px] font-medium text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100"
           aria-label="Copy code"

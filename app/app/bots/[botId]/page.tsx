@@ -102,7 +102,7 @@ export default async function BotOverview({ params, searchParams }: { params: Pr
       ) : null}
 
       <Card title="Install on your website" sub="Paste this one line just before </body>. Works on Shopify (theme.liquid), WordPress (footer), Wix (Custom code → Body end) and any other site.">
-        <CodeBlock code={snippet} />
+        <CodeBlock code={snippet} botId={bot.id} />
         <p className="mt-3 text-[12.5px] text-zinc-500">
           Shows only on: <span className="font-medium text-zinc-700">{liveLabel}</span> · <Link className="text-brand-700 hover:underline" href={`/app/bots/${bot.id}/settings`}>change domains</Link>
         </p>

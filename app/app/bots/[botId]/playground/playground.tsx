@@ -28,7 +28,7 @@ const LANG_TESTS = [
 
 const newVisitor = () => "play" + Math.random().toString(36).slice(2, 14);
 
-export function Playground(props: { botKey: string; testToken: string; testUrl: string; snippet: string; greeting: string; isAdmin?: boolean }) {
+export function Playground(props: { botKey: string; testToken: string; testUrl: string; snippet: string; greeting: string; isAdmin?: boolean; botId: string }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -174,7 +174,7 @@ export function Playground(props: { botKey: string; testToken: string; testUrl: 
         <Card title="Share">
           <div className="flex flex-wrap gap-2">
             <CopyButton text={props.testUrl} label="Copy private test link" />
-            <CopyButton text={props.snippet} label="Copy install snippet" />
+            <CopyButton text={props.snippet} label="Copy install snippet" botId={props.botId} />
           </div>
           {props.isAdmin ? (
             <p className="mt-2 text-xs text-zinc-500">

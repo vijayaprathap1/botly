@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { CHECKOUT_BILLING_PERIOD } from "@/lib/analytics/billing-events";
+import { track } from "@/lib/analytics/track";
 import { requireSession } from "@/lib/auth";
 import { cancelSubscription, createSubscription, razorpayConfigured } from "@/lib/billing/razorpay";
 import { plans } from "@/lib/plans";
@@ -48,6 +50,7 @@ export async function startCheckout(orgId: string, planId: "starter" | "growth")
     // a closed checkout must never cancel or replace the plan the customer already has.
     const current = org.subscription_status === "active" && org.razorpay_subscription_id ? org.razorpay_subscription_id : undefined;
     const sub = await createSubscription({ planId: rzpPlan, orgId, email: org.billing_email ?? session.email, replaces: current, gstin: org.gstin ?? undefined, billingName: org.billing_name ?? undefined });
+    await track({ name: "checkout_started", orgId, properties: { plan: planId, billing_period: CHECKOUT_BILLING_PERIOD } });
     return { subscriptionId: sub.id, keyId: process.env.RAZORPAY_KEY_ID!, email: org.billing_email ?? session.email, name: org.name, plan: def.name };
   } catch (e) {
     console.error("[billing] checkout", e instanceof Error ? e.message : e);

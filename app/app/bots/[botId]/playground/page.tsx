@@ -13,6 +13,7 @@ export default async function PlaygroundPage({ params }: { params: Promise<{ bot
       testToken={bot.test_token}
       testUrl={`${config.appUrl}/t/${bot.test_token}`}
       snippet={installSnippet(config.appUrl, bot.public_key)}
+      botId={bot.id}
       greeting={bot.greeting}
       isAdmin={session.isAdmin}
     />
