@@ -75,7 +75,8 @@ export class Api {
       try {
         message = (await res.json()).error?.message ?? message;
       } catch {}
-      throw Object.assign(new Error(message), { status: res.status });
+      const retryAfterMs = retryAfterToMs(res.headers.get("retry-after"));
+      throw Object.assign(new Error(message), { status: res.status, retryAfterMs });
     }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -144,3 +145,21 @@ export function devHint(reason: string, origin: string) {
 
 /** How long the widget waits for a reply before giving up. Longer than /api/chat's maxDuration (60 s). */
 export const CLIENT_REPLY_TIMEOUT_MS = 65_000;
+
+/** Retry-After as seconds or an HTTP date, capped at 60 s (null when absent or invalid). */
+export function retryAfterToMs(v: string | null, now = Date.now()): number | null {
+  if (!v) return null;
+  const secs = Number(v.trim());
+  const ms = Number.isFinite(secs) ? secs * 1000 : Date.parse(v) - now;
+  return Number.isFinite(ms) && ms > 0 ? Math.min(ms, 60_000) : null;
+}
+
+/**
+ * The line under a message that didn't send. HTTP 429 (an edge, firewall or app rate
+ * limit) gets a calm "busy" line instead of "something went wrong".
+ */
+export function sendFailureText(f: { status?: number; offline?: boolean }): string {
+  if (f.offline || !f.status) return "Not sent. Check your connection.";
+  if (f.status === 429) return "Not sent. We're a little busy right now. Try again in a moment.";
+  return "Not sent. Something went wrong on our side.";
+}

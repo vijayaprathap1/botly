@@ -119,6 +119,7 @@ svg{flex:none}
 /* Send error */
 .errline{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;font-size:13px;font-weight:700;color:var(--err)}
 .retry{min-height:44px;padding:0 14px;border-radius:12px;border:1.5px solid var(--err);background:var(--err-t);color:var(--err);font-weight:800;font-size:13.5px}
+.retry:disabled{opacity:.5;cursor:default}
 
 /* Typing indicator */
 .typing-row{flex-direction:row;align-items:center;gap:10px}

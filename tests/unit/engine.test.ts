@@ -108,6 +108,48 @@ describe("chat engine", () => {
     expect(store.unanswered[0]!.question).toMatch(/90%/);
   });
 
+  it("regenerates once when a Tanglish reply opens in Tamil script (nothing of it is shown)", async () => {
+    const llm = new QueueLlm([
+      { text: "philosophy books" },
+      { text: "மன்னிக்கவும், தத்துவ புத்தகங்கள் பற்றிய தகவல் எனக்கு இல்லை." },
+      { text: "Aama, philosophy books irukku. Evalo venum nu sollunga." },
+    ]);
+    const out = await runChat(deps(llm), req("philosophy books irukka? enna vilai?"), ctx, emit);
+    const shown = events.filter((e) => e.event === "delta").map((e) => e.data.text).join("");
+    expect(shown).toBe("Aama, philosophy books irukku. Evalo venum nu sollunga.");
+    expect(shown).not.toMatch(/[\u0B80-\u0BFF]/);
+    expect(out.scriptRetry).toBe(true);
+    expect(llm.calls).toHaveLength(3);
+    expect(llm.calls[2]!.system[1]!.text).toMatch(/Roman letters \(a–z\) only/);
+    expect(store.messages.find((m) => m.role === "assistant")!.content).toBe(shown);
+  });
+
+  it("retries at most once, even if the second draft is still in Tamil script", async () => {
+    const llm = new QueueLlm([
+      { text: "philosophy books" },
+      { text: "மன்னிக்கவும், தத்துவ புத்தகங்கள் பற்றிய தகவல் எனக்கு இல்லை." },
+      { text: "தத்துவ புத்தகங்கள் கிடைக்கும், விலை £50 வரை." },
+      { text: "should not be called" },
+    ]);
+    await runChat(deps(llm), req("philosophy books irukka? enna vilai?"), ctx, emit);
+    expect(llm.calls).toHaveLength(3);
+    expect(events.filter((e) => e.event === "delta").map((e) => e.data.text).join("")).toMatch(/கிடைக்கும்/);
+  });
+
+  it("no retry when the Tanglish reply is already in Roman letters", async () => {
+    const llm = new QueueLlm([{ text: "philosophy books" }, { text: "Aama, philosophy books irukku." }]);
+    const out = await runChat(deps(llm), req("philosophy books irukka? enna vilai?"), ctx, emit);
+    expect(llm.calls).toHaveLength(2);
+    expect(out.scriptRetry).toBeUndefined();
+  });
+
+  it("a Tamil-script visitor still gets Tamil script (no guard)", async () => {
+    const llm = new QueueLlm([{ text: "தத்துவ புத்தகங்கள்" }, { text: "ஆம், தத்துவ புத்தகங்கள் கிடைக்கும். உங்களுக்கு எது வேண்டும்?" }]);
+    const out = await runChat(deps(llm), req("தத்துவ புத்தகங்கள் இருக்கா?"), ctx, emit);
+    expect(out.text).toMatch(/கிடைக்கும்/);
+    expect(out.scriptRetry).toBeUndefined();
+  });
+
   it("records a Tanglish refusal that never called the tool", async () => {
     const llm = new QueueLlm([
       { text: "romance books" },
@@ -428,11 +470,14 @@ describe("QA retest 2026-10-25: Tanglish after Tamil script", () => {
   it("reminds the model to answer Tanglish in Roman letters and logs a Tamil-script 'no info' reply as unanswered", async () => {
     const tamilReply =
       "மன்னிக்கவும், philosophy புத்தகங்கள் மற்றும் அவற்றின் விலை பற்றிய தகவல் எனக்கு இல்லை. வேறு ஏதாவது உதவி வேண்டுமா?";
-    const llm = new QueueLlm([{ text: "delivery to Madurai" }, { text: "மதுரைக்கு டெலிவரி உண்டு." }, { text: "philosophy books price" }, { text: tamilReply }]);
+    const llm = new QueueLlm([{ text: "delivery to Madurai" }, { text: "மதுரைக்கு டெலிவரி உண்டு." }, { text: "philosophy books price" }, { text: tamilReply }, { text: "Mannikkavum, philosophy books pathi information illa." }]);
     await runChat(deps(llm), req("மதுரைக்கு டெலிவரி உண்டா?"), ctx, emit);
     const conversationId = events.find((e) => e.event === "meta")!.data.conversationId;
     const out = await runChat(deps(llm), req("Anna, philosophy books irukka? Price evlo?", { conversationId }), ctx, emit);
     expect(out.language).toBe("tanglish");
+    // The Tamil-script draft is never shown: the script guard regenerates it once in Roman letters.
+    expect(out.scriptRetry).toBe(true);
+    expect(out.text).toBe("Mannikkavum, philosophy books pathi information illa.");
     const answerCall = llm.calls.at(-1)!;
     const lastUser = answerCall.messages.at(-1)!;
     expect(String(lastUser.content)).toContain("Anna, philosophy books irukka? Price evlo?");

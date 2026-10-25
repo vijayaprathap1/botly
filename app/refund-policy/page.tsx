@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { MarketingShell } from "@/components/marketing/shell";
 import { business } from "@/lib/business";
+import { POLICIES_LAST_UPDATED } from "@/lib/legal";
 import { TRIAL } from "@/lib/plans";
 
 export const metadata: Metadata = { title: "Refund and Cancellation Policy", robots: { index: true, follow: true } };
@@ -13,7 +14,7 @@ export default function RefundPolicy() {
     <MarketingShell>
       <main className="mx-auto max-w-3xl px-4 py-12 text-[15px] leading-relaxed text-zinc-800">
         <h1 className="text-3xl font-bold">Refund and Cancellation Policy</h1>
-        <p className="mt-2 text-sm text-zinc-500">Applies to Botly subscriptions sold by {name}. Last updated {new Date().getFullYear()}.</p>
+        <p className="mt-2 text-sm text-zinc-500">Applies to Botly subscriptions sold by {name}. Last updated {POLICIES_LAST_UPDATED}.</p>
 
         <h2 className="mt-8 text-lg font-semibold">Free trial first</h2>
         <p>Every new account gets a free trial of {TRIAL.days} days including {TRIAL.replies} AI replies, with no card required, so you can check the assistant on your own business before paying.</p>

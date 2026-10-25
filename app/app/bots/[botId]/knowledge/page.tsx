@@ -9,9 +9,11 @@ import { config } from "@/lib/config";
 import { getBot } from "@/lib/dashboard";
 import { fmtDateTime, fmtInt } from "@/lib/format";
 import { supabaseServer } from "@/lib/supabase/server";
+import { KnowledgeFilterChips, KnowledgeFilterProvider, KnowledgeFilterResults } from "./filters";
 import { ImportForms } from "./import-forms";
 
 const TYPES = ["policy", "faq", "product", "page", "file", "note"] as const;
+const STATUSES: [string, string][] = [["active", "Active"], ["draft", "Drafts"], ["approved", "Approved"], ["archived", "Archived"], ["all", "All"]];
 const STATUS_TONE = { approved: "green", draft: "amber", archived: "gray" } as const;
 
 export default async function KnowledgePage({ params, searchParams }: { params: Promise<{ botId: string }>; searchParams: Promise<{ type?: string; status?: string; q?: string }> }) {
@@ -43,10 +45,6 @@ export default async function KnowledgePage({ params, searchParams }: { params: 
     : { count: 0 };
   const pct = Math.min(100, Math.round((approvedTokens / cap) * 100));
   const back = `/app/bots/${bot.id}/knowledge?${new URLSearchParams(Object.entries(sp).filter(([, v]) => v) as [string, string][]).toString()}`;
-  const filterHref = (k: string, v: string | undefined) => {
-    const p = new URLSearchParams(Object.entries({ ...sp, [k]: v }).filter(([, x]) => x) as [string, string][]);
-    return `/app/bots/${bot.id}/knowledge?${p.toString()}`;
-  };
 
   return (
     <div className="grid gap-4">
@@ -94,6 +92,7 @@ export default async function KnowledgePage({ params, searchParams }: { params: 
 
       <ImportForms botId={bot.id} />
 
+      <KnowledgeFilterProvider base={`/app/bots/${bot.id}/knowledge`} filters={{ type: sp.type, status: sp.status, q: sp.q }}>
       <Card>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <form className="flex min-w-0 flex-1 gap-2" action={`/app/bots/${bot.id}/knowledge`}>
@@ -106,23 +105,9 @@ export default async function KnowledgePage({ params, searchParams }: { params: 
             Add
           </Link>
         </div>
-        <div className="mb-3 flex flex-wrap gap-1.5 text-sm">
-          {[["active", "Active"], ["draft", "Drafts"], ["approved", "Approved"], ["archived", "Archived"], ["all", "All"]].map(([v, l]) => (
-            <Link key={v} href={filterHref("status", v)} className={`rounded-full px-2.5 py-1 ${status === v ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"}`}>
-              {l}
-            </Link>
-          ))}
-          <span className="mx-1 text-zinc-300">|</span>
-          <Link href={filterHref("type", undefined)} className={`rounded-full px-2.5 py-1 ${!sp.type ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"}`}>
-            All types
-          </Link>
-          {TYPES.map((t) => (
-            <Link key={t} href={filterHref("type", t)} className={`rounded-full px-2.5 py-1 ${sp.type === t ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"}`}>
-              {t}
-            </Link>
-          ))}
-        </div>
+        <KnowledgeFilterChips base={`/app/bots/${bot.id}/knowledge`} statuses={STATUSES} types={TYPES} />
 
+        <KnowledgeFilterResults>
         {sources.length === 0 ? (
           <Empty title="Nothing here">Try another filter, run onboarding, or add a source.</Empty>
         ) : (
@@ -162,7 +147,9 @@ export default async function KnowledgePage({ params, searchParams }: { params: 
             </ul>
           </form>
         )}
+        </KnowledgeFilterResults>
       </Card>
+      </KnowledgeFilterProvider>
       {status === "draft" && sources.length > 0 ? <Notice>Tip: select all, untick anything wrong, then Approve.</Notice> : null}
     </div>
   );
