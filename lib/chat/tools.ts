@@ -40,7 +40,7 @@ export const TOOL_HANDOFF: ToolDef = {
 export const TOOL_REPORT_UNANSWERED: ToolDef = {
   name: "report_unanswered",
   description:
-    "Record a question that the knowledge does not answer, so the team can add the answer. Call it every time the answer is not in <knowledge>, then tell the visitor plainly you don't have that information and offer to connect them with the team.",
+    "Record a question the knowledge does not answer, so the team can add the answer. Call it every time the answer is not in <knowledge>, then tell the visitor plainly you don't have that information. If they asked for a discount, coupon or offer that is not written in the knowledge, say you can't confirm any discount or coupon code. Never imply a code exists and never say the team can provide one.",
   input_schema: {
     type: "object",
     properties: {

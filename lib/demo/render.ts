@@ -1,6 +1,7 @@
 import "server-only";
 import { existsSync } from "node:fs";
 import { isIP } from "node:net";
+import { normalizeUrl } from "../crawler/crawl";
 import { assertPublicUrl, isPrivateAddress } from "./url-guard";
 
 /**
@@ -138,18 +139,21 @@ export async function renderSite(input: string, opts: { extraPages?: number; bud
     await assertPublicUrl(finalUrl);
     const home = (await page.evaluate(READABLE)) as Readable;
     const html = (await page.evaluate(SERIALIZE)) as string;
-    const pages: RenderedPage[] = [{ url: finalUrl, title: home.title, text: home.text.slice(0, 40_000) }];
+    const homeUrl = normalizeUrl(finalUrl) ?? finalUrl;
+    const pages: RenderedPage[] = [{ url: homeUrl, title: home.title, text: home.text.slice(0, 40_000) }];
 
     // A few of the site's own pages, the most useful-looking first.
     const origin = new URL(finalUrl).origin;
-    const candidates = [...new Set(home.links.map((l) => l.split("#")[0]!).filter((l) => l.startsWith(origin) && l !== finalUrl && l !== origin + "/" && !SKIP.test(l)))].sort((a, b) => Number(USEFUL.test(b)) - Number(USEFUL.test(a)));
+    const candidates = [...new Set(home.links.map((l) => normalizeUrl(l) ?? l.split("#")[0]!).filter((l) => l.startsWith(origin) && l !== homeUrl && !SKIP.test(l)))].sort((a, b) => Number(USEFUL.test(b)) - Number(USEFUL.test(a)));
     for (const link of candidates.slice(0, opts.extraPages ?? 6)) {
       if (deadline - Date.now() < 8_000) break;
       try {
         await open(link, 400);
         if (!page.url().startsWith(origin)) continue;
+        const pageUrl = normalizeUrl(page.url()) ?? page.url();
+        if (pages.some((p) => p.url === pageUrl)) continue;
         const r = (await page.evaluate(READABLE)) as Readable;
-        if (r.text.length > 120) pages.push({ url: page.url(), title: r.title, text: r.text.slice(0, 40_000) });
+        if (r.text.length > 120) pages.push({ url: pageUrl, title: r.title, text: r.text.slice(0, 40_000) });
       } catch {
         /* skip a page that won't load */
       }

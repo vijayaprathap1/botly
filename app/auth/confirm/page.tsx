@@ -44,7 +44,7 @@ export default async function ConfirmPage({ searchParams }: { searchParams: Prom
       ) : (
         <>
           <h1 className="text-[26px] font-semibold tracking-[-0.03em] text-zinc-950">This link isn&apos;t valid</h1>
-          <p className="mt-2 text-[14.5px] text-zinc-500">It may be incomplete or already used. Ask for a new sign-in link.</p>
+          <p className="mt-2 text-[14.5px] text-zinc-500">It may be incomplete or already used. Ask for a new link from Botly.</p>
           <Link href="/login" className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-950 text-[14.5px] font-medium text-white shadow-sm transition hover:bg-zinc-800">Back to sign in</Link>
         </>
       )}

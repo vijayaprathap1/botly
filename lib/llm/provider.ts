@@ -60,6 +60,14 @@ export const openaiCompat = {
     if (env !== undefined) return env.split(",").map((m) => m.trim()).filter(Boolean);
     return preset()?.fallbacks ?? [];
   },
+  /**
+   * Small model for a short side task (rewriting a search query). The first fallback
+   * that isn't the reply model, otherwise the reply model itself.
+   */
+  rewriteModel(primary: string): string {
+    const small = this.fallbackModels().find((m) => m && m !== primary);
+    return small || primary;
+  },
   /** Thinking models (Gemini 3, gpt-oss) answer faster with low effort. "off" disables. */
   reasoningEffort(): string | null {
     const v = (process.env.LLM_REASONING_EFFORT ?? "").trim().toLowerCase();

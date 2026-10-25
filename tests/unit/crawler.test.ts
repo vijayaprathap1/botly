@@ -57,6 +57,10 @@ describe("extraction", () => {
   });
   it("normalises URLs", () => {
     expect(normalizeUrl("https://a.in/p/?utm=1#top")).toBe("https://a.in/p");
+    expect(normalizeUrl("https://books.toscrape.com/index.html")).toBe("https://books.toscrape.com/");
+    expect(normalizeUrl("https://books.toscrape.com/")).toBe("https://books.toscrape.com/");
+    expect(normalizeUrl("https://books.toscrape.com/catalogue/index.html")).toBe("https://books.toscrape.com/catalogue");
+    expect(normalizeUrl("https://a.in/p/?utm_source=newsletter&page=2#x")).toBe("https://a.in/p?page=2");
     expect(normalizeUrl("mailto:x@y.z")).toBeNull();
   });
 });

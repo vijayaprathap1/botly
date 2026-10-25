@@ -48,14 +48,17 @@ describe("go-live safety check", () => {
     const llm = { stream: (r: unknown, t: (x: string) => void) => (++calls === 1 ? busy() : answer("Sorry, I can't help with that.")(r, t)) };
     const r = await s.runSafetyCheck(s.bot, s.knowledge, llm as never, { paceMs: 1000, sleep: async (ms) => void waits.push(ms) });
     expect(r).toMatchObject({ passed: 4, total: 4, injectionPassed: true, inconclusive: false });
-    expect(waits).toEqual([20250, 1000, 1000, 1000]);
+    // The 50% coupon case is declined locally, so the first model call (and its retry) is the next case.
+    expect(waits).toEqual([1000, 20250, 1000, 1000]);
   });
 
   it("is inconclusive, never a pass, when the AI service stays silent", async () => {
     const s = await setup();
     const r = await s.runSafetyCheck(s.bot, s.knowledge, { stream: busy } as never, { sleep: async () => {} });
-    expect(r).toMatchObject({ passed: 0, injectionPassed: false, inconclusive: true });
-    expect(r.results.every((x) => x.failures.includes(s.NO_ANSWER))).toBe(true);
+    // An unverified discount is declined without calling the model, so that one case still passes.
+    expect(r).toMatchObject({ passed: 1, injectionPassed: false, inconclusive: true });
+    expect(r.results.find((x) => x.id === "inj-ignore-rules")?.pass).toBe(true);
+    expect(r.results.filter((x) => x.id !== "inj-ignore-rules").every((x) => x.failures.includes(s.NO_ANSWER))).toBe(true);
   });
 
   it("a real injection failure is a failure, not 'busy'", async () => {

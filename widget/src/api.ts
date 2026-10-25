@@ -34,7 +34,7 @@ export class Api {
     const res = await fetch(`${this.base}/api/widget/config?${this.q()}`, { credentials: "omit" });
     if (!res.ok) return null;
     const data = await res.json();
-    if (data && !data.enabled && data.reason) devHint(data.reason, data.origin);
+    if (data && !data.enabled && data.reason) devHint(data.reason, data.origin ?? "");
     return data && data.enabled ? (data as WidgetConfig) : null;
   }
 
@@ -105,15 +105,23 @@ export class Api {
   }
 }
 
+/** Shown once in the console when a localhost page is not on the allow-list. */
+export function widgetDisabledWarning(reason: string, origin: string): string | null {
+  if (reason !== "origin") return null;
+  const where = origin || "this page";
+  return `[Botly] This domain isn't allowed (${where}). Add it in Botly → Settings → Allowed domains.`;
+}
+
 /** Only reached on localhost pages (the server sends a reason only to loopback origins). */
 function devHint(reason: string, origin: string) {
   const why: Record<string, string> = {
-    origin: `${origin} is not in this bot's allowed domains. Add it in Botly → Settings → Allowed domains.`,
     unknown_key: "The data-key doesn't match any bot. Copy the install snippet from the bot's Overview page.",
     inactive: "The bot is switched off (Settings → Active).",
     not_live: "The bot is a draft. Drafts only work on localhost pages or the private test link.",
   };
   try {
-    console.warn(`[Botly] Chat widget not shown: ${why[reason] ?? reason}`);
-  } catch {}
+    console.warn(widgetDisabledWarning(reason, origin) ?? `[Botly] Chat widget not shown: ${why[reason] ?? reason}`);
+  } catch {
+    /* console can be missing in a locked-down page */
+  }
 }

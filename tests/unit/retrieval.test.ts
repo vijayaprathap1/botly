@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { chunkSource, fuseRanks } from "@/lib/retrieval/chunk";
-import { rewriteQuery } from "@/lib/retrieval/retriever";
+import { keywordRank } from "@/lib/retrieval/rank";
+import { prepareSearch, queriesForRetrieval, rewriteQuery } from "@/lib/retrieval/retriever";
+import { openaiCompat } from "@/lib/llm/provider";
 import type { LlmClient, LlmRequest } from "@/lib/llm/types";
 import { buildSystemPrompt } from "@/lib/prompts/assistant";
 
@@ -34,14 +36,43 @@ describe("query rewrite", () => {
       return { content: [], stopReason: "end_turn", usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 }, firstTokenMs: 1 };
     },
   };
-  it("rewrites Tamil to English and keeps the original", async () => {
-    expect(await rewriteQuery(llm, "m", "பிளவுஸ் தைக்க எவ்வளவு?", "ta")).toBe("blouse stitching price பிளவுஸ் தைக்க எவ்வளவு?");
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+  it("rewrites Tamil into an English query and searches both separately", async () => {
+    const prepared = await prepareSearch(llm, "m", "பிளவுஸ் தைக்க எவ்வளவு?", "ta");
+    expect(prepared.english).toBe("blouse stitching price");
+    expect(await rewriteQuery(llm, "m", "பிளவுஸ் தைக்க எவ்வளவு?", "ta")).toBe("blouse stitching price");
+    expect(queriesForRetrieval("பிளவுஸ் தைக்க எவ்வளவு?", prepared.english)).toEqual(["பிளவுஸ் தைக்க எவ்வளவு?", "blouse stitching price"]);
     expect(llm.calls[0]!.tools).toEqual([]);
+    expect(llm.calls[0]!.maxTokens).toBeLessThanOrEqual(48);
   });
   it("leaves English alone (no model call)", async () => {
     const n = llm.calls.length;
     expect(await rewriteQuery(llm, "m", "COD?", "en")).toBe("COD?");
+    expect(queriesForRetrieval("COD?", "COD?")).toEqual(["COD?"]);
     expect(llm.calls.length).toBe(n);
+  });
+  it("does not rewrite an order number and phone (no letters to translate)", async () => {
+    const n = llm.calls.length;
+    expect(await rewriteQuery(llm, "m", "#1042, 9000000000", "other")).toBe("#1042, 9000000000");
+    expect(llm.calls.length).toBe(n);
+  });
+  it("uses the small fallback model when one is configured", async () => {
+    vi.stubEnv("LLM_FALLBACK_MODELS", "openai/gpt-oss-20b");
+    expect(openaiCompat.rewriteModel("openai/gpt-oss-120b")).toBe("openai/gpt-oss-20b");
+    await rewriteQuery(llm, "openai/gpt-oss-120b", "रोमांस किताबें", "hi");
+    expect(llm.calls.at(-1)!.model).toBe("openai/gpt-oss-20b");
+  });
+  it("ranks the English rewrite above a raw Hindi query that matches nothing", () => {
+    const chunks = [
+      { id: "romance", content: "Category: Romance. Romance books." },
+      { id: "philosophy", content: "Category: Philosophy. Philosophy books." },
+    ];
+    const hindi = "रोमांस वाली किताबें";
+    const english = "romance books";
+    expect(keywordRank(hindi, chunks)).toEqual([]);
+    expect(fuseRanks([keywordRank(hindi, chunks), keywordRank(english, chunks)])[0]).toBe("romance");
   });
 });
 
