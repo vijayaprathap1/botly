@@ -46,25 +46,56 @@ test("hostile global CSS: widget renders correctly, streams, and never shifts th
   expect(errors).toEqual([]);
 });
 
-test("talk to a person: lead form validates Indian numbers, submits, confirms", async ({ page }) => {
+test("talk to a person: handoff card links to the business's own WhatsApp and phone; lead form validates, submits, confirms", async ({ page }) => {
   const errors = watchConsole(page);
   await page.goto(`${SITE}/plain.html`);
   await launcher(page).click();
   await panel(page).getByRole("button", { name: "Talk to a person" }).click();
+  const handoff = panel(page).locator(".card.handoff");
+  await expect(handoff.locator("h3")).toHaveText("Talk to a person at Ananya Handlooms");
+  await expect(handoff.getByRole("link", { name: "WhatsApp" })).toHaveAttribute("href", "https://wa.me/919876543210");
+  await expect(handoff.getByRole("link", { name: "Call" })).toHaveAttribute("href", "tel:+919876543210");
+  for (const b of await handoff.locator("a.btn, button").all()) expect(Math.round((await b.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+  await handoff.getByRole("button", { name: "Or leave your number and they'll call you" }).click();
   const form = panel(page).locator("form.card");
   await expect(form).toBeVisible();
   await form.getByLabel("Your name").fill("Priya E2E");
   await form.getByLabel("Phone number").fill("12345");
-  await form.getByRole("button", { name: "Send to the team" }).click();
+  await form.getByRole("button", { name: "Send to Ananya Handlooms" }).click();
   await expect(form.locator(".err")).toContainText("10-digit");
   await form.getByLabel("Phone number").fill("97900 11223");
   await form.getByLabel("What do you need? (optional)").fill("Want to see bridal sarees on video call");
-  await form.getByRole("button", { name: "Send to the team" }).click();
-  await expect(panel(page).locator(".card.ok")).toContainText("Sent to the team");
+  await form.getByRole("button", { name: "Send to Ananya Handlooms" }).click();
+  const saved = panel(page).locator(".card", { hasText: "Lead saved" });
+  await expect(saved).toContainText("Ananya Handlooms has your details");
+  await expect(saved).toContainText("+91 97900 •••23");
+  await expect(saved).toContainText("Want to see bridal sarees on video call");
   // Pressing it again doesn't ask twice.
   await panel(page).getByRole("button", { name: "Talk to a person" }).click();
   await expect(panel(page)).toContainText("already with the team");
   expect(errors).toEqual([]);
+});
+
+test("offline: banner shows, send is disabled, a failed send offers Retry", async ({ page, context }) => {
+  await page.goto(`${SITE}/plain.html`);
+  await launcher(page).click();
+  await context.setOffline(true);
+  await expect(panel(page).locator(".banner.net")).toContainText("You're offline");
+  await composer(page).fill("Is COD available?");
+  await expect(panel(page).locator(".composer .send")).toBeDisabled();
+  await context.setOffline(false);
+  await expect(panel(page).locator(".banner.net")).toBeHidden();
+  await expect(panel(page).locator(".composer .send")).toBeEnabled();
+  // The server is unreachable (not the browser): the message stays with a 44px Retry.
+  await page.route(`${APP}/api/chat`, (r) => r.abort());
+  await composer(page).press("Enter");
+  const err = panel(page).locator(".row.user .errline");
+  await expect(err).toContainText("Not sent. Check your connection.");
+  expect(Math.round((await err.getByRole("button", { name: "Retry" }).boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+  await page.unroute(`${APP}/api/chat`);
+  await err.getByRole("button", { name: "Retry" }).click();
+  await expect(panel(page).locator(".row.bot .bubble").last()).toContainText("Cash on delivery", { timeout: 15_000 });
+  await expect(panel(page).locator(".errline")).toHaveCount(0);
 });
 
 test("model-driven handoff shows the lead form card", async ({ page }) => {
@@ -73,7 +104,7 @@ test("model-driven handoff shows the lead form card", async ({ page }) => {
   await composer(page).fill("Can I talk to a human please?");
   await composer(page).press("Enter");
   await expect(panel(page).locator("form.card")).toBeVisible({ timeout: 15_000 });
-  await expect(panel(page).locator("form.card h4")).toHaveText("Talk to a person");
+  await expect(panel(page).locator("form.card h3")).toHaveText("Talk to a person");
 });
 
 test("high z-index sticky header: launcher stays on top and clickable", async ({ page }) => {

@@ -1,0 +1,10 @@
+Fonts used by the Botly chat widget (widget.js). All are licensed under the
+SIL Open Font License, Version 1.1 (https://openfontlicense.org).
+Files are the woff2 subsets published by Fontsource (https://fontsource.org).
+
+plus-jakarta-sans-latin*.woff2   Plus Jakarta Sans, Copyright 2020 The Plus Jakarta Sans Project Authors
+hind-madurai-tamil-*.woff2       Hind Madurai, Copyright (c) 2015 Indian Type Foundry
+mukta-devanagari-*.woff2         Mukta, Copyright 2017 The EK Type Project Authors
+
+They are loaded by the widget only when needed: Plus Jakarta Sans when the chat opens,
+Hind Madurai only when Tamil text is on screen, Mukta only when Devanagari text is on screen.
