@@ -102,6 +102,8 @@ describe("RLS", () => {
   it("server-only functions are not callable by browser roles", async () => {
     await expect(as("authenticated", OWNER_A, (c) => c.query("select * from rate_limit_hit('x', 1, 60)"))).rejects.toThrow(/permission denied/);
     await expect(as("anon", null, (c) => c.query("select merge_unanswered($1, null, 'q', 'en')", [BOT_A]))).rejects.toThrow(/permission denied/);
+    await expect(as("authenticated", OWNER_A, (c) => c.query("select check_reply($1)", [ORG_A]))).rejects.toThrow(/permission denied/);
+    await expect(as("anon", null, (c) => c.query("select claim_slot('x', 60)"))).rejects.toThrow(/permission denied/);
   });
 });
 

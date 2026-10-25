@@ -54,7 +54,7 @@ export const openaiCompat = {
     const p = preset();
     return process.env.LLM_MODEL || (p ? p.model : PRESETS.nvidia!.model);
   },
-  /** Tried in order when the main model is overloaded (503/429). LLM_FALLBACK_MODELS=a,b overrides. */
+  /** Tried in order when the main model is overloaded (429/5xx) or missing (404). LLM_FALLBACK_MODELS=a,b overrides. */
   fallbackModels(): string[] {
     const env = process.env.LLM_FALLBACK_MODELS;
     if (env !== undefined) return env.split(",").map((m) => m.trim()).filter(Boolean);
@@ -77,16 +77,43 @@ export function llmKeyPresent(): boolean {
   return llmProvider() === "openai" ? Boolean(openaiCompat.apiKey()) : Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
+/** Models this deployment will call. Anything else is treated as unknown and rewritten to the default. */
+export function knownModelIds(): string[] {
+  const extra = (process.env.LLM_EXTRA_MODELS ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+  if (llmProvider() === "openai") {
+    return [...new Set([openaiCompat.model(), ...openaiCompat.fallbackModels(), ...extra].filter(Boolean))];
+  }
+  return [...new Set([process.env.ANTHROPIC_DEFAULT_MODEL || "claude-haiku-4-5", ...extra])];
+}
+
+const loggedUnknownModels = new Set<string>();
+
+function noteUnknownModel(requested: string, fallback: string) {
+  if (loggedUnknownModels.has(requested)) return;
+  loggedUnknownModels.add(requested);
+  console.warn(`[llm] model "${requested}" is not a configured id for this provider; using ${fallback}`);
+}
+
 /**
  * The model id to send. Bots store a model per row (default claude-haiku-4-5); on an
- * OpenAI-compatible provider a Claude id means "use the configured default".
+ * OpenAI-compatible provider a Claude id, or any id that is not the configured model
+ * or a fallback, means "use the configured default". A retired id that is still listed
+ * is also recovered when the provider returns 404 (see the chat adapter).
  */
 export function resolveModel(requested: string | null | undefined): string {
+  const id = (requested ?? "").trim();
   if (llmProvider() === "openai") {
-    return !requested || requested.startsWith("claude") ? openaiCompat.model() : requested;
+    const fallback = openaiCompat.model();
+    if (!id || id.startsWith("claude")) return fallback;
+    if (knownModelIds().includes(id)) return id;
+    noteUnknownModel(id, fallback);
+    return fallback;
   }
-  // A bot created while another provider was active stores that provider's id: use the default instead.
-  return (requested && requested.startsWith("claude") ? requested : "") || process.env.ANTHROPIC_DEFAULT_MODEL || "claude-haiku-4-5";
+  const fallback = process.env.ANTHROPIC_DEFAULT_MODEL || "claude-haiku-4-5";
+  if (!id) return fallback;
+  if (id.startsWith("claude") || knownModelIds().includes(id)) return id;
+  noteUnknownModel(id, fallback);
+  return fallback;
 }
 
 export function providerLabel(): string {

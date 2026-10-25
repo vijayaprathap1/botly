@@ -37,6 +37,8 @@ beforeEach(() => {
   vi.stubEnv("LLM_API_KEY", "nvapi-test");
   vi.stubEnv("LLM_MODEL", "");
   vi.stubEnv("LLM_BASE_URL", "");
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+  vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -47,6 +49,8 @@ describe("provider selection", () => {
   it("nvidia maps to the OpenAI-compatible adapter with a default model", () => {
     expect(llmProvider()).toBe("openai");
     expect(resolveModel("claude-haiku-4-5")).toBe("qwen/qwen3-next-80b-a3b-instruct");
+    expect(resolveModel("qwen/qwen3-235b-a22b")).toBe("qwen/qwen3-next-80b-a3b-instruct");
+    vi.stubEnv("LLM_EXTRA_MODELS", "qwen/qwen3-235b-a22b");
     expect(resolveModel("qwen/qwen3-235b-a22b")).toBe("qwen/qwen3-235b-a22b");
     vi.stubEnv("LLM_MODEL", "openai/gpt-oss-120b");
     expect(resolveModel(null)).toBe("openai/gpt-oss-120b");
@@ -59,6 +63,8 @@ describe("provider selection", () => {
     expect(openaiCompat.reasoningEffort()).toBe("low");
     vi.stubEnv("LLM_PROVIDER", "groq");
     expect(resolveModel("claude-haiku-4-5")).toBe("openai/gpt-oss-120b");
+    expect(resolveModel("gemini-3.5-flash")).toBe("openai/gpt-oss-120b");
+    expect(resolveModel("openai/gpt-oss-20b")).toBe("openai/gpt-oss-20b");
     vi.stubEnv("LLM_REASONING_EFFORT", "off");
     expect(openaiCompat.reasoningEffort()).toBeNull();
   });
@@ -89,6 +95,18 @@ describe("provider selection", () => {
     const turn = await new OpenAiCompatLlm().stream({ model: "gemini-3.5-flash", system: [], messages: [{ role: "user", content: "x" }], tools: [], maxTokens: 5 }, () => {});
     expect(turn.content).toEqual([{ type: "text", text: "ok" }]);
     expect(calls.map((c) => c.body.model)).toEqual(["gemini-3.5-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"]);
+  });
+  it("a 404 for an unknown model falls through to the default and then the fallback", async () => {
+    vi.stubEnv("LLM_PROVIDER", "groq");
+    vi.stubEnv("LLM_FALLBACK_MODELS", "");
+    const missing = () => new Response(JSON.stringify({ error: { message: "The model `openai/gpt-oss-20b` does not exist" } }), { status: 404 });
+    let n = 0;
+    mockFetch(() => (n++ === 0 ? missing() : sse([delta({ content: "ok" }, "stop")])));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const turn = await new OpenAiCompatLlm().stream({ model: "openai/gpt-oss-20b", system: [], messages: [{ role: "user", content: "x" }], tools: [], maxTokens: 5 }, () => {});
+    warn.mockRestore();
+    expect(turn.content).toEqual([{ type: "text", text: "ok" }]);
+    expect(calls.map((c) => c.body.model)).toEqual(["openai/gpt-oss-20b", "openai/gpt-oss-120b"]);
   });
   it("reports Gemini's array-wrapped error message when every model is busy", async () => {
     vi.stubEnv("LLM_PROVIDER", "gemini");
