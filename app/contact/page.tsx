@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
-import { Mail, MapPin, Phone, ShieldCheck } from "lucide-react";
+import { Mail, MapPin, MessageCircle, Phone, ShieldCheck } from "lucide-react";
 import { MarketingShell } from "@/components/marketing/shell";
+import { SupportEmail, SupportPhone, SupportWhatsApp } from "@/components/marketing/support-contact";
 import { business } from "@/lib/business";
 
 export const metadata: Metadata = { title: "Contact · Botly", robots: { index: true, follow: true } };
 
 export default function Contact() {
-  const { name, email, phone, address, city, grievanceOfficer } = business;
+  const { name, address, city, grievanceOfficer } = business;
   const rows = [
-    { icon: Mail, label: "Email", value: <a className="underline underline-offset-4" href={`mailto:${email}`}>{email}</a> },
-    phone ? { icon: Phone, label: "Phone / WhatsApp", value: <a className="underline underline-offset-4" href={`tel:${phone.replace(/\s/g, "")}`}>{phone}</a> } : null,
+    { icon: Mail, label: "Email", value: <SupportEmail className="underline underline-offset-4" /> },
+    { icon: Phone, label: "Phone", value: <SupportPhone className="underline underline-offset-4" /> },
+    { icon: MessageCircle, label: "WhatsApp", value: <SupportWhatsApp className="underline underline-offset-4">Chat with us on WhatsApp</SupportWhatsApp> },
     { icon: MapPin, label: "Address", value: address || city + ", India" },
-    grievanceOfficer ? { icon: ShieldCheck, label: "Grievance officer", value: `${grievanceOfficer} · ${email}` } : null,
+    grievanceOfficer ? { icon: ShieldCheck, label: "Grievance officer", value: <>{grievanceOfficer} · <SupportEmail className="underline underline-offset-4" /></> } : null,
   ].filter(Boolean) as { icon: typeof Mail; label: string; value: React.ReactNode }[];
   return (
     <MarketingShell>

@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import { MarketingShell } from "@/components/marketing/shell";
+import { business } from "@/lib/business";
 import { TRIAL } from "@/lib/plans";
 
 export const metadata: Metadata = { title: "Terms of Service · Botly", robots: { index: true, follow: true } };
 
 // TEMPLATE: have a lawyer review before relying on it. Set BUSINESS_LEGAL_NAME, BUSINESS_CITY, SUPPORT_EMAIL.
 export default function Terms() {
-  const name = process.env.BUSINESS_LEGAL_NAME || "Botly";
-  const email = process.env.SUPPORT_EMAIL || "support@your-domain";
-  const city = process.env.BUSINESS_CITY || "Chennai";
+  const { name, email, city } = business;
   return (
     <MarketingShell>
       <main className="mx-auto max-w-3xl px-4 py-12 text-[15px] leading-relaxed text-zinc-800">

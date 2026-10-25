@@ -3,15 +3,17 @@ import Link from "next/link";
 import { ArrowRight, BarChart3, Check, Globe2, Inbox, Languages, MessageCircle, PackageSearch, ShieldCheck, Sparkles, Zap } from "lucide-react";
 import { MarketingShell } from "@/components/marketing/shell";
 import { ProductMock } from "@/components/marketing/product-mock";
+import { SupportEmail, SupportPhone, SupportWhatsApp } from "@/components/marketing/support-contact";
+import { SPOKEN_LANGUAGES } from "@/lib/business";
 import { fmtInr, paidPlans, TRIAL } from "@/lib/plans";
 
 export const metadata: Metadata = {
   title: "Botly · AI customer support that speaks your customers' language",
-  description: "An AI assistant trained on your website and social profiles. Answers customers in English, Tamil and Hindi, 24/7, and emails you every lead with a one-tap WhatsApp reply. One line to install.",
+  description: `An AI assistant trained on your website and social profiles. Answers customers in ${SPOKEN_LANGUAGES}, 24/7, and emails you every lead with a one-tap WhatsApp reply. One line to install.`,
   robots: { index: true, follow: true },
   // One address for search engines: the old vercel.app host and www serve the same page.
   alternates: { canonical: "/" },
-  openGraph: { title: "Botly · AI customer support for Indian businesses", description: "Trained on your business. Answers in English, Tamil and Hindi. Sends you the leads.", type: "website" },
+  openGraph: { title: "Botly · AI customer support for Indian businesses", description: `Trained on your business. Answers in ${SPOKEN_LANGUAGES}. Sends you the leads.`, type: "website" },
   twitter: { card: "summary_large_image" },
 };
 
@@ -31,7 +33,7 @@ const FEATURES = [
 const FAQ = [
   ["Do I need a website?", "No. You can start from your Instagram or Google profile details and what you type in. A website gives it more to learn from."],
   ["Will it make things up?", "It's instructed to answer only from your approved information, and it's tested against tricks like fake discount requests before it goes live. If it doesn't know, it says so."],
-  ["Which languages does it speak?", "English, Tamil and Hindi, including mixed messages like Hinglish and Tanglish. It replies in the same language and script the customer used."],
+  ["Which languages does it speak?", `${SPOKEN_LANGUAGES}. It replies in the same language and script the customer used.`],
   ["What happens after the free trial?", `Your ${TRIAL.days}-day trial includes ${TRIAL.replies} AI replies. After that, visitors see your phone, WhatsApp and email instead of AI replies until you pick a plan. Nothing breaks on your site.`],
   ["Can I cancel any time?", "Yes, from Billing. Your plan runs until the end of the month you paid for."],
   ["Is my customers' data safe?", "Conversations are visible only to you and our support team. You can export everything and delete a customer's data on request."],
@@ -86,7 +88,7 @@ export default function Landing() {
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     url: "https://botly.in",
-    description: "An AI assistant trained on your business that answers website visitors in English, Tamil and Hindi and sends you the leads.",
+    description: `An AI assistant trained on your business that answers website visitors in ${SPOKEN_LANGUAGES} and sends you the leads.`,
     offers: [{ "@type": "Offer", name: "Free trial", price: 0, priceCurrency: "INR" }, ...offers],
   };
   return (
@@ -97,12 +99,14 @@ export default function Landing() {
         <section className="relative overflow-hidden">
           <div className="bg-grid absolute inset-0 -z-10 [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_70%)]" aria-hidden />
           <div className="mx-auto max-w-6xl px-5 pb-12 pt-10 text-center sm:pb-16 sm:pt-24">
-            <Link href="#features" className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 text-[12.5px] font-medium text-zinc-700 shadow-sm transition hover:border-zinc-300">
+            <Link href="#features" className="inline-flex max-w-full items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 text-[12.5px] font-medium text-zinc-700 shadow-sm transition hover:border-zinc-300">
               <span className="rounded-full bg-brand-600 px-1.5 py-px text-[10.5px] font-semibold text-white">New</span>
-              Speaks Tamil, Hindi and Hinglish <ArrowRight className="h-3.5 w-3.5 text-zinc-400" />
+              <span className="min-[450px]:hidden">Speaks Tamil, Hindi, Hinglish and more</span>
+              <span className="hidden min-[450px]:inline">Speaks English, Tamil, Hindi, Hinglish and Tanglish</span>
+              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
             </Link>
             <h1 className="mx-auto mt-5 max-w-4xl text-[33px] font-semibold leading-[1.08] tracking-[-0.035em] text-zinc-950 min-[400px]:text-[38px] sm:mt-6 sm:text-[64px] sm:leading-[1.05]">
-              Customer support that knows your business, in your customers&apos; language
+              AI customer support that knows your business, in your customers&apos; language
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-[16px] leading-relaxed text-zinc-600 sm:mt-6 sm:text-[19px]">
               An AI assistant trained on your website and social profiles. It answers questions about products, prices, delivery and returns around the clock, and sends you the leads.
@@ -182,8 +186,9 @@ export default function Landing() {
             <p className="text-[13px] font-semibold uppercase tracking-wider text-brand-600">Pricing</p>
             <h2 className="mt-3 text-[32px] font-semibold tracking-[-0.03em] sm:text-[40px]">Start free. Upgrade when it pays for itself.</h2>
             <p className="mt-3 text-[15px] text-zinc-600">Monthly plans, cancel any time. Prices exclude GST.</p>
+            <p className="mt-3 text-[15px] text-zinc-600 sm:text-[16px]">Every plan starts with a {TRIAL.days}-day free trial. No card needed, cancel any time.</p>
           </div>
-          <div className="mt-12 grid gap-5 lg:grid-cols-3">
+          <div className="mt-3 grid gap-5 lg:grid-cols-3">
             <div className="flex flex-col rounded-2xl border border-zinc-200 bg-white p-7">
               <h3 className="text-[15px] font-semibold">Free trial</h3>
               <p className="mt-1 text-[13.5px] text-zinc-500">See it working on your business</p>
@@ -192,7 +197,7 @@ export default function Landing() {
               <ul className="mt-6 flex-1 space-y-2.5 text-[14px] text-zinc-700">
                 {["Assistant built from your profiles", "Live preview and install code", "Leads by email"].map((f) => <li key={f} className="flex gap-2"><Check className="mt-0.5 h-4 w-4 flex-none text-zinc-400" />{f}</li>)}
               </ul>
-              <Link href="/login?signup=1" className="mt-8 inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 font-medium hover:bg-zinc-50">Start free</Link>
+              <Link href="/login?signup=1&plan=trial" className="mt-8 inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 font-medium hover:bg-zinc-50">Start free</Link>
             </div>
             {paidPlans().map((p) => {
               const hot = p.id === "growth";
@@ -202,18 +207,22 @@ export default function Landing() {
                   <h3 className="text-[15px] font-semibold">{p.name}</h3>
                   <p className={`mt-1 text-[13.5px] ${hot ? "text-zinc-400" : "text-zinc-500"}`}>{p.blurb}</p>
                   <p className="mt-6 text-[40px] font-semibold tracking-[-0.03em]">{fmtInr(p.priceInr)}<span className={`text-[15px] font-normal ${hot ? "text-zinc-400" : "text-zinc-500"}`}>/month</span></p>
-                  <p className={`text-[13px] ${hot ? "text-zinc-400" : "text-zinc-500"}`}>{p.conversations.toLocaleString("en-IN")} conversations a month</p>
+                  <p className={`text-[13px] ${hot ? "text-zinc-400" : "text-zinc-500"}`}>per month + GST · after your {TRIAL.days}-day free trial</p>
                   <ul className={`mt-6 flex-1 space-y-2.5 text-[14px] ${hot ? "text-zinc-200" : "text-zinc-700"}`}>
                     {p.features.map((f) => <li key={f} className="flex gap-2"><Check className={`mt-0.5 h-4 w-4 flex-none ${hot ? "text-brand-300" : "text-brand-600"}`} />{f}</li>)}
                   </ul>
-                  <Link href="/login?signup=1" className={`mt-8 inline-flex h-10 items-center justify-center rounded-lg font-medium ${hot ? "bg-white text-zinc-950 hover:bg-zinc-100" : "bg-zinc-950 text-white hover:bg-zinc-800"}`}>Try {p.name} free for {TRIAL.days} days</Link>
+                  <Link href={`/login?signup=1&plan=${p.id}`} className={`mt-8 inline-flex h-10 items-center justify-center rounded-lg font-medium ${hot ? "bg-white text-zinc-950 hover:bg-zinc-100" : "bg-zinc-950 text-white hover:bg-zinc-800"}`}>Try {p.name} free for {TRIAL.days} days</Link>
                 </div>
               );
             })}
           </div>
           <p className="mt-8 text-center text-[13.5px] text-zinc-600">Every plan starts with the same free trial. You choose Starter or Growth when it ends, and nothing is charged before that.</p>
           <p className="mt-2 text-center text-[13.5px] text-zinc-500">
-            Want us to set it up and tune it for you every month? Ask about our done-for-you service.{process.env.SUPPORT_EMAIL ? <> <a className="font-medium text-zinc-900 underline underline-offset-4" href={`mailto:${process.env.SUPPORT_EMAIL}`}>Contact us</a></> : null}
+            Want us to set it up and tune it for you every month? Ask about our done-for-you service. Contact us at <SupportEmail className="font-medium text-zinc-900 underline underline-offset-4" />
+            {" · "}
+            <SupportPhone className="font-medium text-zinc-900 underline underline-offset-4" />
+            {" · "}
+            <SupportWhatsApp className="font-medium text-zinc-900 underline underline-offset-4">WhatsApp</SupportWhatsApp>
           </p>
         </section>
 
@@ -243,7 +252,7 @@ export default function Landing() {
           <div className="relative overflow-hidden rounded-3xl bg-brand-600 px-8 py-16 text-center text-white sm:px-16">
             <div className="bg-grid absolute inset-0 opacity-20 [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]" aria-hidden />
             <h2 className="relative mx-auto max-w-2xl text-[32px] font-semibold leading-tight tracking-[-0.03em] sm:text-[40px]">Your next customer is asking a question right now</h2>
-            <p className="relative mx-auto mt-4 max-w-xl text-[16px] text-brand-100">Build your assistant in five minutes. Free for {TRIAL.days} days.</p>
+            <p className="relative mx-auto mt-4 max-w-xl text-[16px] text-brand-100">Build your assistant in five minutes. Free for {TRIAL.days} days · No card needed</p>
             <Link href="/login?signup=1" className="relative mt-8 inline-flex h-12 items-center gap-2 rounded-xl bg-white px-6 text-[15px] font-medium text-zinc-950 shadow-lg transition hover:bg-zinc-100">
               Build my assistant free <ArrowRight className="h-4 w-4" />
             </Link>
