@@ -3,7 +3,7 @@ import { MarketingShell } from "@/components/marketing/shell";
 import { business } from "@/lib/business";
 import { aiProcessorName } from "@/lib/llm/provider";
 
-export const metadata: Metadata = { title: "Privacy Policy · Botly", robots: { index: true, follow: true } };
+export const metadata: Metadata = { title: "Privacy Policy", robots: { index: true, follow: true } };
 
 // TEMPLATE: have a lawyer review (India DPDP Act 2023). Visitors to customers' sites have their own notice at /privacy.
 export default function PrivacyPolicy() {

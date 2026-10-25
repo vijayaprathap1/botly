@@ -12,7 +12,7 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
           <nav className="flex items-center gap-1 text-[14px]" aria-label="Main">
             <Link href="/#how" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 md:inline">How it works</Link>
             <Link href="/#features" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 md:inline">Features</Link>
-            <Link href="/#pricing" className="inline-flex min-h-11 items-center px-2 text-sm text-zinc-700 transition hover:text-zinc-950 md:hidden">Pricing</Link>
+            <Link href="/#pricing" className="inline-flex min-h-11 items-center px-2 text-sm text-zinc-600 transition hover:text-zinc-950 md:hidden">Pricing</Link>
             <Link href="/#pricing" className="hidden rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950 md:inline">Pricing</Link>
             <Link href="/login" className="rounded-md px-3 py-2 text-zinc-600 transition hover:text-zinc-950">Sign in</Link>
             <Link href="/login?signup=1" className="ml-1 inline-flex h-9 items-center rounded-lg bg-zinc-950 px-4 font-medium text-white shadow-sm transition hover:bg-zinc-800">Start free</Link>

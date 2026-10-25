@@ -3,7 +3,7 @@ import { MarketingShell } from "@/components/marketing/shell";
 import { business } from "@/lib/business";
 import { TRIAL } from "@/lib/plans";
 
-export const metadata: Metadata = { title: "Terms of Service · Botly", robots: { index: true, follow: true } };
+export const metadata: Metadata = { title: "Terms of Service", robots: { index: true, follow: true } };
 
 // TEMPLATE: have a lawyer review before relying on it. Set BUSINESS_LEGAL_NAME, BUSINESS_CITY, SUPPORT_EMAIL.
 export default function Terms() {

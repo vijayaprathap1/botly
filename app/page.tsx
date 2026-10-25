@@ -185,10 +185,10 @@ export default function Landing() {
           <div className="text-center">
             <p className="text-[13px] font-semibold uppercase tracking-wider text-brand-600">Pricing</p>
             <h2 className="mt-3 text-[32px] font-semibold tracking-[-0.03em] sm:text-[40px]">Start free. Upgrade when it pays for itself.</h2>
-            <p className="mt-3 text-[15px] text-zinc-600">Monthly plans, cancel any time. Prices exclude GST.</p>
-            <p className="mt-3 text-[15px] text-zinc-600 sm:text-[16px]">Every plan starts with a {TRIAL.days}-day free trial. No card needed, cancel any time.</p>
+            <p className="mt-3 text-[15px] text-zinc-600">Monthly plans. Prices exclude GST.</p>
+            <p className="mt-3 text-[15px] text-zinc-600">Every plan starts with a {TRIAL.days}-day free trial. No card needed, cancel any time.</p>
           </div>
-          <div className="mt-3 grid gap-5 lg:grid-cols-3">
+          <div className="mt-3 grid gap-5 lg:mt-7 lg:grid-cols-3">
             <div className="flex flex-col rounded-2xl border border-zinc-200 bg-white p-7">
               <h3 className="text-[15px] font-semibold">Free trial</h3>
               <p className="mt-1 text-[13.5px] text-zinc-500">See it working on your business</p>
@@ -207,7 +207,7 @@ export default function Landing() {
                   <h3 className="text-[15px] font-semibold">{p.name}</h3>
                   <p className={`mt-1 text-[13.5px] ${hot ? "text-zinc-400" : "text-zinc-500"}`}>{p.blurb}</p>
                   <p className="mt-6 text-[40px] font-semibold tracking-[-0.03em]">{fmtInr(p.priceInr)}<span className={`text-[15px] font-normal ${hot ? "text-zinc-400" : "text-zinc-500"}`}>/month</span></p>
-                  <p className={`text-[13px] ${hot ? "text-zinc-400" : "text-zinc-500"}`}>per month + GST · after your {TRIAL.days}-day free trial</p>
+                  <p className={`text-[13px] ${hot ? "text-zinc-400" : "text-zinc-500"}`}>+ GST · after your {TRIAL.days}-day free trial</p>
                   <ul className={`mt-6 flex-1 space-y-2.5 text-[14px] ${hot ? "text-zinc-200" : "text-zinc-700"}`}>
                     {p.features.map((f) => <li key={f} className="flex gap-2"><Check className={`mt-0.5 h-4 w-4 flex-none ${hot ? "text-brand-300" : "text-brand-600"}`} />{f}</li>)}
                   </ul>
@@ -216,7 +216,7 @@ export default function Landing() {
               );
             })}
           </div>
-          <p className="mt-8 text-center text-[13.5px] text-zinc-600">Every plan starts with the same free trial. You choose Starter or Growth when it ends, and nothing is charged before that.</p>
+          <p className="mt-8 text-center text-[13.5px] text-zinc-600">You choose Starter or Growth when the trial ends, and nothing is charged before that.</p>
           <p className="mt-2 text-center text-[13.5px] text-zinc-500">
             Want us to set it up and tune it for you every month? Ask about our done-for-you service. Contact us at <SupportEmail className="font-medium text-zinc-900 underline underline-offset-4" />
             {" · "}

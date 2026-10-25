@@ -4,7 +4,7 @@ import { MarketingShell } from "@/components/marketing/shell";
 import { SupportEmail, SupportPhone, SupportWhatsApp } from "@/components/marketing/support-contact";
 import { business } from "@/lib/business";
 
-export const metadata: Metadata = { title: "Contact · Botly", robots: { index: true, follow: true } };
+export const metadata: Metadata = { title: "Contact", robots: { index: true, follow: true } };
 
 export default function Contact() {
   const { name, address, city, grievanceOfficer } = business;

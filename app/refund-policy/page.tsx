@@ -4,7 +4,7 @@ import { MarketingShell } from "@/components/marketing/shell";
 import { business } from "@/lib/business";
 import { TRIAL } from "@/lib/plans";
 
-export const metadata: Metadata = { title: "Refund and Cancellation Policy · Botly", robots: { index: true, follow: true } };
+export const metadata: Metadata = { title: "Refund and Cancellation Policy", robots: { index: true, follow: true } };
 
 // TEMPLATE: have a lawyer review before relying on it.
 export default function RefundPolicy() {
