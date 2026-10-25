@@ -42,7 +42,7 @@ export function Hero() {
             <span className={`${peek} border-ink bg-white`}>{HINGLISH.peek}</span>
           </div>
           <p className="max-w-[540px] text-[16.5px] leading-[1.6] text-ink-2 wsm:text-[19px]">
-            Botly learns your business from your website and Instagram or Google profile, replies in English, Tamil, Hindi, Hinglish and
+            Botly learns your business from your website, plus anything you paste from your Instagram or Google profile, replies in English, Tamil, Hindi, Hinglish and
             Tanglish, and emails you each lead with one tap to WhatsApp or call them back.
           </p>
           <div className="mt-[30px] flex flex-wrap gap-3.5">

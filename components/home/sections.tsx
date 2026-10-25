@@ -31,7 +31,7 @@ export function WorksOn() {
 }
 
 const STEPS = [
-  { title: "Tell us about your business", body: "Your website address, the bio from your Instagram or Google profile, and anything customers always ask about.", n: "bg-marigold" },
+  { title: "Tell us about your business", body: "Your website address, the bio you paste from your Instagram or Google profile, and anything customers always ask about.", n: "bg-marigold" },
   { title: "We write your assistant's knowledge", body: "We read your website and what you typed, then build a business profile and FAQs in a few minutes. Edit anything.", n: "bg-rani-t text-rani" },
   { title: "Try it, then paste one line", body: "Chat with it yourself first. When you're happy, add one line of code to Shopify, WordPress, Wix or any site.", n: "bg-leaf-t text-leaf" },
 ];
