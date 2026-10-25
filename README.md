@@ -3,7 +3,7 @@
 **An AI support assistant for Indian small businesses.** Botly learns a business from its website and the profile details the owner gives it, answers visitors in English, Tamil, Hindi, Hinglish and Tanglish, and emails the owner each lead with one-tap WhatsApp and Call buttons. You install it with one `<script>` tag.
 
 - Live site: **https://botly.in**
-- Pricing: **Starter ₹2,999/month**, **Growth ₹9,999/month** (GST extra). New sign-ups get a 14-day free trial with 50 AI replies.
+- Pricing: **Starter ₹2,999/month**, **Growth ₹9,999/month**, flat. New sign-ups get a 14-day free trial with 50 AI replies.
 - Stack: Next.js 16 (App Router) and React 19 on Vercel, Supabase (Postgres, Auth, RLS, pgvector) on the free tier, Groq as the production LLM, Resend for email, Razorpay Subscriptions for billing.
 
 | Live site, desktop (1440 px) | Live site, phone (390 px) |
@@ -49,7 +49,7 @@ Each item below is in the code on `main`. Partial features are marked as partial
 - Prompt-injection safety checks run before a bot goes live. Self-serve bots go live on their own when the checks pass.
 - Knowledge editor: drafts, approved and archived sources; FAQ, policy, product, page, file and note types; product CSV import; PDF, DOCX, TXT and MD upload.
 - Preview (the real widget in an iframe), Conversations (filters, CSV and JSON export), Leads (status pipeline, WhatsApp link, CSV), an Unanswered inbox, a monthly report (printable, CSV) and Settings (branding, greeting, chips, hours, allowed domains, lead emails and WhatsApp numbers, fallback contact).
-- Plan and billing: Razorpay Checkout (UPI, cards, net banking), GSTIN and billing name for invoices, and cancellation.
+- Plan and billing: Razorpay Checkout (UPI, cards, net banking), billing name and email for invoices, and cancellation.
 - Emails through Resend: a lead or handoff email with **WhatsApp {name}**, **Call** and **Read the chat** buttons, an 80% quota warning, trial lifecycle emails, and a Monday summary for Growth.
 - Optional WhatsApp Cloud API alerts to the owner (partial: needs an approved Meta template; until then each lead is logged as "WhatsApp pending" and email still goes out).
 
@@ -335,7 +335,7 @@ Apply these once each, in filename order (`supabase/migrations/`). `scripts/loca
 | 4 | `0004_phase2.sql` | Client invites, owner answer suggestions, cost columns hidden from owners, `knowledge_chunks` (pgvector + full-text), `bot_report()`, visitor data deletion, retention purge. |
 | 5 | `0005_phase3.sql` | `bot_integrations` for Shopify and WooCommerce order lookup (credentials encrypted in the app). |
 | 6 | `0006_saas.sql` | Self-serve: trial, plans, Razorpay subscription fields, `billing_events`, business profile. |
-| 7 | `0007_billing_details.sql` | Billing name, GSTIN and the trial email log. |
+| 7 | `0007_billing_details.sql` | Billing details and the trial email log. |
 | 8 | `0008_hours_not_set.sql` | Business hours default to "not set" instead of a made-up Mon–Sat schedule. |
 | 9 | `0009_demos.sql` | Demo builder: `demo_sites` and the `is_demo` organization flag. |
 | 10 | `0010_demos_upgrade.sql` | Brings an early draft of the demo tables in line with the code. Safe to re-run. |

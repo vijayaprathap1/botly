@@ -138,7 +138,7 @@ Growth accounts also get a summary email every Monday at about 9:00 AM IST.
 
 **Trial:** 14 days and 50 AI replies, whichever runs out first. Preview replies count too. Botly emails you a welcome, a "few replies left" notice at 80%, a "trial ends in 2 days" notice and a "trial has ended" notice. **When the trial ends, the widget stays on your site but shows your contact details instead of AI answers.** Upgrade to switch the AI back on.
 
-**Plans** (prices exclude 18% GST):
+**Plans** (flat monthly prices):
 
 | | Starter | Growth |
 |---|---|---|
@@ -153,7 +153,7 @@ Growth accounts also get a summary email every Monday at about 9:00 AM IST.
 
 ![Plan and billing](images/owner-billing.png)
 
-**To pay:** open **Plan & billing** in the menu and click **Choose Starter** or **Choose Growth**. Razorpay Checkout opens (UPI, cards, net banking). It's a monthly subscription that renews automatically. Add your **billing name and GSTIN** under Billing details for GST invoices. The screenshot shows a done-for-you account that is billed by invoice instead.
+**To pay:** open **Plan & billing** in the menu and click **Choose Starter** or **Choose Growth**. Razorpay Checkout opens (UPI, cards, net banking). It's a monthly subscription that renews automatically. Add your **billing name and email** under Billing details for your invoices. The screenshot shows a done-for-you account that is billed by invoice instead.
 
 - At **80% of your monthly conversations**, you get an email once. At 100%, the widget shows your contact details until the next month or an upgrade.
 - **Cancel plan** stops renewal. Your plan stays active until the end of the paid month.
