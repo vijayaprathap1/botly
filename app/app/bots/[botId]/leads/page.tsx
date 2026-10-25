@@ -5,6 +5,7 @@ import { Badge, btn, Card, Empty, inputClass } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { getBot } from "@/lib/dashboard";
 import { fmtDateTime } from "@/lib/format";
+import { whatsappLeadStatus } from "@/lib/notify/status";
 import { supabaseServer } from "@/lib/supabase/server";
 import type { LeadRow } from "@/lib/types";
 import { whatsappLink } from "@/lib/validation/phone";
@@ -65,7 +66,7 @@ export default async function LeadsPage({ params, searchParams }: { params: Prom
                   </div>
                   {l.need ? <p className="mt-1 text-sm text-zinc-700">{l.need}</p> : null}
                   <p className="mt-1 text-xs text-zinc-500">
-                    {fmtDateTime(l.created_at, bot.org.timezone)} · email {l.notified_email_at ? "sent" : "not sent"} · WhatsApp {l.notified_whatsapp_at ? "sent" : "pending"}
+                    {fmtDateTime(l.created_at, bot.org.timezone)} · email {l.notified_email_at ? "sent" : "not sent"} · WhatsApp {whatsappLeadStatus(l.notified_whatsapp_at, bot.notify_whatsapp ?? [])}
                     {l.conversation_id ? (
                       <>
                         {" · "}
