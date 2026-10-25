@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
     // (and search engines) there. The widget script and API stay reachable on the old host:
     // customers' websites already load them from it.
     return [
-      { source: "/:path((?!api/|widget\\.js|_next/|auth/).*)", has: [{ type: "host", value: "botly-rosy.vercel.app" }], destination: "https://botly.in/:path", permanent: true },
+      { source: "/:path((?!api/|widget\\.js|widget-fonts/|_next/|auth/).*)", has: [{ type: "host", value: "botly-rosy.vercel.app" }], destination: "https://botly.in/:path", permanent: true },
       { source: "/:path*", has: [{ type: "host", value: "www.botly.in" }], destination: "https://botly.in/:path*", permanent: true },
     ];
   },
@@ -39,6 +39,15 @@ const nextConfig: NextConfig = {
         source: "/widget.js",
         headers: [
           { key: "Cache-Control", value: "public, max-age=300, stale-while-revalidate=86400" },
+          { key: "Access-Control-Allow-Origin", value: "*" },
+        ],
+      },
+      {
+        // Widget fonts: fetched cross-origin by widget.js (@font-face needs CORS). File names
+        // are fixed per font version, so a new version must use a new name.
+        source: "/widget-fonts/:file*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
           { key: "Access-Control-Allow-Origin", value: "*" },
         ],
       },

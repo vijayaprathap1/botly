@@ -130,7 +130,7 @@ export function absoluteCss(css: string, base: string): string {
 const isPlaceholder = (src: string | undefined) => !src || /^data:/i.test(src) || /placeholder|blank\.|spacer|transparent|lazy|loading\.(gif|svg)|1x1/i.test(src);
 
 /** The brand colour for the widget: theme-color, else the commonest button colour, else Botly's. */
-export function pickBrandColor(root: HTMLElement, fallback = "#4f46e5"): string {
+export function pickBrandColor(root: HTMLElement, fallback = "#C2410C"): string {
   const usable = (hex: string | undefined | null) => {
     const rgb = hex ? parseHex(hex) : null;
     if (!rgb) return null;

@@ -35,7 +35,7 @@ export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin
   const [position, setPosition] = useState(bot.branding.position);
   const [greeting, setGreeting] = useState(bot.greeting);
   const dark = theme === "dark";
-  const validColor = /^#[0-9a-f]{6}$/i.test(color) ? color : "#4f46e5";
+  const validColor = /^#[0-9a-f]{6}$/i.test(color) ? color : "#C2410C";
 
   return (
     <>

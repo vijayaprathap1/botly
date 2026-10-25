@@ -121,7 +121,7 @@ export async function startWorkspace(_: StartState, form: FormData): Promise<Sta
       model: config.defaultModel,
       allowed_origins: host ? [host] : [],
       greeting: `Hi! I'm ${d.assistantName} from ${d.businessName}. How can I help you today?`,
-      branding: { primary_color: "#4f46e5", avatar_url: null, assistant_name: d.assistantName, position: "right", theme: "auto", show_powered_by: true },
+      branding: { primary_color: "#C2410C", avatar_url: null, assistant_name: d.assistantName, position: "right", theme: "auto", show_powered_by: true },
       notify_emails: [d.contactEmail || email].filter(Boolean),
       notify_whatsapp: wa?.ok ? [wa.e164] : [],
       fallback_contact: contact,
