@@ -187,3 +187,24 @@ describe("homepage snapshot guards", () => {
     expect(seen.some((u) => u.includes("169.254"))).toBe(false);
   });
 });
+
+describe("test-only loopback allowance", () => {
+  const harness = { BOTLY_TEST_ALLOW_LOOPBACK: "1", NEXT_PUBLIC_APP_URL: "http://localhost:3000" };
+  it("allows the e2e fixture site on localhost only with the harness flag", async () => {
+    const { assertPublicUrl, loopbackAllowedForTests } = await import("@/lib/demo/url-guard");
+    expect(loopbackAllowedForTests(harness)).toBe(true);
+    expect((await assertPublicUrl("http://localhost:4173/site", undefined, harness)).toString()).toBe("http://localhost:4173/site");
+    expect((await assertPublicUrl("http://127.0.0.1:4173/", undefined, harness)).port).toBe("4173");
+  });
+  it("is never on in production or on Vercel, and never opens private ranges", async () => {
+    const { assertPublicUrl, loopbackAllowedForTests, UnsafeUrlError } = await import("@/lib/demo/url-guard");
+    expect(loopbackAllowedForTests({})).toBe(false);
+    expect(loopbackAllowedForTests({ ...harness, VERCEL: "1" })).toBe(false);
+    expect(loopbackAllowedForTests({ ...harness, VERCEL_ENV: "production" })).toBe(false);
+    expect(loopbackAllowedForTests({ ...harness, NEXT_PUBLIC_APP_URL: "https://botly.in" })).toBe(false);
+    await expect(assertPublicUrl("http://localhost:4173/site", undefined, { NEXT_PUBLIC_APP_URL: "https://botly.in" })).rejects.toThrow(UnsafeUrlError);
+    for (const u of ["http://169.254.169.254/", "http://10.0.0.5/", "http://192.168.1.1/"]) {
+      await expect(assertPublicUrl(u, undefined, harness), u).rejects.toThrow(UnsafeUrlError);
+    }
+  });
+});
