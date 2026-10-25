@@ -23,8 +23,7 @@ export function Hero() {
       />
       <div className={`${wrap} relative z-[1] grid items-center gap-12 wlg:grid-cols-[1.02fr_1fr] wlg:gap-14`}>
         <div>
-          <p className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-line bg-white py-1.5 pl-1.5 pr-3.5 text-[13px] font-semibold text-ink-2 wsm:text-[14px]">
-            <b className="rounded-full bg-leaf-t px-2.5 py-[3px] text-[12.5px] text-leaf">₹ pricing</b>
+          <p className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-line bg-white px-3.5 py-1.5 text-[13px] font-semibold text-ink-2 wsm:text-[14px]">
             AI support for Indian businesses
           </p>
           <h1
