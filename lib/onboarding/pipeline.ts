@@ -150,7 +150,7 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
       send({ stage: "drafted", message: `Wrote ${d.faqs.length} FAQs${policyToText(d.policy) ? ", a policy summary" : ""}${o.selfServe && d.profile_markdown ? " and your business profile" : ""}`, count: d.faqs.length });
     } catch (e) {
       console.error("[onboarding] drafting failed", e instanceof Error ? e.message : e);
-      send({ stage: "skip", message: "Couldn't write the FAQs automatically. Using your website pages directly instead." });
+      send({ stage: "skip", message: autoApprove ? "Couldn't write the FAQs automatically. Using your website pages directly instead." : "Couldn't write the FAQs automatically. Your website pages are saved as drafts you can approve instead." });
       if (autoApprove) await db.from("knowledge_sources").update({ status: "approved" }).eq("bot_id", botId).eq("type", "page");
     }
   } else if (autoApprove && pages.length) {
