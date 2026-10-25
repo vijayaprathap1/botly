@@ -149,7 +149,7 @@ Setup: run `supabase/migrations/0009_demos.sql` in the Supabase SQL editor and s
 1. **Account:** sign up at razorpay.com and complete KYC (PAN, bank account, business details). Ask support to enable **Subscriptions** if it isn't in the menu.
 2. **Business details on your site** (Razorpay reviews these pages before approving live payments): set `BUSINESS_LEGAL_NAME`, `SUPPORT_EMAIL`, `SUPPORT_PHONE`, `BUSINESS_ADDRESS`, `BUSINESS_CITY`, `GRIEVANCE_OFFICER`. They appear on `/contact`, `/terms`, `/privacy-policy` and `/refund-policy` (all linked in the footer).
 3. **Test mode first:** Account & Settings → API Keys → generate test keys → `RAZORPAY_KEY_ID` (`rzp_test_…`) and `RAZORPAY_KEY_SECRET`.
-4. **Plans:** Subscriptions → Plans → create "Botly Starter" (monthly, every 1 month, ₹2,999) and "Botly Growth" (monthly, ₹9,999). Copy the `plan_…` ids into `RAZORPAY_PLAN_STARTER` / `RAZORPAY_PLAN_GROWTH`. The amounts must match `PRICE_STARTER_INR` / `PRICE_GROWTH_INR` (the site shows prices "+ GST"; if you want GST included in the charge, put the GST-inclusive amount in the plan and on the site).
+4. **Plans:** Subscriptions → Plans → create "Botly Starter" (monthly, every 1 month, ₹2,999) and "Botly Growth" (monthly, ₹9,999). Copy the `plan_…` ids into `RAZORPAY_PLAN_STARTER` / `RAZORPAY_PLAN_GROWTH`. The amounts must match `PRICE_STARTER_INR` / `PRICE_GROWTH_INR`. The site shows these as flat monthly prices, so the plan amount is exactly what customers pay.
 5. **Webhook:** Account & Settings → Webhooks → Add. URL `https://YOUR_DOMAIN/api/billing/webhook`, a secret you make up (put the same value in `RAZORPAY_WEBHOOK_SECRET`), events: all `subscription.*`.
 6. **Check:** `npm run check` confirms the keys work, both plans exist in the same mode, they're monthly INR, and their prices match the website.
 7. **Try it:** sign in as a customer → Plan & billing → Choose Starter → pay with a Razorpay test card or test UPI id → the plan turns Starter within seconds, and the payment appears in Super admin → Latest billing events.
@@ -165,7 +165,7 @@ How it behaves:
 
 - **Error alerts:** every server error and every AI-provider failure emails `ALERT_EMAIL` (or the first `ADMIN_EMAILS` address), at most once per 15 minutes per kind of error. Needs `RESEND_API_KEY`. For uptime, point a free monitor (UptimeRobot, Better Stack) at `https://YOUR_DOMAIN/api/health?deep=1`.
 - **Trial emails:** the daily job (9 am IST) sends each trial one welcome, one "80% of replies used", one "2 days left" and one "trial ended" email.
-- **Migration 0007** (billing name, GSTIN, trial email log): run `supabase/migrations/0007_billing_details.sql` in the Supabase SQL editor after pulling this update.
+- **Migration 0007** (billing details, trial email log): run `supabase/migrations/0007_billing_details.sql` in the Supabase SQL editor after pulling this update.
 - **Migration 0010** (only if you ran an earlier draft of 0009 and see "cannot change return type of existing function"): run `supabase/migrations/0010_demos_upgrade.sql`. It is safe to run on any database.
 - **Migration 0008** (business hours "not set" instead of a made-up Mon–Sat 10–7 default): run `supabase/migrations/0008_hours_not_set.sql` the same way. It also resets existing bots that still carry the untouched old default; a business that really keeps those hours re-enters them in Settings.
 

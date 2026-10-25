@@ -12,7 +12,7 @@ import type { Plan } from "./types";
 export type PlanDef = {
   id: Plan;
   name: string;
-  priceInr: number; // per month, GST extra
+  priceInr: number; // per month, flat: exactly what the customer pays
   conversations: number; // per month
   bots: number;
   crawlPages: number;

@@ -54,7 +54,7 @@ export function Hero() {
             </a>
           </div>
           <ul className="mt-[22px] flex flex-wrap gap-x-4 gap-y-1.5 text-[14.5px] text-ink-2">
-            {[`${TRIAL.days}-day free trial`, `${TRIAL.replies} AI replies`, "No card needed", `From ${from}/month + GST`].map((t) => (
+            {[`${TRIAL.days}-day free trial`, `${TRIAL.replies} AI replies`, "No card needed", `From ${from}/month`].map((t) => (
               <li key={t} className="inline-flex items-center gap-1.5">
                 <CircleCheck className="h-4 w-4 text-leaf" aria-hidden /> {t}
               </li>
