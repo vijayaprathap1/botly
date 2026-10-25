@@ -1,6 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { business } from "../business";
 import { config } from "../config";
 import { HOURS_NOT_SET } from "../hours";
 import { sendEmail } from "../notify/email";
@@ -36,7 +37,7 @@ export const demoConfig = {
     return {
       phone: process.env.DEMO_CONTACT_PHONE || process.env.SUPPORT_PHONE || undefined,
       whatsapp: process.env.DEMO_CONTACT_WHATSAPP || undefined,
-      email: process.env.DEMO_CONTACT_EMAIL || process.env.SUPPORT_EMAIL || config.adminEmails[0] || undefined,
+      email: process.env.DEMO_CONTACT_EMAIL || business.email,
     };
   },
 };

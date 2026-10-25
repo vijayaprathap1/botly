@@ -1,3 +1,4 @@
+import { business } from "../business";
 import { brandEmail } from "./layout";
 import type { LeadNotice, Notifier, SendResult } from "./types";
 
@@ -69,7 +70,7 @@ export class ResendNotifier implements Notifier {
     const res = await fetch(`${process.env.RESEND_API_URL || "https://api.resend.com"}/emails`, {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: process.env.EMAIL_FROM || "Botly <onboarding@resend.dev>", to: [to], subject, html, text }),
+      body: JSON.stringify({ from: process.env.EMAIL_FROM || "Botly <onboarding@resend.dev>", reply_to: business.email, to: [to], subject, html, text }),
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) throw new Error(`Resend ${res.status}: ${(await res.text()).slice(0, 300)}`);
@@ -88,7 +89,7 @@ export async function sendEmail(msg: { to: string; subject: string; html: string
       const res = await fetch(`${process.env.RESEND_API_URL || "https://api.resend.com"}/emails`, {
         method: "POST",
         headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from: process.env.EMAIL_FROM || "Botly <onboarding@resend.dev>", to: [msg.to], subject: msg.subject, html: msg.html, text: msg.text }),
+        body: JSON.stringify({ from: process.env.EMAIL_FROM || "Botly <onboarding@resend.dev>", reply_to: business.email, to: [msg.to], subject: msg.subject, html: msg.html, text: msg.text }),
         signal: AbortSignal.timeout(10_000),
       });
       if (res.ok) return { sent: true, id: ((await res.json()) as { id?: string }).id };
