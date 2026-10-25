@@ -1,3 +1,4 @@
+import { recordWidgetFirstLoad } from "@/lib/analytics/widget-seen";
 import { isLoopback, resolveAccess } from "@/lib/chat/access";
 import { SupabaseStore } from "@/lib/chat/supabase-store";
 import { config } from "@/lib/config";
@@ -46,6 +47,7 @@ async function handle(req: Request) {
   if (!bot) return off("unknown_key");
   const access = resolveAccess(bot, req.headers.get("origin"), parsed.data.testToken);
   if (!access.allowed) return off(access.reason);
+  if (!access.isTest) await recordWidgetFirstLoad(db, bot, origin);
 
   const month = monthKey(new Date(), bot.org.timezone);
   const used = access.isTest ? 0 : await store.getUsedConversations(bot.id, month);

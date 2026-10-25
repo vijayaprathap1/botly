@@ -19,11 +19,14 @@ export default function PrivacyPolicy() {
           <li>Business information you give us, and text from your business&apos;s public website pages.</li>
           <li>Billing data handled by Razorpay. We don&apos;t store your card or UPI details.</li>
           <li>Usage data: conversations with your assistant, leads, and technical logs.</li>
+          <li>If you arrive from an ad or a link, the campaign parameters (source, medium, campaign, content and term), the page you landed on, and the referring site. These are kept in your browser&apos;s local storage on this website, not in a cookie. They are sent once when you create a workspace and stored on that workspace. If there is no campaign, the source is recorded as direct.</li>
         </ul>
         <h2 className="mt-6 text-lg font-semibold">Why we use it</h2>
         <p>To provide and improve the service, bill you, keep it secure, and contact you about your account. We don&apos;t sell personal data.</p>
         <h2 className="mt-6 text-lg font-semibold">Who processes it</h2>
-        <p>Supabase (database and sign-in), Vercel (hosting), {aiProcessorName()} (generating AI replies), Resend (email), Meta WhatsApp (lead alerts, if enabled) and Razorpay (payments). Data may be processed outside India by these providers.</p>
+        <p>Supabase (database and sign-in), Vercel (hosting), {aiProcessorName()} (generating AI replies), Resend (email), Meta WhatsApp (lead alerts, if enabled), Razorpay (payments) and Cloudflare (Web Analytics on this website and the signed-in app). Data may be processed outside India by these providers.</p>
+        <h2 className="mt-6 text-lg font-semibold">Analytics</h2>
+        <p>Botly&apos;s own marketing pages and the signed-in app use Cloudflare Web Analytics. It is cookieless: it counts page views without identifying you and without a consent banner. It is not loaded inside the chat widget embedded on a customer&apos;s website. We don&apos;t use Google Analytics. The campaign fields described above stay in first-party local storage until you create a workspace or clear site data. We don&apos;t sell them or share them with advertisers.</p>
         <h2 className="mt-6 text-lg font-semibold">How long we keep it</h2>
         <p>Conversations and leads are kept for 12 months by default (you can shorten this). Account data is kept while your account is open and deleted within 90 days of closure, except records we must keep by law.</p>
         <h2 className="mt-6 text-lg font-semibold">Your rights</h2>

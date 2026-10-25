@@ -67,6 +67,11 @@ export type ChatOutcome = {
   usage: Usage;
   costUsd: number;
   language: string;
+  /** Set once the bot is known. Used to record the first real conversation after the reply. */
+  isNewConversation: boolean;
+  isTest: boolean;
+  botId: string | null;
+  orgId: string | null;
 };
 
 const RESTORE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -86,6 +91,10 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     usage: emptyUsage(),
     costUsd: 0,
     language: detectLanguage(req.message),
+    isNewConversation: false,
+    isTest: false,
+    botId: null,
+    orgId: null,
   };
   const fail = (code: string, message: string) => {
     emit("error", { code, message });
@@ -105,6 +114,9 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     return fail(access.reason, "This chat isn't available on this website.");
   }
   const isTest = access.isTest;
+  outcome.botId = bot.id;
+  outcome.orgId = bot.org.id;
+  outcome.isTest = isTest;
 
   // 2. Rate limits ------------------------------------------------------------------
   const blocked = await checkLimits(deps.limiter, [
@@ -117,6 +129,15 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   // 2b. Plan gate: free-trial replies and days, suspended accounts ---------------------
   const gate = await deps.store.consumeReply(bot.org.id);
   if (gate !== "ok") {
+    if (gate === "limit" || gate === "expired") {
+      const orgId = bot.org.id;
+      const botId = bot.id;
+      const reason = gate === "limit" ? "replies_50" : "day_14";
+      outcome.jobs.push(async () => {
+        const { track } = await import("../analytics/track");
+        await track({ name: "trial_limit_reached", orgId, botId, properties: { reason } });
+      });
+    }
     emit("tool_card", { type: "fallback_contact", reason: "quota", contact: bot.fallback_contact } satisfies ToolCard);
     emit("done", { conversationId: req.conversationId ?? null, quota: gate === "suspended" ? "suspended" : "trial_ended" });
     return outcome;
@@ -152,6 +173,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     if (!conversation) return fail("server_error", "Something went wrong. Please try again.");
     isNewConversation = true;
   }
+  outcome.isNewConversation = isNewConversation;
   const conversationId = conversation.id;
   outcome.conversationId = conversationId;
   emit("meta", { conversationId, isNew: isNewConversation });

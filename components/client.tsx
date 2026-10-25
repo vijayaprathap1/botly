@@ -1,9 +1,10 @@
 "use client";
 import { startTransition, useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { trackEmbedCopied } from "@/app/app/analytics-actions";
 import { btn } from "./ui";
 
-export function CopyButton({ text, label = "Copy", className }: { text: string; label?: string; className?: string }) {
+export function CopyButton({ text, label = "Copy", className, botId }: { text: string; label?: string; className?: string; botId?: string }) {
   const [done, setDone] = useState(false);
   return (
     <button
@@ -22,6 +23,7 @@ export function CopyButton({ text, label = "Copy", className }: { text: string; 
         }
         setDone(true);
         setTimeout(() => setDone(false), 1500);
+        if (botId) void trackEmbedCopied(botId).catch(() => {});
       }}
     >
       {done ? "Copied ✓" : label}

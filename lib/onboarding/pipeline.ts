@@ -7,6 +7,7 @@ import { getLlm } from "../llm";
 import { requestTokenLimit } from "../llm/provider";
 import { estimateTokens } from "../tokens";
 import type { BotWithOrg } from "../types";
+import { track } from "../analytics/track";
 import { draftKnowledge, isRealAnswer, policyToText } from "./draft";
 
 export type OnboardEvent = {
@@ -39,7 +40,35 @@ export type OnboardOptions = {
  * Onboarding pipeline shared by the admin wizard and self-serve sign-up:
  * crawl → save pages/products → Claude drafts FAQs, policies, tone and a business profile.
  */
+type BuildCtx = { orgId: string | null; pagesIngested: number; started: boolean };
+
 export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) => void): Promise<{ ok: boolean }> {
+  const startedAt = Date.now();
+  const ctx: BuildCtx = { orgId: null, pagesIngested: 0, started: false };
+  let failure: string | null = null;
+  try {
+    return await executeOnboarding(o, send, ctx);
+  } catch (e) {
+    failure = e instanceof Error ? e.message : "Onboarding failed";
+    throw e;
+  } finally {
+    if (ctx.started) {
+      await track({
+        name: "bot_build_completed",
+        orgId: ctx.orgId,
+        botId: o.botId,
+        properties: {
+          success: failure === null,
+          duration_s: Math.max(0, Math.round((Date.now() - startedAt) / 1000)),
+          pages_ingested: ctx.pagesIngested,
+          error: failure ? failure.slice(0, 300) : null,
+        },
+      });
+    }
+  }
+}
+
+async function executeOnboarding(o: OnboardOptions, send: (e: OnboardEvent) => void, ctx: BuildCtx): Promise<{ ok: boolean }> {
   const { db, botId } = o;
   // The whole import must fit one serverless invocation (300 s): leave the safety check out
   // rather than be cut off half-way with nothing recorded.
@@ -47,6 +76,9 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
   const { data: botRow } = await db.from("bots").select("*, org:organizations(*)").eq("id", botId).single();
   if (!botRow) throw new Error("Bot not found");
   const bot = botRow as BotWithOrg;
+  ctx.orgId = bot.org_id;
+  ctx.started = true;
+  await track({ name: "bot_build_started", orgId: bot.org_id, botId });
   const status = o.selfServe ? "approved" : "draft";
   const stamp = (r: { type: string; title: string; url: string | null; content: string }, st = status) => ({
     ...r,
@@ -91,6 +123,7 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
     }
     send({ stage: "saved", message: `Saved ${rows.length} pages and products`, count: rows.length });
   }
+  ctx.pagesIngested = pages.length + products.length;
 
   const haveInput = pages.length > 0 || Boolean(o.ownerNotes?.trim());
   if (o.draft && haveInput) {
@@ -143,6 +176,17 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
             ...(d.business_type ? { business_type: d.business_type } : {}),
           })
           .eq("id", bot.org_id);
+        const social = bot.org.social_links ?? {};
+        await track({
+          name: "business_profile_created",
+          orgId: bot.org_id,
+          botId,
+          properties: {
+            has_website_url: Boolean(o.url || bot.org.website_url),
+            social_count: Object.values(social).filter((v) => typeof v === "string" && v.trim()).length,
+            faq_count: d.faqs.length,
+          },
+        });
       } else if (d.tone) await db.from("bots").update({ tone_suggestion: d.tone }).eq("id", botId);
       send({ stage: "drafted", message: `Wrote ${d.faqs.length} FAQs${policyToText(d.policy) ? ", a policy summary" : ""}${o.selfServe && d.profile_markdown ? " and your business profile" : ""}`, count: d.faqs.length });
     } catch (e) {

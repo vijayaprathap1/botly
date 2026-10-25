@@ -1,12 +1,15 @@
 "use server";
 
 import { z } from "zod";
+import { attributionColumns, attributionFromFields, signUpProperties, signupMethod } from "@/lib/analytics/attribution";
+import { quietDeadline, track } from "@/lib/analytics/track";
 import { requireSession } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { HOURS_NOT_SET, parseHoursText } from "@/lib/hours";
 import { TRIAL } from "@/lib/plans";
 import { normalizeOrigin } from "@/lib/security/origin";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { supabaseServer } from "@/lib/supabase/server";
 import { estimateTokens } from "@/lib/tokens";
 import { isValidEmail, normalizePhone } from "@/lib/validation/phone";
 
@@ -154,5 +157,26 @@ export async function startWorkspace(_: StartState, form: FormData): Promise<Sta
       token_count: estimateTokens(ownerNotes), updated_by: session.userId,
     });
   }
+  // Attribution is a separate write: a database that hasn't had the analytics
+  // migration yet still creates the workspace.
+  const touch = attributionFromFields(form);
+  const saved = await quietDeadline(
+    db
+      .from("organizations")
+      .update(attributionColumns(touch))
+      .eq("id", org.id)
+      .then(({ error }) => error?.message ?? null),
+  );
+  if (saved === undefined) console.error("[analytics] attribution timed out");
+  else if (saved) console.error("[analytics] attribution", saved);
+  let method: "google" | "email" = "email";
+  const lookedUp = await quietDeadline(
+    (async () => {
+      const { data } = await (await supabaseServer()).auth.getUser();
+      return signupMethod(data.user);
+    })(),
+  );
+  if (lookedUp) method = lookedUp;
+  await track({ name: "sign_up", orgId: org.id, botId: bot.id, properties: signUpProperties(method, touch) });
   return { botId: bot.id, ownerNotes, url: d.website || null };
 }

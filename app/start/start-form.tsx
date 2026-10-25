@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { stampFirstTouch } from "@/components/analytics/first-touch";
 import { useFormAction } from "@/components/client";
 import { btn, Card, Field, inputClass, Notice } from "@/components/ui";
 import { startWorkspace, type StartState } from "./actions";
@@ -107,7 +108,13 @@ export function StartForm({ email }: { email: string }) {
 
   const err = (f: string) => (state?.field === f ? <p className="mt-1 text-sm text-red-700">{state.error}</p> : null);
   return (
-    <form onSubmit={action} className="mt-6 grid gap-4">
+    <form
+      onSubmit={(e) => {
+        stampFirstTouch(e.currentTarget);
+        action(e);
+      }}
+      className="mt-6 grid gap-4"
+    >
       <Card title="1. Your business">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Business name" htmlFor="businessName">
