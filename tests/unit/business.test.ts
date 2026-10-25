@@ -27,10 +27,18 @@ describe("public support phone", () => {
     expect(business.whatsappUrl).toBe("https://wa.me/919800011111");
   });
 
-  it("uses support@botly.in unless SUPPORT_EMAIL is set", () => {
+  it("uses vijay@botly.in unless SUPPORT_EMAIL is set", () => {
     vi.stubEnv("SUPPORT_EMAIL", "");
-    expect(business.email).toBe("support@botly.in");
+    expect(business.email).toBe("vijay@botly.in");
     vi.stubEnv("SUPPORT_EMAIL", "owner@example.com");
     expect(business.email).toBe("owner@example.com");
+  });
+});
+
+describe("normalizePlace", () => {
+  it("puts one space after each comma", async () => {
+    const { normalizePlace } = await import("@/lib/business");
+    expect(normalizePlace("Pondicherry,India")).toBe("Pondicherry, India");
+    expect(normalizePlace("  Pondicherry ,  India, ")).toBe("Pondicherry, India");
   });
 });

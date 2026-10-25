@@ -12,12 +12,17 @@ export function supportPhoneLinks(display: string): { tel: string; whatsapp: str
   return { tel: `+${digits}`, whatsapp: `https://wa.me/${digits}` };
 }
 
+/** "Pondicherry,India" -> "Pondicherry, India": one space after each comma, trimmed. */
+export function normalizePlace(value: string): string {
+  return value.replace(/\s*,\s*/g, ", ").replace(/\s+/g, " ").trim().replace(/,$/, "");
+}
+
 export const business = {
   get name() {
     return process.env.BUSINESS_LEGAL_NAME || "Botly";
   },
   get email() {
-    return process.env.SUPPORT_EMAIL?.trim() || "support@botly.in";
+    return process.env.SUPPORT_EMAIL?.trim() || "vijay@botly.in";
   },
   get phone() {
     return process.env.SUPPORT_PHONE?.trim() || DEFAULT_SUPPORT_PHONE;
@@ -31,10 +36,10 @@ export const business = {
     return supportPhoneLinks(this.phone).whatsapp;
   },
   get address() {
-    return process.env.BUSINESS_ADDRESS || "";
+    return normalizePlace(process.env.BUSINESS_ADDRESS || "");
   },
   get city() {
-    return process.env.BUSINESS_CITY || "Chennai";
+    return normalizePlace(process.env.BUSINESS_CITY || "Pondicherry");
   },
   get grievanceOfficer() {
     return process.env.GRIEVANCE_OFFICER || "";

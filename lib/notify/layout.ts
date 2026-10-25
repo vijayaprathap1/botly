@@ -1,3 +1,4 @@
+import { business } from "../business";
 /**
  * One look for every email Botly sends. Each message chooses the blocks that suit it
  * (a badge, an action button, a facts panel, numbered next steps) instead of all mail
@@ -130,7 +131,7 @@ ${para}${stats}${e.bodyHtml ?? ""}${button}${rawLink}${panel}${steps}${note}
 </td></tr></table>
 </td></tr>
 <tr><td align="center" style="padding:22px 12px 0;font-size:12.5px;line-height:20px;color:${MUTED}">
-<a href="https://botly.in" style="color:${MUTED};text-decoration:none;font-weight:600">botly.in</a> &nbsp;&middot;&nbsp; <a href="mailto:support@botly.in" style="color:${MUTED};text-decoration:none">support@botly.in</a> &nbsp;&middot;&nbsp; <a href="https://botly.in/privacy-policy" style="color:${MUTED};text-decoration:none">Privacy</a>
+<a href="https://botly.in" style="color:${MUTED};text-decoration:none;font-weight:600">botly.in</a> &nbsp;&middot;&nbsp; <a href="mailto:${escapeHtml(business.email)}" style="color:${MUTED};text-decoration:none">${escapeHtml(business.email)}</a> &nbsp;&middot;&nbsp; <a href="https://botly.in/privacy-policy" style="color:${MUTED};text-decoration:none">Privacy</a>
 <br>Botly &mdash; the AI assistant that answers your website visitors.${e.reason ? `<br>${escapeHtml(e.reason)}` : ""}
 </td></tr>
 </table></td></tr></table></body></html>`;
@@ -147,7 +148,7 @@ ${para}${stats}${e.bodyHtml ?? ""}${button}${rawLink}${panel}${steps}${note}
       ...(e.steps ? ["", ...(e.steps.title ? [e.steps.title] : []), ...e.steps.items.map((s, i) => `${i + 1}. ${s}`)] : []),
       ...(e.note ? ["", e.note] : []),
       "",
-      "Botly · https://botly.in · support@botly.in",
+      `Botly · https://botly.in · ${business.email}`,
       ...(e.reason ? [e.reason] : []),
     ].join("\n"),
   );
