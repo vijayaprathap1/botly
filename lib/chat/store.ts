@@ -77,6 +77,18 @@ export interface ChatStore {
   updateLead(id: string, patch: Partial<LeadRow>): Promise<void>;
   mergeUnanswered(botId: string, conversationId: string | null, question: string, language: string | null): Promise<string>;
   logNotification(n: NotificationLog): Promise<void>;
-  /** Uses one AI reply from a free trial (atomic). 'ok' for paid plans. */
+  /** Uses one AI reply from a free trial (atomic). 'ok' for paid plans. Prefer check + commit. */
   consumeReply(orgId: string): Promise<"ok" | "expired" | "limit" | "suspended">;
+  /**
+   * Whether this org may receive a reply. Does not increment.
+   * `counted` is true only when the install has no check_reply yet and the reply was counted up front.
+   */
+  checkReply(orgId: string): Promise<ReplyGate>;
+  /** Count one successful trial reply. No-op for paid plans. */
+  commitReply(orgId: string): Promise<void>;
+  /** Assistant messages in this conversation that actually called the model. */
+  countAiReplies(conversationId: string): Promise<number>;
 }
+
+export type ReplyStatus = "ok" | "expired" | "limit" | "suspended";
+export type ReplyGate = { status: ReplyStatus; counted: boolean };

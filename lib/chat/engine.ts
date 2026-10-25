@@ -6,6 +6,7 @@ import type { Retriever } from "../retrieval/retriever";
 import { toCard, verifyCustomer, type OrderProvider, type OrderStatusCard } from "../orders/types";
 import { detectLanguage } from "../language";
 import type { LlmClient, LlmMessage, TextPart, ToolResultPart, ToolUsePart } from "../llm/types";
+import { matchApprovedFaq } from "../faq-match";
 import { resolveModel } from "../llm/provider";
 import { rateLimitWaitMs } from "../llm/rate-limit";
 import { reportError } from "../alerts";
@@ -39,7 +40,7 @@ export type Emit = (event: ChatEventName, data: unknown) => void;
 export type ToolCard =
   | { type: "lead_form"; leadType: LeadType; prefill: { name?: string; phone?: string; email?: string; need?: string }; error?: string }
   | { type: "lead_saved"; name: string; handoff: boolean }
-  | { type: "fallback_contact"; reason: "quota" | "inactive" | "error"; contact: BotWithOrg["fallback_contact"] }
+  | { type: "fallback_contact"; reason: "quota" | "inactive" | "error" | "busy" | "cap"; contact: BotWithOrg["fallback_contact"] }
   | ({ type: "order_status" } & OrderStatusCard)
   | { type: "callback_form"; prefill: { name?: string; phone?: string; date?: string; slot?: string; need?: string }; minDate: string; error?: string };
 
@@ -115,10 +116,10 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   if (blocked) return fail("rate_limited", "You're sending messages quickly. Please wait a minute and try again.");
 
   // 2b. Plan gate: free-trial replies and days, suspended accounts ---------------------
-  const gate = await deps.store.consumeReply(bot.org.id);
-  if (gate !== "ok") {
+  const gate = await deps.store.checkReply(bot.org.id);
+  if (gate.status !== "ok") {
     emit("tool_card", { type: "fallback_contact", reason: "quota", contact: bot.fallback_contact } satisfies ToolCard);
-    emit("done", { conversationId: req.conversationId ?? null, quota: gate === "suspended" ? "suspended" : "trial_ended" });
+    emit("done", { conversationId: req.conversationId ?? null, quota: gate.status === "suspended" ? "suspended" : "trial_ended" });
     return outcome;
   }
 
@@ -157,11 +158,15 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   emit("meta", { conversationId, isNew: isNewConversation });
 
   // 4. Context: knowledge, history, facts -------------------------------------------
-  const [sources, rows, lead] = await Promise.all([
+  const [sources, rows, lead, aiReplies] = await Promise.all([
     deps.store.getApprovedKnowledge(bot.id),
     deps.store.getMessages(conversationId, config.historyTurns * 4),
     conversation.lead_id ? deps.store.getLead(conversation.lead_id) : Promise.resolve(null),
+    isNewConversation ? Promise.resolve(0) : deps.store.countAiReplies(conversationId),
   ]);
+  const faqHit = matchApprovedFaq(sources, req.message);
+  const replyCap = config.maxAiReplies(bot.org.plan);
+  const capped = !faqHit && replyCap > 0 && aiReplies >= replyCap;
   // Saved while the model streams (after reading history, so it isn't duplicated there).
   const userMessagePromise = deps.store.insertMessage({
     conversation_id: conversationId,
@@ -176,7 +181,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   let approvedKnowledgeText = knowledge.text;
   let retrievedKnowledge: string | null = null;
   let retrievalInfo: { mode: "full" | "retrieval" | "full-capped"; titles?: string[]; query?: string } = { mode: "full" };
-  if (knowledge.overCap && deps.retriever) {
+  if (!faqHit && !capped && knowledge.overCap && deps.retriever) {
     const lastUser = [...rows].reverse().find((r) => r.role === "user")?.content ?? "";
     try {
       const r = await deps.retriever.retrieve({
@@ -248,19 +253,40 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   // 5. Model + tool loop ---------------------------------------------------------------
   const tools = toolsForPlan(bot.org.plan);
   const baseMessages = structuredClone(messages);
+  const say = (t: string) => {
+    if (outcome.firstTokenMs === null) outcome.firstTokenMs = Date.now() - started;
+    outcome.text += t;
+    emit("delta", { text: t });
+  };
+  const offerPerson = (kind: "outage" | "cap", retryAfterMs?: number) => {
+    const text = personText(outcome.language, kind);
+    say(text);
+    emit("tool_card", {
+      type: "lead_form",
+      leadType: "other",
+      prefill: { need: req.message.slice(0, 500) },
+    } satisfies ToolCard);
+    const contact = bot.fallback_contact ?? {};
+    if (contact.phone || contact.whatsapp || contact.email) {
+      emit("tool_card", { type: "fallback_contact", reason: kind === "cap" ? "cap" : "busy", contact } satisfies ToolCard);
+    }
+    // The bubble already shows the sentence. ai_unavailable tells safety checks this was not a model answer.
+    if (kind === "outage") emit("error", { code: "ai_unavailable", message: text, retryAfterMs: retryAfterMs && retryAfterMs > 0 ? retryAfterMs : 15_000 });
+  };
   // A reply with neither text nor a card would leave the visitor looking at nothing.
   let cardShown = false;
   const emitTurn: Emit = (event, data) => {
     if (event === "tool_card") cardShown = true;
     emit(event, data);
   };
-  const say = (t: string) => {
-    if (outcome.firstTokenMs === null) outcome.firstTokenMs = Date.now() - started;
-    outcome.text += t;
-    emit("delta", { text: t });
-  };
+  let countTrial = false;
   let rounds = 0;
-  try {
+  if (faqHit) {
+    say(faqHit.answer);
+    countTrial = true;
+  } else if (capped) {
+    offerPerson("cap");
+  } else try {
     while (rounds < config.maxToolRounds) {
       rounds++;
       const needsSeparator = outcome.text.length > 0;
@@ -338,21 +364,16 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
         say(emptyReplyText(outcome.language, conversation.status === "handed_off"));
       }
     }
+    countTrial = true;
   } catch (e) {
     const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
     console.error("[chat] model call failed", bot.id, msg);
     outcome.jobs.push(() => reportError("AI replies failing", e, { bot: bot.name, business: bot.org.name, model }).then(() => undefined));
     if (outcome.text.trim() || cardShown) {
       // The visitor already has an answer or a form; a later tool round failing changes nothing for them.
-    } else if (isRateLimited(msg)) {
-      // Provider is saturated for a few seconds (free tiers): asking again shortly works,
-      // so don't send the visitor away to the phone number.
-      const waitMs = rateLimitWaitMs(msg);
-      const when = waitMs && waitMs > 5_000 ? `about ${Math.ceil(waitMs / 5_000) * 5} seconds` : "a few seconds";
-      emit("error", { code: "busy", message: `I'm answering a lot of questions right now. Please send that again in ${when}.`, retryAfterMs: waitMs ?? undefined });
+      countTrial = true;
     } else {
-      emit("tool_card", { type: "fallback_contact", reason: "error", contact: bot.fallback_contact } satisfies ToolCard);
-      emit("error", { code: "llm_error", message: "Sorry, I couldn't reply just now. You can reach the team directly." });
+      offerPerson("outage", rateLimitWaitMs(msg) ?? undefined);
     }
   }
 
@@ -403,6 +424,10 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     });
   }
 
+  if (countTrial && !gate.counted && bot.org.plan === "trial") {
+    await deps.store.commitReply(bot.org.id).catch((err) => console.error("[chat] commitReply", err instanceof Error ? err.message : err));
+  }
+
   if (ctx.debug) {
     emit("debug", {
       model,
@@ -430,7 +455,19 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   return outcome;
 }
 
-const isRateLimited = (message: string) => /LLM API 429|\b429\b|rate.?limit|tokens per minute|overloaded/i.test(message);
+/** Shown with the lead form and, when the bot has them, WhatsApp / phone / email. */
+function personText(language: string, kind: "outage" | "cap"): string {
+  const ta = language === "ta" || language === "tanglish";
+  const hi = language === "hi" || language === "hinglish";
+  if (kind === "cap") {
+    if (ta) return "இந்த உரையாடலில் என்னால் மேலும் பதிலளிக்க முடியாது. கீழே உள்ள படிவத்தில் பெயரையும் எண்ணையும் எழுதுங்கள், அல்லது வாட்ஸ்அப், அழைப்பு அல்லது மின்னஞ்சல் மூலம் எங்களைத் தொடர்பு கொள்ளுங்கள். குழு தொடரும்.";
+    if (hi) return "इस बातचीत में मैं और जवाब नहीं दे सकता। नीचे फॉर्म में नाम और फ़ोन लिखें, या WhatsApp, कॉल या ईमेल से जुड़ें। टीम आगे बात करेगी।";
+    return "I've reached the limit for this chat, so a person should take it from here. Leave your name and phone in the form, or reach the team by WhatsApp, phone or email, and they'll follow up.";
+  }
+  if (ta) return "இப்போது பதிலளிக்க முடியவில்லை. கீழே உள்ள படிவத்தில் பெயரையும் எண்ணையும் எழுதுங்கள், அல்லது வாட்ஸ்அப், அழைப்பு அல்லது மின்னஞ்சல் மூலம் எங்களைத் தொடர்பு கொள்ளுங்கள். குழு உங்களைத் தொடர்பு கொள்ளும்.";
+  if (hi) return "अभी जवाब देना मुश्किल है। नीचे फॉर्म में अपना नाम और फ़ोन छोड़ें, या WhatsApp, कॉल या ईमेल से जुड़ें। टीम आपसे संपर्क करेगी।";
+  return "I'm having trouble answering right now. Leave your name and phone in the form, or reach the team by WhatsApp, phone or email, and they'll get back to you.";
+}
 
 /** Last resort when the model returns no text: never leave the visitor without a reply. */
 function emptyReplyText(language: string, handedOff: boolean): string {

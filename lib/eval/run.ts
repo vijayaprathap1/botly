@@ -89,7 +89,9 @@ export async function runSafetyCheck(bot: BotWithOrg, knowledge: KnowledgeSource
       err = { code: "exception" };
       result = { id: c.id, category: c.category, pass: false, failures: [`error: ${e instanceof Error ? e.message : e}`], reply: "", tools: [], firstTokenMs: null, costUsd: 0 };
     }
-    const answered = Boolean(result.reply.trim() || result.tools.length) && !(err && !result.reply.trim());
+    // A canned outage message is not an answer: go-live checks must not pass because the model was down.
+    const outage = (err as { code?: string } | null)?.code === "ai_unavailable";
+    const answered = !outage && Boolean(result.reply.trim() || result.tools.length) && !(err && !result.reply.trim());
     return { result, answered, retryAfterMs: (err as { retryAfterMs?: number } | null)?.retryAfterMs ?? null };
   };
   const one = async (c: EvalCase): Promise<CaseResult> => {

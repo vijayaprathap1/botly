@@ -493,7 +493,7 @@ export class BotlyWidget {
               this.renderChips(data.questions ?? []);
             } else if (event === "error") {
               typing.remove();
-              if (data.code !== "inactive" && data.code !== "llm_error") this.addEvent(data.message ?? "Something went wrong.");
+              if (data.code !== "inactive" && data.code !== "llm_error" && data.code !== "ai_unavailable") this.addEvent(data.message ?? "Something went wrong.");
             } else if (event === "done") {
               if (data.conversationId) {
                 this.saved.conversationId = data.conversationId;
@@ -625,7 +625,12 @@ export class BotlyWidget {
     const card = h("div", { class: "card contact" });
     card.append(
       h("h4", {
-        text: reason === "quota" || reason === "inactive" ? "Chat is busy right now. You can reach us directly:" : "You can reach us directly:",
+        text:
+          reason === "cap"
+            ? "Continue with the team:"
+            : reason === "quota" || reason === "inactive" || reason === "busy"
+              ? "Chat is busy right now. You can reach us directly:"
+              : "You can reach us directly:",
       }),
     );
     const line = (label: string, value: string, href: string) =>

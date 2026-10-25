@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { KnowledgeSource } from "../knowledge";
 import type { BotWithOrg, ConversationRow, LeadRow, MessageRow } from "../types";
-import type { ChatStore, NewLead, NewMessage, NotificationLog } from "./store";
+import type { ChatStore, NewLead, NewMessage, NotificationLog, ReplyGate, ReplyStatus } from "./store";
 
 /** In-memory ChatStore for unit tests and fixture evals (no database). */
 export class MemoryStore implements ChatStore {
@@ -120,15 +120,35 @@ export class MemoryStore implements ChatStore {
     this.notifications.push(n);
   }
 
+  async countAiReplies(conversationId: string) {
+    return this.messages.filter((m) => m.conversation_id === conversationId && m.role === "assistant" && m.input_tokens + m.output_tokens > 0).length;
+  }
+
+  private trialStatus(orgId: string): ReplyStatus {
+    const o = [...this.bots.values()].find((b) => b.org.id === orgId)?.org;
+    if (!o) return "ok";
+    if (o.suspended) return "suspended";
+    if (o.plan !== "trial") return "ok";
+    if (o.trial_ends_at && new Date(o.trial_ends_at) < new Date()) return "expired";
+    if ((o.trial_replies_used ?? 0) >= (o.trial_reply_limit ?? 50)) return "limit";
+    return "ok";
+  }
+
+  async checkReply(orgId: string): Promise<ReplyGate> {
+    return { status: this.trialStatus(orgId), counted: false };
+  }
+
+  async commitReply(orgId: string) {
+    const o = [...this.bots.values()].find((b) => b.org.id === orgId)?.org;
+    if (!o || o.plan !== "trial" || o.suspended) return;
+    if (o.trial_ends_at && new Date(o.trial_ends_at) < new Date()) return;
+    const next = (o.trial_replies_used ?? 0) + 1;
+    for (const b of this.bots.values()) if (b.org.id === orgId) b.org.trial_replies_used = next;
+  }
+
   async consumeReply(orgId: string) {
-    const bot = [...this.bots.values()].find((b) => b.org.id === orgId);
-    const o = bot?.org;
-    if (!o) return "ok" as const;
-    if (o.suspended) return "suspended" as const;
-    if (o.plan !== "trial") return "ok" as const;
-    if (o.trial_ends_at && new Date(o.trial_ends_at) < new Date()) return "expired" as const;
-    if ((o.trial_replies_used ?? 0) >= (o.trial_reply_limit ?? 50)) return "limit" as const;
-    for (const b of this.bots.values()) if (b.org.id === orgId) b.org.trial_replies_used = (o.trial_replies_used ?? 0) + 1;
-    return "ok" as const;
+    const gate = await this.checkReply(orgId);
+    if (gate.status === "ok") await this.commitReply(orgId);
+    return gate.status;
   }
 }

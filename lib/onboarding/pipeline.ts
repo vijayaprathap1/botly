@@ -93,6 +93,7 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
   }
 
   const haveInput = pages.length > 0 || Boolean(o.ownerNotes?.trim());
+  let aiPaused = false;
   if (o.draft && haveInput) {
     send({ stage: "drafting", message: "Writing your business profile, FAQs and policies…" });
     try {
@@ -146,8 +147,15 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
       } else if (d.tone) await db.from("bots").update({ tone_suggestion: d.tone }).eq("id", botId);
       send({ stage: "drafted", message: `Wrote ${d.faqs.length} FAQs${policyToText(d.policy) ? ", a policy summary" : ""}${o.selfServe && d.profile_markdown ? " and your business profile" : ""}`, count: d.faqs.length });
     } catch (e) {
-      console.error("[onboarding] drafting failed", e instanceof Error ? e.message : e);
-      send({ stage: "skip", message: "Couldn't write the FAQs automatically. Using your website pages directly instead." });
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[onboarding] drafting failed", msg);
+      aiPaused = /AI budget exceeded/i.test(msg);
+      send({
+        stage: "skip",
+        message: aiPaused
+          ? "Live chats are using the AI capacity right now, so FAQ drafting is paused instead of failing. Your pages are saved. Run the import again in a few minutes."
+          : "Couldn't write the FAQs automatically. Using your website pages directly instead.",
+      });
       if (o.selfServe) await db.from("knowledge_sources").update({ status: "approved" }).eq("bot_id", botId).eq("type", "page");
     }
   } else if (o.selfServe && pages.length) {
@@ -155,7 +163,10 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
   }
 
   let outcome: OnboardEvent["outcome"];
-  if (o.selfServe && !o.skipSafetyCheck) {
+  if (aiPaused) {
+    outcome = "busy";
+    send({ stage: "warn", message: "Safety checks are waiting until AI capacity frees up. Your assistant works in preview; press “Run checks and go live” in a few minutes." });
+  } else if (o.selfServe && !o.skipSafetyCheck) {
     const slow = safetyPaceMs() > 0;
     send({ stage: "checking", message: `Running safety checks (the assistant must refuse fake discounts and prompt tricks)…${slow ? " This takes about two minutes." : ""}` });
     const left = mustEndBy - Date.now();

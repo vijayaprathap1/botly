@@ -28,7 +28,7 @@ npm run check                      # setup doctor: tests .env.local, Supabase, m
 npm run dev                        # builds public/widget.js, then starts Next.js on :3000
 ```
 
-If something is missing, `npm run check` says exactly what and where to get it, and the dashboard shows a **Finish setting up** page instead of crashing. After editing `.env.local`, always stop and restart `npm run dev`. `GET /api/health` returns 200 when config, database and AI are all working (use it for uptime monitoring).
+If something is missing, `npm run check` says exactly what and where to get it, and the dashboard shows a **Finish setting up** page instead of crashing. After editing `.env.local`, always stop and restart `npm run dev`. `GET /api/health` returns 200 when config and the database are working (use it for uptime monitoring). It does not call the model.
 
 Open http://localhost:3000, sign in with an address listed in `ADMIN_EMAILS`. The first sign-in makes you the platform admin.
 
@@ -163,7 +163,9 @@ How it behaves:
 
 ## Alerts, trial emails and updates
 
-- **Error alerts:** every server error and every AI-provider failure emails `ALERT_EMAIL` (or the first `ADMIN_EMAILS` address), at most once per 15 minutes per kind of error. Needs `RESEND_API_KEY`. For uptime, point a free monitor (UptimeRobot, Better Stack) at `https://YOUR_DOMAIN/api/health?deep=1`.
+- **Error alerts:** every server error and every AI-provider failure emails `ALERT_EMAIL` (or the first `ADMIN_EMAILS` address), at most once per 15 minutes per kind of error, including across serverless instances once migration 0011 is applied. Needs `RESEND_API_KEY`. For uptime, point a free monitor (UptimeRobot, Better Stack) at `https://YOUR_DOMAIN/api/health` (no `deep=1`). That check is public and does not call the model. `GET /api/health?deep=1` does call the model: send `Authorization: Bearer $CRON_SECRET` (the secret must be at least 16 characters), or open it while signed in as an admin. Without that, `deep=1` only repeats a result cached for 5 minutes and never starts a new call.
+- **Migration 0011** (trial replies counted only after a successful answer, shared AI budget, alert dedupe, cached health): run `supabase/migrations/0011_launch_guards.sql` in the Supabase SQL editor before or with this deploy. Until it is applied, trial replies are still counted up front and the shared budget is not enforced (chats keep working).
+- **AI budget and chat caps** (env, defaults in `.env.example`): `RATE_LIMIT_BOT_PER_MIN=30`, `MAX_AI_REPLIES_PER_CONVERSATION=30` (same for every plan, including Growth; set `MAX_AI_REPLIES_PER_CONVERSATION_GROWTH` to override one plan), `AI_BUDGET_REQUESTS_PER_MIN=40`, `AI_BUDGET_TOKENS_PER_MIN=200000`, `AI_BUDGET_REQUESTS_PER_DAY=10000`, `AI_BUDGET_TOKENS_PER_DAY=15000000`. Set these in Vercel even if you like the defaults, so a previously saved `RATE_LIMIT_BOT_PER_MIN=120` does not stay in force. A model id on a bot that is not `LLM_MODEL`, a fallback, or `LLM_EXTRA_MODELS` is rewritten to the default. Optional cleanup if `select id, name, model from bots where model not in ('openai/gpt-oss-120b','openai/gpt-oss-20b')` shows rows you do not want to keep: `update bots set model = 'openai/gpt-oss-120b' where model not in ('openai/gpt-oss-120b','openai/gpt-oss-20b');`
 - **Trial emails:** the daily job (9 am IST) sends each trial one welcome, one "80% of replies used", one "2 days left" and one "trial ended" email.
 - **Migration 0007** (billing name, GSTIN, trial email log): run `supabase/migrations/0007_billing_details.sql` in the Supabase SQL editor after pulling this update.
 - **Migration 0010** (only if you ran an earlier draft of 0009 and see "cannot change return type of existing function"): run `supabase/migrations/0010_demos_upgrade.sql`. It is safe to run on any database.

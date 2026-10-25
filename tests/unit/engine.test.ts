@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runChat, type ChatEventName, type EngineDeps } from "@/lib/chat/engine";
 import { MemoryStore } from "@/lib/chat/memory-store";
 import { fixtureToBot, loadEvalFile } from "@/lib/eval/fixture";
@@ -57,6 +57,9 @@ beforeEach(() => {
   events.length = 0;
   const { bot, knowledge } = fixtureToBot(fixture);
   store.addBot(bot, knowledge);
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("chat engine", () => {
@@ -339,17 +342,64 @@ describe("chat engine: the visitor always gets a reply", () => {
     expect([...store.messages.values()].flat().some((m: any) => m.role === "assistant" && m.content === out.text)).toBe(true);
   });
 
-  it("a rate-limited provider asks the visitor to retry instead of showing the contact card", async () => {
+  it("a rate-limited provider offers the lead form and the contact card", async () => {
     const llm: LlmClient = { stream: async () => { throw new Error("LLM API 429: Rate limit reached for model. Please try again in 31.2s."); } };
-    await runChat(deps(llm), req("hi"), ctx, emit);
-    expect(events.find((e) => e.event === "error")!.data).toMatchObject({ code: "busy", message: expect.stringContaining("about 35 seconds") });
-    expect(events.some((e) => e.event === "tool_card")).toBe(false);
+    const out = await runChat(deps(llm), req("hi"), ctx, emit);
+    expect(out.text).toMatch(/having trouble answering/i);
+    expect(events.find((e) => e.event === "error")!.data).toMatchObject({ code: "ai_unavailable" });
+    const cards = events.filter((e) => e.event === "tool_card").map((e) => e.data);
+    expect(cards[0]).toMatchObject({ type: "lead_form", prefill: { need: "hi" } });
+    expect(cards[1]).toMatchObject({ type: "fallback_contact", reason: "busy" });
+    expect(out.text).not.toMatch(/send that again/i);
   });
 
-  it("any other provider failure still shows the contact card", async () => {
+  it("any other provider failure still shows the lead form and the contact card", async () => {
     const llm: LlmClient = { stream: async () => { throw new Error("LLM API 401: invalid api key"); } };
     await runChat(deps(llm), req("hi"), ctx, emit);
-    expect(events.find((e) => e.event === "tool_card")!.data).toMatchObject({ type: "fallback_contact", reason: "error" });
-    expect(events.find((e) => e.event === "error")!.data.code).toBe("llm_error");
+    const cards = events.filter((e) => e.event === "tool_card").map((e) => e.data);
+    expect(cards.map((c) => c.type)).toEqual(["lead_form", "fallback_contact"]);
+    expect(cards[1]).toMatchObject({ reason: "busy" });
+    expect(events.find((e) => e.event === "error")!.data.code).toBe("ai_unavailable");
+  });
+
+  it("answers an approved FAQ without calling the model", async () => {
+    const llm = new QueueLlm([{ text: "should not be used" }]);
+    const out = await runChat(deps(llm), req("Do you stitch blouses? What sizes?"), ctx, emit);
+    expect(llm.calls).toHaveLength(0);
+    expect(out.text).toContain("650");
+    expect(events.some((e) => e.event === "error")).toBe(false);
+  });
+
+  it("does not treat a longer question as that FAQ", async () => {
+    const llm = new QueueLlm([{ text: "Let me check both." }]);
+    await runChat(deps(llm), req("Do you stitch blouses? What sizes? And do you ship to Japan?"), ctx, emit);
+    expect(llm.calls).toHaveLength(1);
+  });
+
+  it("stops at the per-conversation AI reply cap and does not count that turn", async () => {
+    vi.stubEnv("MAX_AI_REPLIES_PER_CONVERSATION", "2");
+    const bot = [...store.bots.values()][0]!;
+    Object.assign(bot.org, { plan: "trial", trial_reply_limit: 10, trial_replies_used: 0, trial_ends_at: new Date(Date.now() + 86_400_000).toISOString() });
+    const llm = new QueueLlm([{ text: "one" }, { text: "two" }, { text: "three" }]);
+    const d = deps(llm);
+    const first = await runChat(d, req("a"), ctx, () => {});
+    await runChat(d, req("b", { conversationId: first.conversationId }), ctx, () => {});
+    events.length = 0;
+    const third = await runChat(d, req("c", { conversationId: first.conversationId }), ctx, emit);
+    expect(llm.calls).toHaveLength(2);
+    expect(third.text).toMatch(/limit for this chat/);
+    expect(events.filter((e) => e.event === "tool_card").map((e) => e.data.type)).toEqual(["lead_form", "fallback_contact"]);
+    expect(bot.org.trial_replies_used).toBe(2);
+  });
+
+  it("does not spend a trial reply when every model fails", async () => {
+    const bot = [...store.bots.values()][0]!;
+    Object.assign(bot.org, { plan: "trial", trial_reply_limit: 2, trial_replies_used: 0, trial_ends_at: new Date(Date.now() + 86_400_000).toISOString() });
+    const llm: LlmClient = { stream: async () => { throw new Error("LLM API 429: busy"); } };
+    await runChat(deps(llm), req("hi"), ctx, emit);
+    expect(bot.org.trial_replies_used).toBe(0);
+    events.length = 0;
+    await runChat(deps(new QueueLlm([{ text: "ok" }])), req("hello"), ctx, emit);
+    expect(bot.org.trial_replies_used).toBe(1);
   });
 });

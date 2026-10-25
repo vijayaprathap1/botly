@@ -120,6 +120,16 @@ describe("saas SQL", () => {
     await expect(as("authenticated", OWNER, (c) => c.query("select consume_reply($1)", [org]))).rejects.toThrow(/permission denied/);
   });
 
+  it("check_reply does not count and commit_reply counts one success", async () => {
+    const org = (await pool.query("insert into organizations (name, plan, trial_ends_at, trial_reply_limit) values ('Commit Co', 'trial', now() + interval '3 days', 2) returning id")).rows[0].id;
+    expect((await pool.query("select check_reply($1) r", [org])).rows[0].r).toBe("ok");
+    expect((await pool.query("select trial_replies_used from organizations where id = $1", [org])).rows[0].trial_replies_used).toBe(0);
+    expect((await pool.query("select commit_reply($1) r", [org])).rows[0].r).toBe("ok");
+    expect((await pool.query("select trial_replies_used from organizations where id = $1", [org])).rows[0].trial_replies_used).toBe(1);
+    await pool.query("update organizations set suspended = true where id = $1", [org]);
+    expect((await pool.query("select check_reply($1) r", [org])).rows[0].r).toBe("suspended");
+  });
+
   it("customers can't read billing events or trial claims", async () => {
     await pool.query("insert into trial_claims (email) values ('someone@x.in') on conflict do nothing");
     const rows = await as("authenticated", OWNER, async (c) => (await c.query("select * from trial_claims")).rows);
