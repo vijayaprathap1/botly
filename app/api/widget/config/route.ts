@@ -3,7 +3,7 @@ import { SupabaseStore } from "@/lib/chat/supabase-store";
 import { config } from "@/lib/config";
 import { isOpenNow } from "@/lib/hours";
 import { clientIp, json, preflight } from "@/lib/http";
-import { effectiveQuota, monthKey } from "@/lib/quota";
+import { effectiveQuota, monthKey, replyGateFromOrg } from "@/lib/quota";
 import { PostgresRateLimiter } from "@/lib/security/rate-limit";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { configQuerySchema } from "@/lib/validation/schemas";
@@ -70,7 +70,9 @@ async function handle(req: Request) {
       isOpen: isOpenNow(bot.business_hours, bot.org.timezone),
       privacyUrl: bot.privacy_url ?? `${config.appUrl}/privacy`,
       fallbackContact: bot.fallback_contact,
-      quotaExceeded: used >= quota,
+      // An ended trial, a used-up trial or a suspended account shows the "paused" card on open
+      // (the org row is already loaded, so this costs no extra query).
+      quotaExceeded: used >= quota || replyGateFromOrg(bot.org) !== "ok",
     },
     200,
     { "Cache-Control": "private, max-age=60" },

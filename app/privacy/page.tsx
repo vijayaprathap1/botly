@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { POLICIES_LAST_UPDATED } from "@/lib/legal";
 import { aiProcessorName } from "@/lib/llm/provider";
 
 export const metadata: Metadata = { title: "Chat privacy notice", robots: { index: true, follow: true } };
@@ -8,6 +9,7 @@ export default function PrivacyPage() {
   return (
     <main className="mx-auto max-w-2xl px-4 py-10 text-[15px] leading-relaxed text-zinc-800">
       <h1 className="text-2xl font-semibold">Chat assistant privacy notice</h1>
+      <p className="mt-1 text-sm text-zinc-500">Last updated {POLICIES_LAST_UPDATED}.</p>
       <p className="mt-4">This chat assistant is run by the business whose website you are on, using Botly. This notice explains what happens to what you type.</p>
       <h2 className="mt-6 font-semibold">What we collect and why</h2>
       <ul className="mt-2 list-disc space-y-1 pl-5">

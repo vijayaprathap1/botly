@@ -1,4 +1,4 @@
-import { Api, CLIENT_REPLY_TIMEOUT_MS, type WidgetConfig } from "./api";
+import { Api, CLIENT_REPLY_TIMEOUT_MS, sendFailureText, type WidgetConfig } from "./api";
 import { themeVars } from "./color";
 import { FontLoader } from "./fonts";
 import { parseMarkdownLite, renderBlocks, streamSafe } from "./markdown";
@@ -631,7 +631,7 @@ export class BotlyWidget {
     // up (and falls back to the smaller model) well before that. 45 s here used to abort
     // replies the server was still about to deliver (QA retest 2026-10-25, Hindi first send).
     const timer = window.setTimeout(() => this.abort?.abort(), CLIENT_REPLY_TIMEOUT_MS);
-    let failed: { status?: number } | null = null;
+    let failed: { status?: number; retryAfterMs?: number | null } | null = null;
     try {
       if (this.offline) throw new Error("offline");
       await this.api.chat(
@@ -677,7 +677,8 @@ export class BotlyWidget {
         this.abort.signal,
       );
     } catch (e) {
-      failed = { status: (e as { status?: number })?.status };
+      const err = e as { status?: number; retryAfterMs?: number | null };
+      failed = { status: err?.status, retryAfterMs: err?.retryAfterMs };
     } finally {
       window.clearTimeout(timer);
       typing.remove();
@@ -692,10 +693,16 @@ export class BotlyWidget {
       this.flushQueued();
     }
     if (failed && !full) {
-      const why = this.offline || !failed.status ? "Not sent. Check your connection." : "Not sent. Something went wrong on our side.";
+      const why = sendFailureText({ status: failed.status, offline: this.offline });
       const retry = h("button", { class: "retry", type: "button", text: "Retry" });
+      // Busy (429): hold Retry briefly (Retry-After, at most 10 s) so a tap doesn't hit the limit again.
+      const hold = failed.status === 429 ? Math.min(failed.retryAfterMs ?? 3000, 10_000) : 0;
+      if (hold > 0) {
+        retry.setAttribute("disabled", "");
+        window.setTimeout(() => retry.removeAttribute("disabled"), hold);
+      }
       retry.addEventListener("click", () => {
-        if (this.offline) return;
+        if (this.offline || retry.hasAttribute("disabled")) return;
         void this.send(text, userRow);
       });
       userRow.append(h("div", { class: "errline", role: "alert" }, h("span", { text: why }), retry));

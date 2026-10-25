@@ -7,6 +7,7 @@ import { toCard, verifyCustomer, type OrderProvider, type OrderStatusCard } from
 import { detectLanguage } from "../language";
 import { declinesKnowledge, dominantScript, offerDecision, offerDecline, replyInstruction, replyReminder } from "../reply-style";
 import { needsQueryRewrite, prepareSearch, queriesForRetrieval } from "../retrieval/retriever";
+import { createScriptGate, romanIndicVisitor, scriptRetryInstruction } from "./script-guard";
 import type { LlmClient, LlmMessage, TextPart, ToolResultPart, ToolUsePart } from "../llm/types";
 import { matchApprovedFaq } from "../faq-match";
 import { resolveModel } from "../llm/provider";
@@ -70,6 +71,8 @@ export type ChatOutcome = {
   usage: Usage;
   costUsd: number;
   language: string;
+  /** A Hinglish/Tanglish turn opened in the wrong script and was regenerated once. */
+  scriptRetry?: boolean;
 };
 
 const RESTORE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -304,6 +307,10 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   };
   let countTrial = false;
   let rounds = 0;
+  // Roman-script Hinglish/Tanglish visitors: at most one regeneration per message when a
+  // turn opens in Devanagari/Tamil script (see lib/chat/script-guard.ts).
+  const romanVisitor = romanIndicVisitor(req.message);
+  let scriptRetried = false;
   const offerKnowledge = `${approvedKnowledgeText}\n${retrievedKnowledge ?? ""}`;
   const denyOffer = !faqHit && !capped && offerDecision(req.message, offerKnowledge) === "deny";
   if (faqHit) {
@@ -325,7 +332,18 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
       rounds++;
       const needsSeparator = outcome.text.length > 0;
       let wroteThisRound = false;
-      const turn = await deps.llm.stream(
+      const write = (t: string) => {
+        if (!wroteThisRound && needsSeparator) {
+          outcome.text += "\n\n";
+          emit("delta", { text: "\n\n" });
+        }
+        wroteThisRound = true;
+        if (outcome.firstTokenMs === null) outcome.firstTokenMs = Date.now() - started;
+        outcome.text += t;
+        emit("delta", { text: t });
+      };
+      const gate = romanVisitor && !scriptRetried ? createScriptGate(write) : null;
+      let turn = await deps.llm.stream(
         {
           model,
           maxTokens: config.maxOutputTokens,
@@ -333,18 +351,26 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
           messages,
           tools,
         },
-        (t) => {
-          if (!wroteThisRound && needsSeparator) {
-            outcome.text += "\n\n";
-            emit("delta", { text: "\n\n" });
-          }
-          wroteThisRound = true;
-          if (outcome.firstTokenMs === null) outcome.firstTokenMs = Date.now() - started;
-          outcome.text += t;
-          emit("delta", { text: t });
-        },
+        gate ? gate.onText : write,
       );
       outcome.usage = addUsage(outcome.usage, turn.usage);
+      if (gate?.finish() && romanVisitor) {
+        // Nothing of the rejected turn reached the visitor (its tool calls are dropped too).
+        scriptRetried = true;
+        outcome.scriptRetry = true;
+        console.warn("[chat] reply script mismatch; regenerating once", bot.id, romanVisitor);
+        turn = await deps.llm.stream(
+          {
+            model,
+            maxTokens: config.maxOutputTokens,
+            system: [{ text: staticText, cache: true }, { text: `${contextText}\n\n${scriptRetryInstruction(romanVisitor)}` }],
+            messages,
+            tools,
+          },
+          write,
+        );
+        outcome.usage = addUsage(outcome.usage, turn.usage);
+      }
 
       const toolUses = turn.content.filter((b): b is ToolUsePart => b.type === "tool_use");
       if (turn.stopReason !== "tool_use" || toolUses.length === 0) break;

@@ -24,3 +24,19 @@ export function monthKey(date: Date, timeZone: string): string {
   const m = parts.find((p) => p.type === "month")?.value;
   return `${y}-${m}-01`;
 }
+
+/**
+ * Same rules as the `check_reply` SQL gate (migration 0011), from an organization row that
+ * is already loaded. The widget config uses it to show the "paused" card on open instead of
+ * after the visitor's first message. The chat API still asks the database before every reply.
+ */
+export function replyGateFromOrg(
+  org: { plan: string; suspended?: boolean | null; trial_ends_at?: string | null; trial_reply_limit?: number | null; trial_replies_used?: number | null },
+  now: Date = new Date(),
+): "ok" | "expired" | "limit" | "suspended" {
+  if (org.suspended) return "suspended";
+  if (org.plan !== "trial") return "ok";
+  if (org.trial_ends_at && new Date(org.trial_ends_at).getTime() < now.getTime()) return "expired";
+  if (org.trial_reply_limit != null && (org.trial_replies_used ?? 0) >= org.trial_reply_limit) return "limit";
+  return "ok";
+}
