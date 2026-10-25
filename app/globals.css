@@ -19,6 +19,34 @@
   --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 1px rgb(15 23 42 / 0.02);
   --shadow-raised: 0 1px 2px rgb(15 23 42 / 0.05), 0 8px 24px -8px rgb(15 23 42 / 0.12);
   --shadow-float: 0 24px 64px -16px rgb(15 23 42 / 0.25), 0 2px 6px rgb(15 23 42 / 0.06);
+
+  /* Homepage "Warm local" tokens (docs/homepage-redesign). The dashboard keeps the indigo brand and Geist. */
+  --color-cream: #fff7ec;
+  --color-cream-2: #fcebd5;
+  --color-line: #ebd9c3;
+  --color-ink: #2b1d14;
+  --color-ink-2: #5c4a3d;
+  --color-saffron: #c2410c;
+  --color-saffron-d: #9a3412;
+  --color-marigold: #ffb627;
+  --color-marigold-t: #ffe7b8;
+  --color-rani: #be185d;
+  --color-rani-t: #fce1ec;
+  --color-teal: #115e59;
+  --color-leaf: #0f766e;
+  --color-leaf-t: #d7f0ea;
+  --color-sky-t: #e3ecff;
+  --color-indigo-icon: #3730a3;
+
+  --shadow-cta: 0 6px 0 #9a3412;
+  --shadow-cta-pressed: 0 3px 0 #9a3412;
+  --shadow-sticker: 3px 3px 0 #2b1d14;
+  --shadow-bubble: 0 10px 30px -12px rgb(91 52 20 / 0.25);
+
+  /* Homepage breakpoints: mobile ≤640, tablet ≤1080 (nav collapses ≤900). Named so Tailwind's sm/md/lg stay as they are. */
+  --breakpoint-wsm: 641px;
+  --breakpoint-wmd: 901px;
+  --breakpoint-wlg: 1081px;
 }
 
 :root {
@@ -118,5 +146,60 @@ input[type="file"]::file-selector-button:hover {
 @layer base {
   .grid > * {
     min-width: 0;
+  }
+}
+
+/* ─── Homepage: "Warm local" ─────────────────────────────────────────────── */
+/* inline: the --font-* variables are set by next/font (components/home/fonts.ts) on the homepage
+   wrapper, not on :root, so the stacks must resolve where they are used. */
+@theme inline {
+  --font-display: var(--font-bricolage), var(--font-jakarta), var(--font-hind-madurai), var(--font-mukta), system-ui, sans-serif;
+  --font-body: var(--font-jakarta), var(--font-hind-madurai), var(--font-mukta), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+html:has(.home) {
+  scroll-behavior: smooth;
+  scroll-padding-top: 84px;
+}
+.home {
+  font-family: var(--font-jakarta), var(--font-hind-madurai), var(--font-mukta), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-feature-settings: normal;
+  color: var(--color-ink);
+  background: var(--color-cream);
+  -webkit-font-smoothing: antialiased;
+}
+/* Tamil and Devanagari: the homepage script fonts, no negative tracking or uppercase. */
+.home :lang(ta) {
+  font-family: var(--font-hind-madurai), "Noto Sans Tamil", "Latha", var(--font-jakarta), sans-serif;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.home :lang(hi) {
+  font-family: var(--font-mukta), "Noto Sans Devanagari", "Mangal", var(--font-jakarta), sans-serif;
+  line-height: inherit;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.home ::selection {
+  background: var(--color-marigold-t);
+}
+.home :focus-visible {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 3px;
+}
+/* White focus ring on ink, saffron and teal backgrounds. */
+.home .on-dark :focus-visible {
+  outline-color: #fff;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:has(.home) {
+    scroll-behavior: auto;
+  }
+  .home *,
+  .home *::before,
+  .home *::after {
+    transition: none !important;
   }
 }

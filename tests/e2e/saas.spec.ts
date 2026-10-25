@@ -65,7 +65,7 @@ async function signIn(page: Page, email: string) {
 
 test("landing page sells: hero, pricing, start free", async ({ page }) => {
   await page.goto(APP);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("in your customers' language");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("in their language");
   await expect(page.locator("#pricing")).toContainText("₹2,999");
   await expect(page.locator("#pricing")).toContainText("₹9,999");
   await page.getByRole("link", { name: "Build my assistant free" }).first().click();
