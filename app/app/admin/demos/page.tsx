@@ -33,7 +33,7 @@ export default async function DemosPage() {
   const db = supabaseAdmin();
   const { data, error } = await db
     .from("demo_sites")
-    .select("id, created_at, slug, org_id, bot_id, source_url, final_url, business_name, html_bytes, mode, status, error, progress, max_pages, views, first_viewed_at, last_viewed_at, expires_at")
+    .select("id, created_at, slug, org_id, bot_id, source_url, final_url, business_name, html_bytes, mode, status, error, progress, max_pages, views, first_viewed_at, last_viewed_at, expires_at, flagged_count")
     .order("created_at", { ascending: false })
     .limit(200);
   const demos = (data ?? []) as DemoSiteRow[];
@@ -55,7 +55,15 @@ export default async function DemosPage() {
     <div className="grid gap-4">
       <AutoRefresh active={building} />
       <PageHeader title="Demos" sub="Paste a business's website and get a private link showing their homepage with a Botly assistant trained on it. For pitching that business's owner only." />
-      {error ? <Notice tone="red">Demos aren&apos;t set up yet: run <code className="font-mono text-[12px]">supabase/migrations/0009_demos.sql</code> in the Supabase SQL editor, then reload this page.</Notice> : null}
+      {error ? (
+        <Notice tone="red">
+          {/flagged_count/i.test(error.message) ? (
+            <>Run <code className="font-mono text-[12px]">supabase/migrations/0013_demo_guards.sql</code> in the Supabase SQL editor, then reload this page.</>
+          ) : (
+            <>Demos aren&apos;t set up yet: run <code className="font-mono text-[12px]">supabase/migrations/0009_demos.sql</code> in the Supabase SQL editor, then reload this page.</>
+          )}
+        </Notice>
+      ) : null}
 
       <Card title="New demo" sub={`Each demo gets ${fmtInt(demoConfig.replyLimit)} AI replies. Leads and "talk to a person" requests from a demo come to you, never to the business.`}>
         <NewDemoForm defaultDays={demoConfig.defaultDays} />
@@ -91,6 +99,7 @@ export default async function DemosPage() {
                       <span className="truncate text-[15px] font-semibold text-zinc-950">{d.business_name}</span>
                       <Badge tone={TONE[d.status]} dot>{LABEL[d.status]}</Badge>
                       {d.mode === "rendered" && d.status === "ready" ? <Badge>Rendered copy</Badge> : null}
+                      {(d.flagged_count ?? 0) > 0 ? <Badge tone="amber">{fmtInt(d.flagged_count ?? 0)} flagged</Badge> : null}
                     </div>
                     <a href={d.final_url ?? d.source_url} target="_blank" rel="noreferrer" className="text-[13px] text-zinc-500 hover:text-zinc-900 hover:underline">{host}</a>
                     {working && d.progress ? <p className="mt-1.5 text-[13px] text-brand-700" aria-live="polite">{d.progress}</p> : null}

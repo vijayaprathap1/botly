@@ -454,6 +454,71 @@ describe("chat engine: the visitor always gets a reply", () => {
     expect(bot.org.trial_replies_used).toBe(2);
   });
 
+  it("caps a demo conversation, shows the demo contact card, and does not count that turn", async () => {
+    vi.stubEnv("DEMO_MAX_AI_REPLIES_PER_CONVERSATION", "1");
+    vi.stubEnv("MAX_AI_REPLIES_PER_CONVERSATION", "30");
+    const bot = [...store.bots.values()][0]!;
+    Object.assign(bot.org, {
+      is_demo: true,
+      plan: "trial",
+      trial_reply_limit: 10,
+      trial_replies_used: 0,
+      trial_ends_at: new Date(Date.now() + 86_400_000).toISOString(),
+    });
+    bot.fallback_contact = { phone: "+91 90000 00000", whatsapp: "+91 90000 00001", email: "demo@botly.test" };
+    const llm = new QueueLlm([{ text: "Hello from the preview." }, { text: "should not run" }]);
+    const d = deps(llm);
+    const first = await runChat(d, req("a"), ctx, () => {});
+    expect(first.text).toBe("Hello from the preview.");
+    const prompt = llm.calls[0]!.system.map((s) => s.text).join("\n");
+    expect(prompt).toContain("Botly preview");
+    expect(prompt).toContain("## Reply language");
+    expect(prompt).toContain("first reply");
+    expect(llm.calls[0]!.budgetLane).toBe("demo");
+    events.length = 0;
+    const second = await runChat(d, req("b", { conversationId: first.conversationId }), ctx, emit);
+    expect(llm.calls).toHaveLength(1);
+    expect(second.text).toMatch(/limit for this chat/);
+    const cards = events.filter((e) => e.event === "tool_card").map((e) => e.data);
+    expect(cards[0]).toMatchObject({ type: "lead_form" });
+    expect(cards[1]).toMatchObject({ type: "fallback_contact", reason: "cap", contact: { email: "demo@botly.test", phone: "+91 90000 00000" } });
+    expect(bot.org.trial_replies_used).toBe(1);
+  });
+
+  it("does not apply the demo conversation cap to a real customer", async () => {
+    vi.stubEnv("DEMO_MAX_AI_REPLIES_PER_CONVERSATION", "1");
+    vi.stubEnv("MAX_AI_REPLIES_PER_CONVERSATION", "30");
+    const bot = [...store.bots.values()][0]!;
+    Object.assign(bot.org, { is_demo: false, plan: "starter" });
+    const llm = new QueueLlm([{ text: "one" }, { text: "two" }]);
+    const d = deps(llm);
+    const first = await runChat(d, req("a"), ctx, () => {});
+    await runChat(d, req("b", { conversationId: first.conversationId }), ctx, () => {});
+    expect(llm.calls).toHaveLength(2);
+    expect(llm.calls[0]!.budgetLane).toBe("customer");
+  });
+
+  it("says it is a demo assistant on the first FAQ answer", async () => {
+    const bot = [...store.bots.values()][0]!;
+    Object.assign(bot.org, { is_demo: true, plan: "trial", trial_reply_limit: 10, trial_replies_used: 0, trial_ends_at: new Date(Date.now() + 86_400_000).toISOString() });
+    const llm = new QueueLlm([{ text: "should not be used" }]);
+    const out = await runChat(deps(llm), req("Do you stitch blouses? What sizes?"), ctx, emit);
+    expect(llm.calls).toHaveLength(0);
+    expect(out.text.startsWith("I'm a demo assistant.")).toBe(true);
+    expect(out.text).toContain("650");
+  });
+
+  it("refuses a demo test token once the preview date has passed", async () => {
+    const bot = [...store.bots.values()][0]!;
+    Object.assign(bot.org, { is_demo: true, plan: "trial", trial_ends_at: new Date(Date.now() - 60_000).toISOString(), trial_reply_limit: 10, trial_replies_used: 0 });
+    const llm = new QueueLlm([{ text: "no" }]);
+    const out = await runChat(deps(llm), req("hi", { testToken: bot.test_token }), ctx, emit);
+    expect(out.text).toBe("");
+    expect(llm.calls).toHaveLength(0);
+    expect(events.find((e) => e.event === "error")!.data).toMatchObject({ code: "inactive" });
+    expect(events.some((e) => e.event === "tool_card")).toBe(false);
+  });
+
   it("does not spend a trial reply when every model fails", async () => {
     const bot = [...store.bots.values()][0]!;
     Object.assign(bot.org, { plan: "trial", trial_reply_limit: 2, trial_replies_used: 0, trial_ends_at: new Date(Date.now() + 86_400_000).toISOString() });

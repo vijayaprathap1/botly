@@ -10,7 +10,8 @@ import { runOnboarding } from "../onboarding/pipeline";
 import type { DemoSiteRow, FallbackContact } from "../types";
 import { estimateTokens } from "../tokens";
 import { renderEnabled, renderSite, type Rendered } from "./render";
-import { cleanSnapshot, fetchHomepage, looksBlocked, needsRendering, pickBusinessName, SnapshotError, type Fetched } from "./snapshot";
+import { demoTopUpPatch, newTestToken, swapSnapshotToken } from "./guards";
+import { assertHomepageAllowed, cleanSnapshot, fetchHomepage, looksBlocked, needsRendering, pickBusinessName, SnapshotError, type Fetched } from "./snapshot";
 import { parsePublicUrl } from "./url-guard";
 
 /**
@@ -138,6 +139,7 @@ export async function copyHomepage(db: SupabaseClient, demo: DemoSiteRow, opts: 
     let page: Fetched | null = null;
     let rendered: Rendered | null = null;
     let why: SnapshotError | null = null;
+    if (opts.forceRender) await assertHomepageAllowed(demo.source_url);
     if (!opts.forceRender) {
       try {
         page = await fetchHomepage(demo.source_url);
@@ -203,8 +205,8 @@ export async function trainDemo(db: SupabaseClient, demo: DemoSiteRow, userId: s
       const { data: pages } = await db.from("knowledge_sources").select("title, url, content").eq("bot_id", demo.bot_id).eq("type", "page").eq("status", "approved").limit(12);
       ownerNotes = (pages ?? []).map((p) => `Page: ${p.title} (${p.url})\n${String(p.content).slice(0, 4000)}`).join("\n\n").slice(0, 20_000) || undefined;
     }
-    await runOnboarding(
-      { db, botId: demo.bot_id, userId, url: demo.mode === "rendered" ? null : demo.final_url ?? demo.source_url, ownerNotes, maxPages: demo.max_pages, draft: true, selfServe: true, skipSafetyCheck: true, budgetMs },
+    const trained = await runOnboarding(
+      { db, botId: demo.bot_id, userId, url: demo.mode === "rendered" ? null : demo.final_url ?? demo.source_url, ownerNotes, maxPages: demo.max_pages, draft: true, selfServe: true, skipSafetyCheck: true, aiLane: "demo", budgetMs },
       (e) => {
         // Progress is for the admin's list: write at most once a second.
         if (e.stage === "page" && Date.now() - last < 1000) return;
@@ -219,6 +221,9 @@ export async function trainDemo(db: SupabaseClient, demo: DemoSiteRow, userId: s
       await db.from("knowledge_sources").update({ status: "approved" }).eq("bot_id", demo.bot_id).eq("type", "page");
     }
     await setDemo(db, demo.id, { status: "ready", progress: null, error: null });
+    // 0013 adds this column. A missing column must not leave the demo stuck in "training".
+    const flagged = await db.from("demo_sites").update({ flagged_count: trained.flagged }).eq("id", demo.id);
+    if (flagged.error && !/flagged_count/i.test(flagged.error.message)) console.error("[demo] flagged_count", demo.id, flagged.error.message);
     return true;
   } catch (e) {
     console.error("[demo] train", demo.id, e instanceof Error ? e.message : e);
@@ -240,16 +245,38 @@ export async function getDemo(db: SupabaseClient, id: string): Promise<DemoSiteR
   return (data as DemoSiteRow | null) ?? null;
 }
 
-/** Moves the expiry, and the reply gate with it. */
-export async function setDemoExpiry(db: SupabaseClient, demo: DemoSiteRow, expires: Date): Promise<void> {
+/**
+ * Replace the bot's test token so a copy taken from the page source stops working.
+ * When the homepage HTML is kept, rewrite the token in it so a later extension still chats.
+ */
+export async function rotateDemoToken(db: SupabaseClient, demo: Pick<DemoSiteRow, "id" | "bot_id" | "html">, opts: { rewriteHtml?: boolean } = {}): Promise<void> {
+  const { data: bot } = await db.from("bots").select("test_token").eq("id", demo.bot_id).maybeSingle();
+  const next = newTestToken();
+  const { error } = await db.from("bots").update({ test_token: next }).eq("id", demo.bot_id);
+  if (error) console.error("[demo] rotate token", demo.bot_id, error.message);
+  if (opts.rewriteHtml && demo.html && bot?.test_token) {
+    await setDemo(db, demo.id, { html: swapSnapshotToken(demo.html, bot.test_token as string, next) });
+  }
+}
+
+/** Moves the expiry, and the reply gate with it. `topUp` clears a used-up trial so chat works again. */
+export async function setDemoExpiry(db: SupabaseClient, demo: DemoSiteRow, expires: Date, opts: { topUp?: boolean } = {}): Promise<void> {
   const iso = expires.toISOString();
   const live = expires.getTime() > Date.now();
   await setDemo(db, demo.id, { expires_at: iso, ...(live && demo.status === "expired" && demo.html ? { status: "ready" } : !live && demo.status === "ready" ? { status: "expired" } : {}) });
-  await db.from("organizations").update({ trial_ends_at: iso }).eq("id", demo.org_id);
+  await db.from("organizations").update(opts.topUp && live ? demoTopUpPatch(expires) : { trial_ends_at: iso }).eq("id", demo.org_id);
+}
+
+/** Ends the preview now and kills the token baked into the page. */
+export async function expireDemoNow(db: SupabaseClient, demo: DemoSiteRow): Promise<void> {
+  await rotateDemoToken(db, demo, { rewriteHtml: true });
+  await setDemoExpiry(db, demo, new Date(Date.now() - 1000));
 }
 
 /** Deletes the demo with its assistant, knowledge, conversations and leads (all cascade from the org). */
 export async function deleteDemo(db: SupabaseClient, demo: DemoSiteRow): Promise<void> {
+  // Kill the token before the row goes, so a copied page cannot chat during the delete.
+  await rotateDemoToken(db, demo);
   const { data: org } = await db.from("organizations").select("is_demo").eq("id", demo.org_id).maybeSingle();
   // Never delete an organization that isn't a demo, whatever the row says.
   if (org?.is_demo) await db.from("organizations").delete().eq("id", demo.org_id);
@@ -258,8 +285,9 @@ export async function deleteDemo(db: SupabaseClient, demo: DemoSiteRow): Promise
 
 /** Daily: expire demos past their date, free their HTML, and remove them for good 30 days later. */
 export async function sweepDemos(db: SupabaseClient, now = new Date()): Promise<{ expired: number; deleted: number }> {
-  const { data: due, error } = await db.from("demo_sites").select("id").in("status", ["ready", "failed", "pending", "copying", "training"]).lt("expires_at", now.toISOString());
+  const { data: due, error } = await db.from("demo_sites").select("id, bot_id, html").in("status", ["ready", "failed", "pending", "copying", "training"]).lt("expires_at", now.toISOString());
   if (error) return { expired: 0, deleted: 0 }; // table not created yet
+  for (const d of due ?? []) await rotateDemoToken(db, { id: d.id as string, bot_id: d.bot_id as string, html: d.html as string | null });
   if (due?.length) await db.from("demo_sites").update({ status: "expired", html: null, html_bytes: null, progress: null }).in("id", due.map((d) => d.id as string));
   const cutoff = new Date(now.getTime() - 30 * 86_400_000).toISOString();
   const { data: old } = await db.from("demo_sites").select("*").eq("status", "expired").lt("expires_at", cutoff).limit(200);

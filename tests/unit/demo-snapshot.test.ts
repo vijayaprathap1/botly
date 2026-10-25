@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { parse } from "node-html-parser";
 import { describe, expect, it } from "vitest";
-import { absoluteCss, cleanSnapshot, looksBlocked, needsRendering, ORIGIN_TOKEN, pickBrandColor, pickBusinessName, SnapshotError } from "@/lib/demo/snapshot";
+import { absoluteCss, cleanSnapshot, fetchHomepage, looksBlocked, needsRendering, ORIGIN_TOKEN, pickBrandColor, pickBusinessName, ROBOTS_DENIED, SnapshotError } from "@/lib/demo/snapshot";
 import { assertPublicUrl, isPrivateAddress, parsePublicUrl, safeFetch, UnsafeUrlError } from "@/lib/demo/url-guard";
 
 const fixture = readFileSync("tests/fixtures/demo/aggressive.html", "utf8");
@@ -146,5 +146,65 @@ describe("url guard", () => {
     await expect(safeFetch("https://big.example.com", { fetchImpl: big, resolve: pub, maxBytes: 1000 })).rejects.toThrow(/too large/);
     const ok = (async () => new Response("<html>ok</html>", { headers: { "content-type": "text/html" } })) as unknown as typeof fetch;
     expect((await safeFetch("https://ok.example.com", { fetchImpl: ok, resolve: pub })).body).toBe("<html>ok</html>");
+  });
+});
+
+describe("homepage snapshot guards", () => {
+  const pub = async () => ["93.184.216.34"];
+  const pageHtml = `<html><head><title>Shop</title></head><body><main><p>${"Fresh sweets from the shop counter. ".repeat(12)}</p></main></body></html>`;
+
+  it("fails the copy when robots.txt disallows the homepage and does not fetch the page", async () => {
+    const seen: string[] = [];
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(input);
+      seen.push(u);
+      const ua = new Headers(init?.headers).get("user-agent") ?? "";
+      expect(ua).toContain("BotlyBot");
+      expect(ua).not.toMatch(/Chrome\/\d/);
+      if (u.endsWith("/robots.txt")) return new Response("User-agent: *\nDisallow: /\n", { status: 200, headers: { "content-type": "text/plain" } });
+      return new Response(pageHtml, { status: 200, headers: { "content-type": "text/html" } });
+    }) as typeof fetch;
+    await expect(fetchHomepage("https://shop.example/menu", fetchImpl, { resolve: pub })).rejects.toThrow(ROBOTS_DENIED);
+    expect(seen.every((u) => u.endsWith("/robots.txt"))).toBe(true);
+  });
+
+  it("fetches an allowed homepage as BotlyBot and refuses a redirect to metadata", async () => {
+    const seen: string[] = [];
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(input);
+      seen.push(u);
+      const ua = new Headers(init?.headers).get("user-agent") ?? "";
+      expect(ua).toContain("BotlyBot");
+      if (u.endsWith("/robots.txt")) return new Response("User-agent: *\nDisallow: /admin\n", { status: 200, headers: { "content-type": "text/plain" } });
+      if (u.endsWith("/start")) return new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data" } });
+      return new Response(pageHtml, { status: 200, headers: { "content-type": "text/html" } });
+    }) as typeof fetch;
+    const ok = await fetchHomepage("https://shop.example/", fetchImpl, { resolve: pub });
+    expect(ok.html).toContain("Fresh sweets");
+    expect(ok.finalUrl).toBe("https://shop.example/");
+    seen.length = 0;
+    await expect(fetchHomepage("https://shop.example/start", fetchImpl, { resolve: pub })).rejects.toThrow(/public internet/);
+    expect(seen.some((u) => u.includes("169.254"))).toBe(false);
+  });
+});
+
+describe("test-only loopback allowance", () => {
+  const harness = { BOTLY_TEST_ALLOW_LOOPBACK: "1", NEXT_PUBLIC_APP_URL: "http://localhost:3000" };
+  it("allows the e2e fixture site on localhost only with the harness flag", async () => {
+    const { assertPublicUrl, loopbackAllowedForTests } = await import("@/lib/demo/url-guard");
+    expect(loopbackAllowedForTests(harness)).toBe(true);
+    expect((await assertPublicUrl("http://localhost:4173/site", undefined, harness)).toString()).toBe("http://localhost:4173/site");
+    expect((await assertPublicUrl("http://127.0.0.1:4173/", undefined, harness)).port).toBe("4173");
+  });
+  it("is never on in production or on Vercel, and never opens private ranges", async () => {
+    const { assertPublicUrl, loopbackAllowedForTests, UnsafeUrlError } = await import("@/lib/demo/url-guard");
+    expect(loopbackAllowedForTests({})).toBe(false);
+    expect(loopbackAllowedForTests({ ...harness, VERCEL: "1" })).toBe(false);
+    expect(loopbackAllowedForTests({ ...harness, VERCEL_ENV: "production" })).toBe(false);
+    expect(loopbackAllowedForTests({ ...harness, NEXT_PUBLIC_APP_URL: "https://botly.in" })).toBe(false);
+    await expect(assertPublicUrl("http://localhost:4173/site", undefined, { NEXT_PUBLIC_APP_URL: "https://botly.in" })).rejects.toThrow(UnsafeUrlError);
+    for (const u of ["http://169.254.169.254/", "http://10.0.0.5/", "http://192.168.1.1/"]) {
+      await expect(assertPublicUrl(u, undefined, harness), u).rejects.toThrow(UnsafeUrlError);
+    }
   });
 });

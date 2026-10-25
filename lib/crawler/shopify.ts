@@ -1,3 +1,4 @@
+import { safeFetch, type Resolver } from "../demo/url-guard";
 import { htmlToText } from "./extract";
 
 type ShopifyVariant = { price: string; available?: boolean; option1?: string | null; option2?: string | null; option3?: string | null };
@@ -38,19 +39,27 @@ export function formatShopifyProduct(p: ShopifyProduct, origin: string, currency
 }
 
 /** Pulls public products from a Shopify store's /products.json (up to `limit`). Returns null if not Shopify. */
-export async function fetchShopifyProducts(origin: string, limit = 250, timeoutMs = 10_000): Promise<CrawledProduct[] | null> {
+export async function fetchShopifyProducts(
+  origin: string,
+  limit = 250,
+  timeoutMs = 10_000,
+  net: { fetchImpl?: typeof fetch; resolve?: Resolver; userAgent?: string } = {},
+): Promise<CrawledProduct[] | null> {
+  const headers = { Accept: "application/json", "User-Agent": net.userAgent ?? "Mozilla/5.0 (compatible; BotlyBot/1.0; +https://botly.app/bot)" };
   try {
-    const res = await fetch(`${origin}/products.json?limit=${Math.min(limit, 250)}`, {
-      headers: { Accept: "application/json", "User-Agent": "BotlyBot/1.0" },
-      signal: AbortSignal.timeout(timeoutMs),
+    const res = await safeFetch(`${origin}/products.json?limit=${Math.min(limit, 250)}`, {
+      timeoutMs,
+      headers,
+      fetchImpl: net.fetchImpl,
+      resolve: net.resolve,
     });
-    if (!res.ok || !(res.headers.get("content-type") ?? "").includes("json")) return null;
-    const data = (await res.json()) as { products?: ShopifyProduct[] };
+    if (res.status !== 200 || !(res.headers.get("content-type") ?? "").includes("json")) return null;
+    const data = JSON.parse(res.body) as { products?: ShopifyProduct[] };
     if (!Array.isArray(data.products)) return null;
     let currency: string | null = null;
     try {
-      const cart = await fetch(`${origin}/cart.js`, { signal: AbortSignal.timeout(5000) });
-      if (cart.ok) currency = ((await cart.json()) as { currency?: string }).currency ?? null;
+      const cart = await safeFetch(`${origin}/cart.js`, { timeoutMs: 5_000, headers, fetchImpl: net.fetchImpl, resolve: net.resolve });
+      if (cart.status === 200) currency = (JSON.parse(cart.body) as { currency?: string }).currency ?? null;
     } catch {
       /* currency is a nice-to-have */
     }

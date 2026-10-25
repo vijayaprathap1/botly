@@ -10,7 +10,7 @@ bash scripts/local-db.sh > /dev/null
 rm -f /tmp/botly-magic-links.log /tmp/botly-fake-resend.jsonl
 POSTGREST_BIN="${POSTGREST_BIN:-postgrest}" bash scripts/local-stack/start.sh > /dev/null
 node tests/e2e/fake-resend.mjs > /tmp/botly-fake-resend.log 2>&1 & echo $! > /tmp/botly-resend.pid
-npx next start -p 3000 > /tmp/botly-next.log 2>&1 & echo $! > /tmp/botly-next.pid
+BOTLY_TEST_ALLOW_LOOPBACK=1 npx next start -p 3000 > /tmp/botly-next.log 2>&1 & echo $! > /tmp/botly-next.pid
 for i in $(seq 1 30); do curl -sf http://localhost:3000/privacy > /dev/null && break; sleep 0.5; done
 status=0
 MAGIC_LINK_LOG=/tmp/botly-magic-links.log npx playwright test "$@" || status=$?

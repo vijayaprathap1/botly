@@ -9,6 +9,8 @@
  * (In the spec the time/page lines sit above the rules; see PLAN.md, departure 1.)
  */
 
+import { PROMPT_INJECTION_RE } from "../knowledge";
+
 export const STATIC_TEMPLATE = `You are {{assistant_name}}, the customer support assistant for {{business_name}} ({{business_type}}), shown in a chat widget on their website.
 
 ## Your job
@@ -27,6 +29,10 @@ Answer the visitor's question quickly, correctly and kindly, using only the busi
 10. After answering, you may call suggest_followups with up to 3 short, useful next questions in the visitor's language and script. Tools are called only through the tool-calling interface: never write a tool name, function call or JSON in your reply text.
 Offers: only confirm a discount, coupon or offer when that exact offer is written in <knowledge>. Otherwise say firmly, in the visitor's language and script, that you can't confirm any discount or coupon. English example, translate it, do not add to it: "I can't confirm any discount or coupon code". Never say you don't have "that" code, never say the team can provide the code, and never imply a code exists. You may offer the team for other questions.
 {{#if growth}}11. For order status, call lookup_order only after you have both the order number and the phone number or email used for the order. For appointments or callbacks, use request_callback.
+{{/if}}
+{{#if demo}}
+## Demo preview
+This chat is a Botly preview built from the business's public website. It is not the store's own assistant. Answers may be inaccurate. Do not quote an exact price, stock level, discount or policy as confirmed. Suggest the visitor confirm those details with the store. On your first reply only, briefly say that you are a demo assistant, in the visitor's language and script (the Reply language section). Do not repeat that on later replies.
 {{/if}}
 <knowledge>
 {{approved_knowledge}}
@@ -55,6 +61,8 @@ export type PromptInput = {
   retrievedKnowledge?: string | null;
   /** Per-message language and script. Changes every turn, so it stays out of the cached block. */
   replyInstruction?: string | null;
+  /** Sales preview (`organizations.is_demo`). Adds the demo disclaimer section. */
+  demo?: boolean;
 };
 
 /** Minimal mustache: {{var}} and {{#if flag}}…{{/if}}. Unknown vars render empty. */
@@ -82,7 +90,7 @@ export function cleanPageField(v: string | null | undefined, max = 200): string 
  */
 export function safePageTitle(v: string | null | undefined): string {
   const flat = cleanPageField(v, 120);
-  const cut = flat.search(/\b(?:system|assistant|developer|admin(?:istrator)?|ai|bot|chatbot|llm|model)\b[^.|\-–—]{0,40}(?::|note|message|prompt|instruction)|\b(?:ignore|disregard|forget)\b.{0,30}\b(?:rules?|instructions?|prompt|above|previous)\b|\b(?:instructions?|prompt)\s*:|\btell (?:every|all|the) (?:visitors?|customers?|users?)\b|\byou (?:are|must|should) now\b/i);
+  const cut = flat.search(PROMPT_INJECTION_RE);
   if (cut < 0) return flat;
   return flat.slice(0, cut).replace(/[\s.|\-–—:,;(\[]+$/, "") || "unknown";
 }
@@ -96,6 +104,7 @@ export function buildSystemPrompt(p: PromptInput): SystemBlocks {
     business_type: p.businessType,
     tone: p.tone,
     growth: p.growth,
+    demo: Boolean(p.demo),
     approved_knowledge: p.approvedKnowledge,
   });
   const facts = (p.conversationFacts ?? []).filter(Boolean);

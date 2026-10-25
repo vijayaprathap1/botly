@@ -1,3 +1,4 @@
+import { assertPublicUrl, safeFetch, UnsafeUrlError, type Resolver } from "../demo/url-guard";
 import { extractPage, splitBoilerplate, type ExtractedPage } from "./extract";
 import { parseRobots, type Robots } from "./robots";
 import { fetchShopifyProducts, type CrawledProduct } from "./shopify";
@@ -13,7 +14,10 @@ export type CrawlEvent =
 
 export type CrawlResult = { pages: ExtractedPage[]; siteWide: string; products: CrawledProduct[] };
 
-const UA = "Mozilla/5.0 (compatible; BotlyBot/1.0; +https://botly.app/bot)";
+/** Honest crawler identity. The homepage snapshot uses this too, not a browser UA. */
+export const CRAWLER_UA = "Mozilla/5.0 (compatible; BotlyBot/1.0; +https://botly.app/bot)";
+
+export type FetchNet = { fetchImpl?: typeof fetch; resolve?: Resolver };
 const SKIP = /\.(jpe?g|png|gif|webp|svg|ico|pdf|zip|mp4|mp3|css|js|xml|json|woff2?)$|\/(cart|checkout|account|login|register|search|wishlist|cdn-cgi)(\/|$)|\/collections\/[^/]+\/products\//i;
 
 /** Query keys that only identify a campaign or click, not a page. */
@@ -43,29 +47,54 @@ export function normalizeUrl(u: string): string | null {
   }
 }
 
-async function fetchText(url: string, timeoutMs: number, accept = "text/html"): Promise<{ text: string; type: string; finalUrl: string } | null> {
+/**
+ * GET a public page through the same SSRF guard as demo snapshots: private IPs,
+ * localhost, metadata addresses and redirects onto them are refused.
+ * A refusal or a network error skips the URL instead of failing the whole crawl.
+ */
+export async function fetchPublicText(url: string, timeoutMs: number, accept = "text/html", net: FetchNet = {}): Promise<{ text: string; type: string; finalUrl: string } | null> {
   try {
-    const res = await fetch(url, { headers: { "User-Agent": UA, Accept: accept }, redirect: "follow", signal: AbortSignal.timeout(timeoutMs) });
-    if (!res.ok) return null;
+    const res = await safeFetch(url, {
+      timeoutMs,
+      maxBytes: 3_000_000,
+      headers: { "User-Agent": CRAWLER_UA, Accept: accept },
+      fetchImpl: net.fetchImpl,
+      resolve: net.resolve,
+    });
+    if (res.status < 200 || res.status >= 300) return null;
     const type = res.headers.get("content-type") ?? "";
-    const len = Number(res.headers.get("content-length") ?? 0);
-    if (len > 3_000_000) return null;
-    return { text: (await res.text()).slice(0, 3_000_000), type, finalUrl: res.url || url };
-  } catch {
+    return { text: res.body.slice(0, 3_000_000), type, finalUrl: res.finalUrl };
+  } catch (e) {
+    if (e instanceof UnsafeUrlError) return null;
     return null;
   }
 }
 
-async function readSitemaps(urls: string[], host: string, timeoutMs: number, depth = 0): Promise<string[]> {
+/** robots.txt for an origin. Missing or unreadable means everything is allowed, same as the crawler. */
+export async function loadRobots(origin: string, timeoutMs: number, net: FetchNet = {}): Promise<Robots> {
+  const rt = await fetchPublicText(`${origin}/robots.txt`, timeoutMs, "text/plain", net);
+  if (rt && !/html/i.test(rt.type)) return parseRobots(rt.text);
+  return parseRobots("");
+}
+
+export function robotsAllows(robots: Robots, url: string): boolean {
+  try {
+    return robots.isAllowed(new URL(url).pathname || "/");
+  } catch {
+    return false;
+  }
+}
+
+async function readSitemaps(urls: string[], host: string, timeoutMs: number, net: FetchNet, depth = 0): Promise<string[]> {
   const out: string[] = [];
   for (const sm of urls.slice(0, 6)) {
-    const r = await fetchText(sm, timeoutMs, "application/xml,text/xml");
+    const r = await fetchPublicText(sm, timeoutMs, "application/xml,text/xml", net);
     if (!r) continue;
     const locs = [...r.text.matchAll(/<loc>\s*(?:<!\[CDATA\[)?([^<\]]+?)(?:\]\]>)?\s*<\/loc>/gi)].map((m) => m[1]!.trim());
     if (/<sitemapindex/i.test(r.text) && depth < 1) {
       // Shopify & WordPress split sitemaps by type; pages/products first.
       const sorted = locs.sort((a, b) => Number(/page|product/i.test(b)) - Number(/page|product/i.test(a)));
-      out.push(...(await readSitemaps(sorted, host, timeoutMs, depth + 1)));
+      out.push(...(await readSitemaps(sorted, host, timeoutMs, net, depth + 1)));
     } else {
       out.push(...locs.filter((l) => {
         try {
@@ -82,27 +111,32 @@ async function readSitemaps(urls: string[], host: string, timeoutMs: number, dep
 /** Crawl a site: robots.txt → sitemap.xml (else follow same-domain links) → up to maxPages pages; Shopify products too. */
 export async function crawlSite(
   startUrl: string,
-  opts: { maxPages: number; timeoutMs?: number; concurrency?: number },
+  opts: { maxPages: number; timeoutMs?: number; concurrency?: number; fetchImpl?: typeof fetch; resolve?: Resolver },
   onEvent: (e: CrawlEvent) => void,
 ): Promise<CrawlResult> {
   const timeoutMs = opts.timeoutMs ?? 10_000;
+  const net: FetchNet = { fetchImpl: opts.fetchImpl, resolve: opts.resolve };
   const start = normalizeUrl(startUrl);
   if (!start) throw new Error("Invalid URL");
+  try {
+    await assertPublicUrl(start, opts.resolve);
+  } catch (e) {
+    throw new Error(e instanceof Error ? e.message : "That address isn't on the public internet.");
+  }
   const origin = new URL(start).origin;
   const host = new URL(start).host;
   onEvent({ stage: "start", message: `Reading ${origin}` });
 
-  let robots: Robots = parseRobots("");
-  const rt = await fetchText(`${origin}/robots.txt`, timeoutMs, "text/plain");
-  if (rt && !/html/i.test(rt.type)) robots = parseRobots(rt.text);
-  onEvent({ stage: "robots", message: rt ? "robots.txt found and respected" : "No robots.txt (everything allowed)" });
+  const rt = await fetchPublicText(`${origin}/robots.txt`, timeoutMs, "text/plain", net);
+  const robots = rt && !/html/i.test(rt.type) ? parseRobots(rt.text) : parseRobots("");
+  onEvent({ stage: "robots", message: rt && !/html/i.test(rt.type) ? "robots.txt found and respected" : "No robots.txt (everything allowed)" });
 
   const sitemapUrls = robots.sitemaps.length ? robots.sitemaps : [`${origin}/sitemap.xml`];
-  const fromSitemap = (await readSitemaps(sitemapUrls, host, timeoutMs)).map(normalizeUrl).filter((u): u is string => Boolean(u));
+  const fromSitemap = (await readSitemaps(sitemapUrls, host, timeoutMs, net)).map(normalizeUrl).filter((u): u is string => Boolean(u));
   onEvent({ stage: "sitemap", message: fromSitemap.length ? `Sitemap lists ${fromSitemap.length} pages` : "No sitemap, following links", count: fromSitemap.length });
 
   // Shopify product catalogue (separate from the page budget).
-  const productsPromise = fetchShopifyProducts(origin);
+  const productsPromise = fetchShopifyProducts(origin, 250, timeoutMs, net);
 
   const queue: string[] = [start, ...fromSitemap.filter((u) => !/\/products\//.test(u) || fromSitemap.length < opts.maxPages)];
   const seen = new Set<string>();
@@ -116,7 +150,7 @@ export async function crawlSite(
       seen.add(u);
       const path = new URL(u).pathname;
       if (SKIP.test(path)) continue;
-      if (!robots.isAllowed(path)) {
+      if (!robotsAllows(robots, u)) {
         onEvent({ stage: "skip", message: `robots.txt disallows ${path}` });
         continue;
       }
@@ -127,7 +161,7 @@ export async function crawlSite(
 
   let inFlight = 0;
   const processUrl = async (u: string) => {
-    const r = await fetchText(u, timeoutMs);
+    const r = await fetchPublicText(u, timeoutMs, "text/html", net);
     if (!r || !/html/i.test(r.type)) return;
     if (new URL(r.finalUrl).host !== host) return;
     const page = extractPage(r.text, u);

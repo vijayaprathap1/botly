@@ -17,6 +17,8 @@ export type LlmRequest = {
   tools: ToolDef[];
   maxTokens: number;
   signal?: AbortSignal;
+  /** Demo calls draw on the demo share of the shared AI budget. */
+  budgetLane?: "customer" | "demo";
 };
 
 export type LlmTurn = {

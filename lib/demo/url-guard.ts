@@ -47,8 +47,39 @@ export function isPrivateAddress(ip: string): boolean {
   );
 }
 
+/** 127.0.0.0/8 and ::1 only (never private ranges or cloud metadata). */
+export function isLoopbackAddress(ip: string): boolean {
+  const v4 = ipv4Parts(ip);
+  if (v4) return v4[0] === 127;
+  const v6 = ip.toLowerCase().replace(/^\[|\]$/g, "");
+  return v6 === "::1" || /^::ffff:127\./.test(v6);
+}
+
+/**
+ * TEST ONLY. The end-to-end harness crawls its own fixture site on localhost. Loopback
+ * (and nothing else) is allowed only when BOTLY_TEST_ALLOW_LOOPBACK=1 AND the app is not
+ * on Vercel AND the app's own URL is localhost, so it can never be on in production.
+ * Unit tests inject a resolver / fetch instead and don't need this.
+ */
+export function loopbackAllowedForTests(env: Record<string, string | undefined> = process.env): boolean {
+  if (env.BOTLY_TEST_ALLOW_LOOPBACK !== "1") return false;
+  if (env.VERCEL || env.VERCEL_ENV || env.VERCEL_URL) return false;
+  let appHost = "";
+  try {
+    appHost = new URL(env.NEXT_PUBLIC_APP_URL || "").hostname;
+  } catch {
+    return false;
+  }
+  return appHost === "localhost" || appHost === "127.0.0.1";
+}
+
+function isTestLoopbackUrl(url: URL, env?: Record<string, string | undefined>): boolean {
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  return (host === "localhost" || (isIP(host) > 0 && isLoopbackAddress(host))) && loopbackAllowedForTests(env);
+}
+
 /** Normalises what the admin typed ("shop.com", "http://shop.com/") into a URL, or throws. */
-export function parsePublicUrl(input: string): URL {
+export function parsePublicUrl(input: string, env?: Record<string, string | undefined>): URL {
   const raw = input.trim();
   if (!raw) throw new UnsafeUrlError("Enter a website address.");
   let url: URL;
@@ -59,6 +90,10 @@ export function parsePublicUrl(input: string): URL {
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new UnsafeUrlError("Only http and https websites can be copied.");
   if (url.username || url.password) throw new UnsafeUrlError("Remove the username and password from the address.");
+  if (isTestLoopbackUrl(url, env)) {
+    url.hash = "";
+    return url;
+  }
   if (url.port && !["80", "443"].includes(url.port)) throw new UnsafeUrlError("Only standard web ports (80, 443) are allowed.");
   const host = url.hostname.replace(/^\[|\]$/g, "");
   if (!host.includes(".") && !host.includes(":")) throw new UnsafeUrlError("Enter a full domain, like shop.com.");
@@ -68,12 +103,13 @@ export function parsePublicUrl(input: string): URL {
   return url;
 }
 
-type Resolver = (host: string) => Promise<string[]>;
+export type Resolver = (host: string) => Promise<string[]>;
 const systemResolver: Resolver = async (host) => (await lookup(host, { all: true, verbatim: true })).map((a) => a.address);
 
 /** Throws unless the URL is public http(s) and every address its host resolves to is public. */
-export async function assertPublicUrl(input: string | URL, resolve: Resolver = systemResolver): Promise<URL> {
-  const url = parsePublicUrl(String(input));
+export async function assertPublicUrl(input: string | URL, resolve: Resolver = systemResolver, env?: Record<string, string | undefined>): Promise<URL> {
+  const url = parsePublicUrl(String(input), env);
+  if (isTestLoopbackUrl(url, env)) return url;
   const host = url.hostname.replace(/^\[|\]$/g, "");
   if (isIP(host)) return url; // already checked above
   let addresses: string[];

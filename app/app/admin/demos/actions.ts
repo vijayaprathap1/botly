@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { copyHomepage, deleteDemo, getDemo, setDemoExpiry, trainDemo } from "@/lib/demo/service";
+import { copyHomepage, deleteDemo, expireDemoNow, getDemo, setDemoExpiry, trainDemo } from "@/lib/demo/service";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 const PATH = "/app/admin/demos";
@@ -19,9 +19,9 @@ export async function demoAction(form: FormData) {
   if (action === "extend") {
     // From today if it has already lapsed, so "+14 days" always means two more weeks of use.
     const base = Math.max(Date.now(), new Date(demo.expires_at).getTime());
-    await setDemoExpiry(db, demo, new Date(base + 14 * 86_400_000));
+    await setDemoExpiry(db, demo, new Date(base + 14 * 86_400_000), { topUp: true });
   } else if (action === "expire") {
-    await setDemoExpiry(db, demo, new Date());
+    await expireDemoNow(db, demo);
   } else if (action === "delete") {
     await deleteDemo(db, demo);
   } else if (action === "recopy") {

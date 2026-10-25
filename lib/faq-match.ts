@@ -1,4 +1,4 @@
-import type { KnowledgeSource } from "./knowledge";
+import { looksLikePromptInjection, type KnowledgeSource } from "./knowledge";
 
 /**
  * Answer a visitor from an approved FAQ only when the question is the same
@@ -6,7 +6,6 @@ import type { KnowledgeSource } from "./knowledge";
  */
 export type FaqHit = { sourceId: string; title: string; answer: string };
 
-const INJECTION = /ignore (all |your )?(previous |prior )?(rules|instructions)|system prompt|you are now|\[?\s*admin message/i;
 const POLITE_PREFIX = /^(?:please|pls|kindly|can you|could you|would you|will you|tell me|i want to know|do you know|hey|hi|hello)\s+/;
 const POLITE_SUFFIX = /\s+(?:please|pls|thanks|thank you|thankyou)$/;
 
@@ -72,7 +71,7 @@ function closeEnough(question: string, message: string): boolean {
 
 export function matchApprovedFaq(sources: KnowledgeSource[], message: string): FaqHit | null {
   const raw = message.trim();
-  if (!raw || raw.length > 500 || INJECTION.test(raw)) return null;
+  if (!raw || raw.length > 500 || looksLikePromptInjection(raw)) return null;
   const norm = normalizeQuestion(raw);
   if (norm.length < 8) return null;
   const hits: FaqHit[] = [];

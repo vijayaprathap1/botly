@@ -55,6 +55,17 @@ export const config = {
     if (!Number.isFinite(n) || n < 0) return 30;
     return Math.floor(n);
   },
+  /**
+   * AI replies allowed in one demo conversation. 0 disables the cap.
+   * Separate from the plan cap so a sales preview cannot run as long as a customer trial.
+   */
+  get demoMaxAiReplies() {
+    const raw = process.env.DEMO_MAX_AI_REPLIES_PER_CONVERSATION;
+    if (raw === undefined || raw.trim() === "") return 15;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return 15;
+    return Math.floor(n);
+  },
   get crawlMaxPages() {
     return int("CRAWL_MAX_PAGES", 40);
   },

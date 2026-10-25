@@ -110,6 +110,7 @@ export async function prepareSearch(
   model: string,
   query: string,
   language: string,
+  opts?: { budgetLane?: "customer" | "demo" },
 ): Promise<{ english: string; queries: string[]; usage: Usage }> {
   const original = query.replace(/\s+/g, " ").trim().slice(0, 500);
   if (!needsQueryRewrite(language, original)) return { english: original, queries: queriesForRetrieval(original, original), usage: emptyUsage() };
@@ -125,6 +126,7 @@ export async function prepareSearch(
         signal: AbortSignal.timeout(REWRITE_TIMEOUT_MS),
         system: [{ text: "Rewrite the customer's message as a short English search query for a shop knowledge base. Keep product names, categories and genres (for example \"philosophy books\"), numbers and places. Drop greetings and filler words like anna, bhai, irukka, evlo, kitna. Output only the query." }],
         messages: [{ role: "user", content: original }],
+        budgetLane: opts?.budgetLane,
       },
       (t) => (out += t),
     );

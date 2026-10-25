@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseRobots } from "@/lib/crawler/robots";
 import { extractPage, splitBoilerplate } from "@/lib/crawler/extract";
 import { formatShopifyProduct } from "@/lib/crawler/shopify";
-import { normalizeUrl } from "@/lib/crawler/crawl";
+import { crawlSite, normalizeUrl } from "@/lib/crawler/crawl";
 
 describe("robots.txt", () => {
   const r = parseRobots(`
@@ -62,6 +62,30 @@ describe("extraction", () => {
     expect(normalizeUrl("https://books.toscrape.com/catalogue/index.html")).toBe("https://books.toscrape.com/catalogue");
     expect(normalizeUrl("https://a.in/p/?utm_source=newsletter&page=2#x")).toBe("https://a.in/p?page=2");
     expect(normalizeUrl("mailto:x@y.z")).toBeNull();
+  });
+});
+
+describe("crawler SSRF", () => {
+  const pub = async () => ["93.184.216.34"];
+  it("does not follow a link that redirects to a metadata address", async () => {
+    const seen: string[] = [];
+    const html = `<html><head><title>Shop</title></head><body><main><p>${"Fresh sweets from the shop counter. ".repeat(8)}</p><a href="https://shop.example/next">Next</a></main></body></html>`;
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const u = String(input);
+      seen.push(u);
+      if (u.endsWith("/robots.txt")) return new Response("User-agent: *\nDisallow:\n", { status: 200, headers: { "content-type": "text/plain" } });
+      if (u.includes("sitemap") || u.includes("products.json") || u.includes("cart.js")) return new Response("no", { status: 404, headers: { "content-type": "text/plain" } });
+      if (u.endsWith("/next")) return new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data" } });
+      if (u.endsWith("/page")) return new Response(html, { status: 200, headers: { "content-type": "text/html" } });
+      return new Response("no", { status: 404, headers: { "content-type": "text/plain" } });
+    }) as typeof fetch;
+    const result = await crawlSite("https://shop.example/page", { maxPages: 3, timeoutMs: 2_000, fetchImpl, resolve: pub }, () => {});
+    expect(seen.some((u) => u.includes("169.254") || u.includes("metadata"))).toBe(false);
+    expect(result.pages.map((p) => p.url)).toEqual(["https://shop.example/page"]);
+  });
+
+  it("refuses a start URL on a private address", async () => {
+    await expect(crawlSite("http://127.0.0.1/secret", { maxPages: 1, timeoutMs: 1_000 }, () => {})).rejects.toThrow(/public internet|localhost|address/i);
   });
 });
 

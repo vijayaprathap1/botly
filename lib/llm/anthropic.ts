@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { acquireAiBudget, adjustAiBudget, estimateRequestTokens } from "./budget";
+import { acquireAiBudget, adjustAiBudget, type BudgetLane, estimateRequestTokens } from "./budget";
 import type { LlmClient, LlmRequest, LlmTurn, TextPart, ToolUsePart } from "./types";
 
 let client: Anthropic | null = null;
@@ -12,7 +12,8 @@ function getClient(): Anthropic {
 export class AnthropicLlm implements LlmClient {
   async stream(req: LlmRequest, onText: (t: string) => void): Promise<LlmTurn> {
     const started = Date.now();
-    const reserved = await acquireAiBudget({ tokens: estimateRequestTokens(req, req.maxTokens) });
+    const lane: BudgetLane = req.budgetLane ?? "customer";
+    const reserved = await acquireAiBudget({ tokens: estimateRequestTokens(req, req.maxTokens), lane });
     const stream = await getClient().messages.create(
       {
         model: req.model,
@@ -29,7 +30,7 @@ export class AnthropicLlm implements LlmClient {
       { signal: req.signal },
     ).catch(async (e: unknown) => {
       const status = typeof e === "object" && e && "status" in e ? Number((e as { status: unknown }).status) : 0;
-      if (reserved > 0 && status !== 429 && status !== 529) await adjustAiBudget(-reserved);
+      if (reserved > 0 && status !== 429 && status !== 529) await adjustAiBudget(-reserved, 0, lane);
       throw e;
     });
 
@@ -88,7 +89,7 @@ export class AnthropicLlm implements LlmClient {
       }
     }
 
-    if (reserved > 0) await adjustAiBudget(usage.input + usage.output + usage.cacheRead + usage.cacheWrite - reserved);
+    if (reserved > 0) await adjustAiBudget(usage.input + usage.output + usage.cacheRead + usage.cacheWrite - reserved, 0, lane);
     return {
       content: blocks.filter(Boolean).map((b) => (b.type === "tool_use" ? { type: "tool_use", id: b.id, name: b.name, input: b.input } : b)),
       stopReason,

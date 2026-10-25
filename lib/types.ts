@@ -64,6 +64,8 @@ export type DemoSiteRow = {
   opened_notified_at: string | null;
   expires_at: string;
   created_by: string | null;
+  /** FAQ or policy drafts held back because they looked like prompt injection. */
+  flagged_count?: number;
 };
 
 export type BotRow = {
