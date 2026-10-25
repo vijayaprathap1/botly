@@ -5,7 +5,7 @@
  * No SDK: plain fetch + SSE parsing, so it runs anywhere (Vercel, Node, tests).
  */
 import type { LlmClient, LlmMessage, LlmRequest, LlmTurn, TextPart, ToolDef, ToolUsePart } from "./types";
-import { acquireAiBudget, adjustAiBudget, AiBudgetError, estimateRequestTokens, holdReservation, noteAiUsage, onboardingReserveTokens } from "./budget";
+import { acquireAiBudget, adjustAiBudget, AiBudgetError, type BudgetLane, estimateRequestTokens, holdReservation, noteAiUsage, tokensToReserve } from "./budget";
 import { openaiCompat } from "./provider";
 import { rateLimitWaitMs } from "./rate-limit";
 import { parseTextToolCalls, TextToolFilter } from "./text-tool-filter";
@@ -90,7 +90,7 @@ function noteMissingModel(model: string, message: string) {
 }
 
 /** Adds reasoning_effort when configured; retries once without it if the server rejects it. */
-async function postChat(body: Record<string, unknown>, signal?: AbortSignal, timeoutMs?: number): Promise<Response> {
+async function postChat(body: Record<string, unknown>, signal?: AbortSignal, timeoutMs?: number, lane: BudgetLane = "customer"): Promise<Response> {
   const effort = openaiCompat.reasoningEffort();
   let payload: Record<string, unknown> = effort ? { ...body, reasoning_effort: effort } : body;
   // Requested id, then the configured default, then fallbacks. A 404 skips the busy retry.
@@ -101,12 +101,13 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
   let fieldDrops = 0;
   const callTimeout = timeoutMs ?? chatTimeoutMs();
   // Onboarding drafts use a long timeout. Wait out a per-minute budget dip instead of failing the import.
-  const onboarding = callTimeout >= 60_000;
-  const estimate = estimateRequestTokens(body, Number(body.max_tokens) || 400) + (onboarding ? onboardingReserveTokens() : 0);
-  const reserved = await acquireAiBudget({ tokens: estimate, waitMs: onboarding ? Math.min(45_000, callTimeout - 30_000) : 0 });
+  // Demo builds are long too, but they must not take the onboarding reserve.
+  const longCall = callTimeout >= 60_000;
+  const estimate = tokensToReserve(estimateRequestTokens(body, Number(body.max_tokens) || 400), { longCall, lane });
+  const reserved = await acquireAiBudget({ tokens: estimate, waitMs: longCall && lane !== "demo" ? Math.min(45_000, callTimeout - 30_000) : 0, lane });
   const releaseIfMissing = async (e: unknown) => {
     const msg = e instanceof Error ? e.message : String(e);
-    if (reserved > 0 && missingModel(msg)) await adjustAiBudget(-reserved);
+    if (reserved > 0 && missingModel(msg)) await adjustAiBudget(-reserved, 0, lane);
   };
   // One deadline for the whole call (all models). A model that has not started answering
   // within its first-byte window is treated as busy and the next model gets the rest.
@@ -117,7 +118,7 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
     const firstByte = hasNext ? firstByteTimeoutMs(callTimeout, remaining) : null;
     try {
       const res = await post("/chat/completions", payload, signal, Math.max(1_000, remaining), firstByte ?? undefined);
-      holdReservation(res, reserved);
+      holdReservation(res, reserved, lane);
       return res;
     } catch (e) {
       if (e instanceof AiBudgetError) throw e;
@@ -285,6 +286,8 @@ export class OpenAiCompatLlm implements LlmClient {
         ...(req.tools.length ? { tools: toOpenAiTools(req.tools), tool_choice: "auto" } : {}),
       },
       req.signal,
+      undefined,
+      req.budgetLane ?? "customer",
     );
     if (!res.body) throw new Error("LLM API returned no stream");
 
@@ -385,6 +388,8 @@ export async function openAiForcedToolCall(args: {
   user: string;
   tool: ToolDef;
   maxTokens: number;
+  /** Demo drafts draw on the demo budget slice and do not take the onboarding reserve. */
+  lane?: BudgetLane;
 }): Promise<{ input: Record<string, unknown>; usage: { input: number; output: number } }> {
   const body = {
     model: args.model,
@@ -399,11 +404,11 @@ export async function openAiForcedToolCall(args: {
   };
   let res: Response;
   try {
-    res = await postChat(body, undefined, 180_000);
+    res = await postChat(body, undefined, 180_000, args.lane ?? "customer");
   } catch (e) {
     // Some servers reject a named tool_choice; "required"/"auto" still work.
     if (!(e instanceof Error) || !/tool_choice|400|422/.test(e.message)) throw e;
-    res = await postChat({ ...body, tool_choice: "auto" }, undefined, 180_000);
+    res = await postChat({ ...body, tool_choice: "auto" }, undefined, 180_000, args.lane ?? "customer");
   }
   const j = (await res.json()) as {
     choices?: { message?: { content?: string | null; tool_calls?: OaiToolCall[] } }[];

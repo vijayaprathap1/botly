@@ -32,6 +32,15 @@ export function dominantScript(text: string): Script {
   return "other";
 }
 
+/** One short first-reply line for a demo FAQ answer (the model path says this itself). */
+export function demoFirstReplyLine(language: string): string {
+  if (language === "ta") return "நான் ஒரு டெமோ உதவியாளர்.";
+  if (language === "tanglish") return "Naan oru demo assistant.";
+  if (language === "hi") return "मैं एक डेमो सहायक हूँ।";
+  if (language === "hinglish") return "Main ek demo assistant hoon.";
+  return "I'm a demo assistant.";
+}
+
 /** Explicit instruction for the system prompt. One visitor message, one script. */
 export function replyInstruction(text: string): string {
   const lang = detectLanguage(text);

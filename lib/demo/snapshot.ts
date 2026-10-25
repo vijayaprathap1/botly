@@ -1,6 +1,7 @@
 import { parse, type HTMLElement } from "node-html-parser";
 import { contrastRatio, parseHex } from "../../widget/src/color";
-import { safeFetch, UnsafeUrlError } from "./url-guard";
+import { CRAWLER_UA, loadRobots, robotsAllows } from "../crawler/crawl";
+import { assertPublicUrl, safeFetch, UnsafeUrlError, type Resolver } from "./url-guard";
 
 /**
  * Copies a prospect's homepage for a demo: fetch it, strip everything that could run or
@@ -14,7 +15,24 @@ export const MAX_SNAPSHOT_BYTES = 2_000_000;
 /** Replaced with the request's own origin when the demo is served (works on any Botly host). */
 export const ORIGIN_TOKEN = "__BOTLY_ORIGIN__";
 
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36";
+/** Shown to the admin when robots.txt disallows the homepage. Same rule the crawler uses. */
+export const ROBOTS_DENIED = "This site's robots.txt disallows Botly from copying the homepage, so the demo wasn't created. Botly identifies itself as BotlyBot and follows the same rule as its crawler.";
+
+export type FetchOpts = { fetchImpl?: typeof fetch; resolve?: Resolver };
+
+/** Throws when the homepage path is disallowed. A missing robots.txt allows the copy. */
+export async function assertHomepageAllowed(url: string, opts: FetchOpts = {}): Promise<URL> {
+  let page: URL;
+  try {
+    page = await assertPublicUrl(url, opts.resolve);
+  } catch (e) {
+    if (e instanceof UnsafeUrlError) throw new SnapshotError(e.message);
+    throw e;
+  }
+  const robots = await loadRobots(page.origin, 10_000, opts);
+  if (!robotsAllows(robots, page.toString())) throw new SnapshotError(ROBOTS_DENIED);
+  return page;
+}
 
 export class SnapshotError extends Error {
   constructor(message: string, readonly needsRender = false) {
@@ -31,12 +49,15 @@ export function looksBlocked(status: number, body: string): boolean {
   return /cf-chl|cf_chl_|just a moment\.\.\.|attention required! \| cloudflare|checking your browser|enable javascript and cookies to continue|ddos protection by|access denied|captcha-delivery|px-captcha|incapsula incident/.test(head);
 }
 
-export async function fetchHomepage(url: string, fetchImpl?: typeof fetch): Promise<Fetched> {
+export async function fetchHomepage(url: string, fetchImpl?: typeof fetch, opts: FetchOpts = {}): Promise<Fetched> {
+  const net = { fetchImpl: fetchImpl ?? opts.fetchImpl, resolve: opts.resolve };
+  const page = await assertHomepageAllowed(url, net);
   let res;
   try {
-    res = await safeFetch(url, {
-      fetchImpl,
-      headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8", "Accept-Language": "en-IN,en;q=0.9" },
+    res = await safeFetch(page.toString(), {
+      fetchImpl: net.fetchImpl,
+      resolve: net.resolve,
+      headers: { "User-Agent": CRAWLER_UA, Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8", "Accept-Language": "en-IN,en;q=0.9" },
     });
   } catch (e) {
     if (e instanceof UnsafeUrlError) throw new SnapshotError(e.message);
@@ -45,6 +66,11 @@ export async function fetchHomepage(url: string, fetchImpl?: typeof fetch): Prom
   if (looksBlocked(res.status, res.body)) throw new SnapshotError("This site blocks automated copies, so its homepage can't be previewed.", true);
   if (res.status >= 400) throw new SnapshotError(`The website answered with an error (${res.status}).`);
   if (!/html/i.test(res.headers.get("content-type") ?? "text/html")) throw new SnapshotError("That address isn't a web page.");
+  const landed = new URL(res.finalUrl);
+  if (landed.pathname !== page.pathname) {
+    const robots = await loadRobots(landed.origin, 10_000, net);
+    if (!robotsAllows(robots, res.finalUrl)) throw new SnapshotError(ROBOTS_DENIED);
+  }
   return { html: res.body, finalUrl: res.finalUrl };
 }
 

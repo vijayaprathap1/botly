@@ -68,7 +68,7 @@ export function parsePublicUrl(input: string): URL {
   return url;
 }
 
-type Resolver = (host: string) => Promise<string[]>;
+export type Resolver = (host: string) => Promise<string[]>;
 const systemResolver: Resolver = async (host) => (await lookup(host, { all: true, verbatim: true })).map((a) => a.address);
 
 /** Throws unless the URL is public http(s) and every address its host resolves to is public. */

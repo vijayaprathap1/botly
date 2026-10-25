@@ -7,6 +7,7 @@ import { getLlm } from "../llm";
 import { requestTokenLimit } from "../llm/provider";
 import { estimateTokens } from "../tokens";
 import type { BotWithOrg } from "../types";
+import { flagUnsafeFaqDrafts, looksLikePromptInjection } from "../knowledge";
 import { draftKnowledge, isRealAnswer, policyToText } from "./draft";
 
 export type OnboardEvent = {
@@ -31,19 +32,22 @@ export type OnboardOptions = {
   ownerNotes?: string;
   /** Time allowed for the whole import (default 270 s). */
   budgetMs?: number;
-  /** Demo bots stay drafts behind a test token, so the go-live check is skipped. */
+  /** Demo bots stay drafts behind a test token, so the go-live model check is skipped. */
   skipSafetyCheck?: boolean;
+  /** Demo builds use the demo AI budget slice and screen FAQ drafts before auto-approving them. */
+  aiLane?: "customer" | "demo";
 };
 
 /**
  * Onboarding pipeline shared by the admin wizard and self-serve sign-up:
  * crawl → save pages/products → Claude drafts FAQs, policies, tone and a business profile.
  */
-export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) => void): Promise<{ ok: boolean }> {
+export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) => void): Promise<{ ok: boolean; flagged: number }> {
   const { db, botId } = o;
   // The whole import must fit one serverless invocation (300 s): leave the safety check out
   // rather than be cut off half-way with nothing recorded.
   const mustEndBy = Date.now() + (o.budgetMs ?? 270_000);
+  let flagged = 0;
   const { data: botRow } = await db.from("bots").select("*, org:organizations(*)").eq("id", botId).single();
   if (!botRow) throw new Error("Bot not found");
   const bot = botRow as BotWithOrg;
@@ -114,16 +118,32 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
         ownerNotes: o.ownerNotes,
         model: process.env.ONBOARDING_MODEL || bot.model || config.defaultModel,
         onProgress: (message) => send({ stage: "drafting", message }),
+        lane: o.aiLane,
       });
       // "Not found on the website" is the drafter's placeholder for a missing fact, not an answer:
       // never save it as knowledge, and don't offer its question as a starter chip.
       const unanswered = new Set(d.faqs.filter((f) => !isRealAnswer(f.answer)).map((f) => f.question.trim().toLowerCase()));
       d.faqs = d.faqs.filter((f) => isRealAnswer(f.answer));
       if (d.suggested_questions) d.suggested_questions = d.suggested_questions.filter((q) => !unanswered.has(q.trim().toLowerCase()));
+      // Demo drafts are auto-approved. Hold back anything that addresses the model
+      // ("ignore previous instructions", a system note) and keep it as a draft.
+      let held: typeof d.faqs = [];
+      if (o.aiLane === "demo") {
+        const split = flagUnsafeFaqDrafts(d.faqs);
+        d.faqs = split.safe;
+        held = split.flagged;
+        flagged += held.length;
+      }
+      const policyText = policyToText(d.policy);
+      const policyUnsafe = o.aiLane === "demo" && looksLikePromptInjection(policyText);
+      if (policyUnsafe) flagged += 1;
+      const profileUnsafe = o.aiLane === "demo" && Boolean(d.profile_markdown) && looksLikePromptInjection(d.profile_markdown);
+      if (profileUnsafe) flagged += 1;
       const drafts = [
         ...d.faqs.map((f) => stamp({ type: "faq", title: f.question.slice(0, 200), url: f.source_url ?? null, content: `Q: ${f.question}\nA: ${f.answer}` })),
-        ...(policyToText(d.policy) ? [stamp({ type: "policy", title: "Policy summary", url: null, content: policyToText(d.policy) })] : []),
-        ...(o.selfServe && d.profile_markdown ? [stamp({ type: "note", title: "Business profile", url: null, content: d.profile_markdown })] : []),
+        ...held.map((f) => stamp({ type: "faq", title: f.question.slice(0, 200), url: f.source_url ?? null, content: `Q: ${f.question}\nA: ${f.answer}` }, "draft")),
+        ...(policyText ? [stamp({ type: "policy", title: "Policy summary", url: null, content: policyText }, policyUnsafe ? "draft" : status)] : []),
+        ...(o.selfServe && d.profile_markdown ? [stamp({ type: "note", title: "Business profile", url: null, content: d.profile_markdown }, profileUnsafe ? "draft" : status)] : []),
       ];
       // Importing again must not pile up copies: skip FAQs we already have (any status, so an
       // archived answer stays archived) and refresh the single policy summary / profile.
@@ -136,7 +156,12 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
         if (error) throw new Error(error.message);
       }
       for (const r of drafts.filter((x) => x.type !== "faq" && priorId.has(key(x.type, x.title)))) {
-        const { error } = await db.from("knowledge_sources").update({ content: r.content, token_count: r.token_count, updated_by: r.updated_by }).eq("id", priorId.get(key(r.type, r.title))!);
+        const { error } = await db.from("knowledge_sources").update({ content: r.content, status: r.status, token_count: r.token_count, updated_by: r.updated_by }).eq("id", priorId.get(key(r.type, r.title))!);
+        if (error) throw new Error(error.message);
+      }
+      // A retrain must take an unsafe FAQ back out of the approved set.
+      for (const r of drafts.filter((x) => x.type === "faq" && x.status === "draft" && priorId.has(key(x.type, x.title)))) {
+        const { error } = await db.from("knowledge_sources").update({ content: r.content, status: "draft", token_count: r.token_count, updated_by: r.updated_by }).eq("id", priorId.get(key(r.type, r.title))!);
         if (error) throw new Error(error.message);
       }
       if (o.selfServe) {
@@ -148,14 +173,14 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
         await db
           .from("organizations")
           .update({
-            profile_markdown: d.profile_markdown ?? null,
+            profile_markdown: profileUnsafe ? null : d.profile_markdown ?? null,
             profile_sources: [...(o.url ? [{ type: "website", url: o.url, pages: pages.length }] : []), ...(o.ownerNotes ? [{ type: "owner_provided" }] : [])],
             profile_updated_at: new Date().toISOString(),
             ...(d.business_type ? { business_type: d.business_type } : {}),
           })
           .eq("id", bot.org_id);
       } else if (d.tone) await db.from("bots").update({ tone_suggestion: d.tone }).eq("id", botId);
-      send({ stage: "drafted", message: `Wrote ${d.faqs.length} FAQs${policyToText(d.policy) ? ", a policy summary" : ""}${o.selfServe && d.profile_markdown ? " and your business profile" : ""}`, count: d.faqs.length });
+      send({ stage: "drafted", message: `Wrote ${d.faqs.length} FAQs${policyText ? ", a policy summary" : ""}${o.selfServe && d.profile_markdown ? " and your business profile" : ""}${flagged ? ` (${flagged} held back by the safety check)` : ""}`, count: d.faqs.length });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[onboarding] drafting failed", msg);
@@ -163,9 +188,11 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
       send({
         stage: "skip",
         message: aiPaused
-          ? autoApprove
-            ? "Live chats are using the AI capacity right now, so FAQ drafting is paused instead of failing. Your pages are saved. Run the import again in a few minutes."
-            : "Live chats are using the AI capacity right now, so FAQ drafting is paused instead of failing. Your pages are saved as drafts. Run the import again in a few minutes."
+          ? o.aiLane === "demo"
+            ? "Demo AI capacity is used up for now, so FAQ drafting is paused. Customer chats are unaffected. Press Retrain in a few minutes."
+            : autoApprove
+              ? "Live chats are using the AI capacity right now, so FAQ drafting is paused instead of failing. Your pages are saved. Run the import again in a few minutes."
+              : "Live chats are using the AI capacity right now, so FAQ drafting is paused instead of failing. Your pages are saved as drafts. Run the import again in a few minutes."
           : autoApprove
             ? "Couldn't write the FAQs automatically. Using your website pages directly instead."
             : "Couldn't write the FAQs automatically. Your website pages are saved as drafts you can approve instead.",
@@ -209,7 +236,7 @@ export async function runOnboarding(o: OnboardOptions, send: (e: OnboardEvent) =
         : "Done. Review and approve the drafts in Knowledge.",
     outcome,
   });
-  return { ok: true };
+  return { ok: true, flagged };
 }
 
 /**

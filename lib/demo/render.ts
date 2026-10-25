@@ -1,8 +1,7 @@
 import "server-only";
 import { existsSync } from "node:fs";
-import { isIP } from "node:net";
 import { normalizeUrl } from "../crawler/crawl";
-import { assertPublicUrl, isPrivateAddress } from "./url-guard";
+import { assertPublicUrl } from "./url-guard";
 
 /**
  * Rendered mode: for websites that are built in the browser (React, Angular, some Wix
@@ -115,15 +114,24 @@ export async function renderSite(input: string, opts: { extraPages?: number; bud
     // The browser must not be steered at this server's own network, and has no use for video.
     await page.setRequestInterception(true);
     page.on("request", (req) => {
-      try {
-        const u = new URL(req.url());
-        const host = u.hostname.replace(/^\[|\]$/g, "");
-        const bad = (u.protocol !== "http:" && u.protocol !== "https:" && u.protocol !== "data:" && u.protocol !== "blob:") || host === "localhost" || /\.(local|internal|localhost)$/i.test(host) || (isIP(host) !== 0 && isPrivateAddress(host));
-        if (bad || req.resourceType() === "media") void req.abort();
-        else void req.continue();
-      } catch {
-        void req.abort();
-      }
+      void (async () => {
+        try {
+          if (req.resourceType() === "media") {
+            await req.abort();
+            return;
+          }
+          const u = new URL(req.url());
+          if (u.protocol === "data:" || u.protocol === "blob:") {
+            await req.continue();
+            return;
+          }
+          // Same guard as the plain snapshot: resolve the host and refuse private, loopback and metadata targets.
+          await assertPublicUrl(u);
+          await req.continue();
+        } catch {
+          await req.abort().catch(() => {});
+        }
+      })();
     });
     page.on("dialog", (d) => void d.dismiss().catch(() => {}));
 

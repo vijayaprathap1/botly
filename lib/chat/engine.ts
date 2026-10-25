@@ -5,7 +5,7 @@ import { buildKnowledgeBlock } from "../knowledge";
 import type { Retriever } from "../retrieval/retriever";
 import { toCard, verifyCustomer, type OrderProvider, type OrderStatusCard } from "../orders/types";
 import { detectLanguage } from "../language";
-import { declinesKnowledge, dominantScript, offerDecision, offerDecline, replyInstruction, replyReminder } from "../reply-style";
+import { declinesKnowledge, demoFirstReplyLine, dominantScript, offerDecision, offerDecline, replyInstruction, replyReminder } from "../reply-style";
 import { needsQueryRewrite, prepareSearch, queriesForRetrieval } from "../retrieval/retriever";
 import { createScriptGate, romanIndicVisitor, scriptRetryInstruction } from "./script-guard";
 import type { LlmClient, LlmMessage, TextPart, ToolResultPart, ToolUsePart } from "../llm/types";
@@ -111,6 +111,11 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     return fail(access.reason, "This chat isn't available on this website.");
   }
   const isTest = access.isTest;
+  // A copied test token must stop the moment the preview's date has passed, even if the
+  // daily job has not yet marked the demo expired or cleared its HTML.
+  if (bot.org.is_demo && bot.org.trial_ends_at && new Date(bot.org.trial_ends_at).getTime() <= now.getTime()) {
+    return fail("inactive", "This preview has ended.");
+  }
 
   // 2. Rate limits ------------------------------------------------------------------
   const blocked = await checkLimits(deps.limiter, [
@@ -170,8 +175,10 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     isNewConversation ? Promise.resolve(0) : deps.store.countAiReplies(conversationId),
   ]);
   const faqHit = matchApprovedFaq(sources, req.message);
-  const replyCap = config.maxAiReplies(bot.org.plan);
+  const replyCap = bot.org.is_demo ? config.demoMaxAiReplies : config.maxAiReplies(bot.org.plan);
   const capped = !faqHit && replyCap > 0 && aiReplies >= replyCap;
+  const budgetLane = bot.org.is_demo ? "demo" as const : "customer" as const;
+  const firstDemoReply = Boolean(bot.org.is_demo) && aiReplies === 0 && !rows.some((r) => r.role === "assistant");
   // Saved while the model streams (after reading history, so it isn't duplicated there).
   const userMessagePromise = deps.store.insertMessage({
     conversation_id: conversationId,
@@ -187,7 +194,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   let searchQueries = queriesForRetrieval(req.message, null);
   let englishQuery = "";
   if (!faqHit && !capped && needsQueryRewrite(outcome.language, req.message)) {
-    const prepared = await prepareSearch(deps.llm, model, req.message, outcome.language);
+    const prepared = await prepareSearch(deps.llm, model, req.message, outcome.language, { budgetLane });
     searchQueries = prepared.queries;
     englishQuery = prepared.english;
     outcome.usage = addUsage(outcome.usage, prepared.usage);
@@ -232,6 +239,13 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   if (englishQuery && englishQuery.toLowerCase() !== req.message.trim().toLowerCase()) {
     facts.push(`English wording of the visitor's question, for finding facts only. Do not quote this note, and do not answer in English unless the visitor wrote in English: ${englishQuery}`);
   }
+  if (bot.org.is_demo) {
+    facts.push(
+      firstDemoReply
+        ? "This is your first reply in this conversation. Start with one short sentence that you are a demo assistant, in the visitor's language and script, then answer. Do not repeat that sentence later."
+        : "You already told this visitor you are a demo assistant. Do not repeat that.",
+    );
+  }
   const id = req.identity;
   if (id && (id.name || id.phone || id.email)) {
     facts.push(
@@ -254,6 +268,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     pageUrl: req.pageUrl,
     conversationFacts: facts,
     replyInstruction: replyInstruction(req.message),
+    demo: Boolean(bot.org.is_demo),
   });
 
   const messages: LlmMessage[] = [...history.messages];
@@ -314,7 +329,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   const offerKnowledge = `${approvedKnowledgeText}\n${retrievedKnowledge ?? ""}`;
   const denyOffer = !faqHit && !capped && offerDecision(req.message, offerKnowledge) === "deny";
   if (faqHit) {
-    say(faqHit.answer);
+    say((firstDemoReply ? `${demoFirstReplyLine(outcome.language)} ` : "") + faqHit.answer);
     countTrial = true;
   } else if (capped) {
     offerPerson("cap");
@@ -350,6 +365,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
           system: [{ text: staticText, cache: true }, { text: contextText }],
           messages,
           tools,
+          budgetLane,
         },
         gate ? gate.onText : write,
       );
@@ -366,6 +382,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
             system: [{ text: staticText, cache: true }, { text: `${contextText}\n\n${scriptRetryInstruction(romanVisitor)}` }],
             messages,
             tools,
+            budgetLane,
           },
           write,
         );
@@ -413,6 +430,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
             system: [{ text: staticText, cache: true }, { text: `${contextText}\n\nReply to the visitor now in plain text, in 1–3 sentences. Do not call a tool.` }],
             messages: baseMessages,
             tools: [],
+            budgetLane,
           },
           say,
         );

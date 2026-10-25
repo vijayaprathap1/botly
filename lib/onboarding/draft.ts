@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { acquireAiBudget, adjustAiBudget, estimateRequestTokens } from "../llm/budget";
 import { openAiForcedToolCall } from "../llm/openai-compat";
 import { llmKeyName, llmKeyPresent, llmProvider, requestTokenLimit, resolveModel } from "../llm/provider";
 import type { ToolDef } from "../llm/types";
@@ -96,6 +97,8 @@ export async function draftKnowledge(args: {
   budgetTokens?: number;
   /** Called between batches ("Reading part 2 of 3"). */
   onProgress?: (message: string) => void;
+  /** Demo builds use the demo budget slice and do not take the onboarding reserve. */
+  lane?: "customer" | "demo";
 }): Promise<Drafts> {
   if (!llmKeyPresent()) throw new Error(`${llmKeyName()} is not set`);
   const openai = llmProvider() === "openai";
@@ -125,7 +128,7 @@ export async function draftKnowledge(args: {
     const userText = `Business: ${args.businessName}\n\n${batch.join("\n\n")}${note}\n\nDraft the knowledge now with save_drafts.`;
     for (let attempt = 0; ; attempt++) {
       try {
-        const r = await draftOnce({ openai, model: args.model, userText, maxOut });
+        const r = await draftOnce({ openai, model: args.model, userText, maxOut, lane: args.lane });
         results.push(r.input);
         usage.input += r.usage.input;
         usage.output += r.usage.output;
@@ -169,20 +172,30 @@ export async function draftKnowledge(args: {
   };
 }
 
-async function draftOnce(o: { openai: boolean; model: string; userText: string; maxOut: number }): Promise<{ input: DraftInput; usage: Drafts["usage"] }> {
+async function draftOnce(o: { openai: boolean; model: string; userText: string; maxOut: number; lane?: "customer" | "demo" }): Promise<{ input: DraftInput; usage: Drafts["usage"] }> {
+  const lane = o.lane ?? "customer";
   if (o.openai) {
-    const r = await openAiForcedToolCall({ model: resolveModel(o.model), system: ONBOARDING_SYSTEM, user: o.userText, tool: DRAFT_TOOL as unknown as ToolDef, maxTokens: o.maxOut });
+    const r = await openAiForcedToolCall({ model: resolveModel(o.model), system: ONBOARDING_SYSTEM, user: o.userText, tool: DRAFT_TOOL as unknown as ToolDef, maxTokens: o.maxOut, lane });
     return { input: r.input as DraftInput, usage: r.usage };
   }
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 180_000, maxRetries: 1 });
-  const res = await client.messages.create({
-    model: o.model,
-    max_tokens: o.maxOut,
-    system: ONBOARDING_SYSTEM,
-    tools: [DRAFT_TOOL as unknown as Anthropic.Tool],
-    tool_choice: { type: "tool", name: "save_drafts" },
-    messages: [{ role: "user", content: o.userText }],
-  });
+  // Customer drafts on Anthropic are unchanged. Demo drafts join the shared budget, without the onboarding reserve.
+  const reserved = lane === "demo" ? await acquireAiBudget({ tokens: estimateRequestTokens({ system: ONBOARDING_SYSTEM, user: o.userText }, o.maxOut), lane: "demo" }) : 0;
+  let res: Anthropic.Message;
+  try {
+    res = await client.messages.create({
+      model: o.model,
+      max_tokens: o.maxOut,
+      system: ONBOARDING_SYSTEM,
+      tools: [DRAFT_TOOL as unknown as Anthropic.Tool],
+      tool_choice: { type: "tool", name: "save_drafts" },
+      messages: [{ role: "user", content: o.userText }],
+    });
+  } catch (e) {
+    if (reserved > 0) await adjustAiBudget(-reserved, 0, "demo");
+    throw e;
+  }
+  if (reserved > 0) await adjustAiBudget(res.usage.input_tokens + res.usage.output_tokens - reserved, 0, "demo");
   const block = res.content.find((b) => b.type === "tool_use");
   if (!block || block.type !== "tool_use") throw new Error("The model did not return drafts");
   return { input: block.input as DraftInput, usage: { input: res.usage.input_tokens, output: res.usage.output_tokens } };
