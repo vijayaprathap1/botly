@@ -38,7 +38,7 @@ export async function addAssistant(_: ActionState, form: FormData): Promise<Acti
   const host = website ? normalizeHost(website) : null;
   if (website && !host) return { error: "That website address doesn't look right." };
   const first = existing?.[0] as Record<string, unknown> | undefined;
-  const branding = (first?.branding as Record<string, unknown> | undefined) ?? { primary_color: "#4f46e5", avatar_url: null, assistant_name: "Assistant", position: "right", theme: "auto", show_powered_by: true };
+  const branding = (first?.branding as Record<string, unknown> | undefined) ?? { primary_color: "#C2410C", avatar_url: null, assistant_name: "Assistant", position: "right", theme: "auto", show_powered_by: true };
   const { data: bot, error } = await db
     .from("bots")
     .insert({

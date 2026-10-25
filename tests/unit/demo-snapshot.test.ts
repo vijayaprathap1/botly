@@ -90,7 +90,7 @@ describe("demo snapshot: helpers", () => {
   it("picks a colour: theme-color, then buttons, never a grey", () => {
     expect(pickBrandColor(parse('<meta name="theme-color" content="#0a7">'))).toBe("#00aa77");
     expect(pickBrandColor(parse("<style>.btn{background:#e11d48}.btn-2{background-color:#e11d48}a.button{background:#111111}</style>", { blockTextElements: { style: true } }))).toBe("#e11d48");
-    expect(pickBrandColor(parse('<meta name="theme-color" content="#ffffff">'))).toBe("#4f46e5");
+    expect(pickBrandColor(parse('<meta name="theme-color" content="#ffffff">'))).toBe("#C2410C");
   });
   it("picks the business name from og:site_name or the title", () => {
     expect(pickBusinessName(fixture, BASE)).toBe("Lakshmi Sweets");

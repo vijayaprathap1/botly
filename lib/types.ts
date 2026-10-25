@@ -152,7 +152,7 @@ export type MessageRow = {
 export type ToolCallLog = { name: string; input: unknown; result: unknown };
 
 export const DEFAULT_BRANDING: Branding = {
-  primary_color: "#4f46e5",
+  primary_color: "#C2410C",
   avatar_url: null,
   assistant_name: "Assistant",
   position: "right",

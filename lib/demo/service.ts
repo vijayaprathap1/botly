@@ -91,7 +91,7 @@ export async function createDemo(db: SupabaseClient, input: CreateDemoInput): Pr
       active: true,
       allowed_origins: [],
       greeting: `Hi! I'm the assistant for ${placeholder}. Ask me anything about us.`,
-      branding: { primary_color: "#4f46e5", avatar_url: null, assistant_name: "Assistant", position: "right", theme: "light", show_powered_by: true },
+      branding: { primary_color: "#C2410C", avatar_url: null, assistant_name: "Assistant", position: "right", theme: "light", show_powered_by: true },
       notify_emails: input.adminEmail ? [input.adminEmail] : [],
       notify_whatsapp: [],
       fallback_contact: demoConfig.contact,
