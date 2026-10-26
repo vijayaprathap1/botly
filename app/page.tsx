@@ -57,7 +57,7 @@ export default function Landing() {
         <FinalCta />
       </main>
       <HomeFooter />
-      {process.env.NEXT_PUBLIC_DEMO_BOT_KEY ? <script src="/widget.js" data-key={process.env.NEXT_PUBLIC_DEMO_BOT_KEY} async /> : null}
+      <script src="/widget.js" data-key="pk_d613ae9530884c74b420b42c" async></script>
     </div>
   );
 }
