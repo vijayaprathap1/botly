@@ -14,3 +14,9 @@ public/widget.js.map
 .local-db
 .env.local-stack
 public/widget-size.txt
+.CLAUDE.md
+.DEMO_BUILDER_PLAN.md
+.MERGE_CONFLICT_ANALYSIS.md
+.PLAN.md
+/plan
+plan/
