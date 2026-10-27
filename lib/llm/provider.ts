@@ -28,6 +28,9 @@ const PRESETS: Record<string, { baseUrl: string; model: string; label: string; r
   github: { baseUrl: "https://models.github.ai/inference", model: "openai/gpt-4.1-mini", label: "GitHub Models", requestTokens: 8000 },
   // OpenRouter has no safe default: set LLM_MODEL to a model id ending in ":free".
   openrouter: { baseUrl: "https://openrouter.ai/api/v1", model: "", label: "OpenRouter" },
+
+  // Sarvam AI Indian LLM provider
+  sarvam: { baseUrl: "https://api.sarvam.ai/v1", model: "sarvam-2b", label: "Sarvam AI", reasoningEffort: "low", fallbacks: ["sarvam-2b-flash"] },
 };
 
 function raw(): string {
@@ -48,7 +51,7 @@ export const openaiCompat = {
     return (process.env.LLM_BASE_URL || preset()?.baseUrl || PRESETS.nvidia!.baseUrl).replace(/\/+$/, "");
   },
   apiKey(): string {
-    return process.env.LLM_API_KEY || process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY || process.env.CEREBRAS_API_KEY || process.env.MISTRAL_API_KEY || process.env.GITHUB_TOKEN || process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY || "";
+    return process.env.LLM_API_KEY || process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY || process.env.CEREBRAS_API_KEY || process.env.MISTRAL_API_KEY || process.env.GITHUB_TOKEN || process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY || process.env.SARVAM_API_KEY || "";
   },
   model(): string {
     const p = preset();
