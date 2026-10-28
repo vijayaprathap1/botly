@@ -25,7 +25,12 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable} ${notoTamil.variable} ${notoDeva.variable}`}>
-      <body className="min-h-dvh font-sans antialiased">{children}</body>
-    </html>
+      <body className="min-h-dvh font-sans antialiased">{children}
+
+      {/* Botly Widget - appears on all pages */}
+      <script src="https://botly.in/widget.js" data-key="pk_d613ae9530884c74b420b42c" async></script>
+    </body>
+  </html>
   );
 }
+
