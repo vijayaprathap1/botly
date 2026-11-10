@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { Noto_Sans_Devanagari, Noto_Sans_Tamil } from "next/font/google";
+import { SiteWidget } from "@/components/site-widget";
 import "./globals.css";
 
 const notoTamil = Noto_Sans_Tamil({ subsets: ["tamil"], weight: ["400", "500"], display: "swap", variable: "--font-tamil" });
@@ -25,12 +26,12 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable} ${notoTamil.variable} ${notoDeva.variable}`}>
-      <body className="min-h-dvh font-sans antialiased">{children}
-
-      {/* Botly Widget - appears on all pages */}
-      <script src="https://botly.in/widget.js" data-key="pk_d613ae9530884c74b420b42c" async></script>
-    </body>
-  </html>
+      <body className="min-h-dvh font-sans antialiased">
+        {children}
+        {/* Botly's own assistant, once for every page (except /t/ test links). */}
+        <SiteWidget />
+      </body>
+    </html>
   );
 }
 

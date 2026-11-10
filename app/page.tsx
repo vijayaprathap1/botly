@@ -57,6 +57,6 @@ export default function Landing() {
         <FinalCta />
       </main>
       <HomeFooter />
-<script src="https://botly.in/widget.js" data-key="pk_d613ae9530884c74b420b42c" async></script>    </div>
+    </div>
   );
 }

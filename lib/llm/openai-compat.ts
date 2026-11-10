@@ -102,12 +102,19 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
   // Optional fields a server rejected, per endpoint (so the fallback provider starts clean).
   const dropped = new Map<string, Set<string>>();
   const payloadFor = (t: LlmTarget): Record<string, unknown> => {
-    const { max_tokens, max_completion_tokens, reasoning_effort: _effort, ...rest } = body;
+    const { max_tokens, max_completion_tokens, reasoning_effort: _effort, [SYSTEM_PARTS]: parts, ...rest } = body;
     const limit = max_tokens ?? max_completion_tokens;
     const out: Record<string, unknown> = { ...rest, model: t.model };
     if (limit !== undefined) out[t.tokenParam] = limit;
     if (t.reasoningEffort) out.reasoning_effort = t.reasoningEffort;
-    for (const f of dropped.get(t.baseUrl) ?? []) delete out[f];
+    const off = dropped.get(t.baseUrl);
+    // OpenAI: mark the end of the stable system prefix so every visitor's first message
+    // reuses the cached tools + instructions + knowledge (implicit caching alone only
+    // caches through the latest user message, which differs per request).
+    if (t.tokenParam === "max_completion_tokens" && Array.isArray(parts) && !off?.has(CACHE_BREAKPOINT)) {
+      out.messages = withCacheBreakpoint(out.messages as OaiMessage[], parts as SystemPart[]);
+    }
+    for (const f of off ?? []) delete out[f];
     return out;
   };
   let idx = 0;
@@ -121,10 +128,11 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
   let waited = false;
   let fieldDrops = 0;
   const callTimeout = timeoutMs ?? chatTimeoutMs();
+  const { [SYSTEM_PARTS]: _parts, ...sized } = body;
   // Onboarding drafts use a long timeout. Wait out a per-minute budget dip instead of failing the import.
   // Demo builds are long too, but they must not take the onboarding reserve.
   const longCall = callTimeout >= 60_000;
-  const estimate = tokensToReserve(estimateRequestTokens(body, Number(body.max_tokens ?? body.max_completion_tokens) || 400), { longCall, lane });
+  const estimate = tokensToReserve(estimateRequestTokens(sized, Number(body.max_tokens ?? body.max_completion_tokens) || 400), { longCall, lane });
   const reserved = await acquireAiBudget({ tokens: estimate, waitMs: longCall && lane !== "demo" ? Math.min(45_000, callTimeout - 30_000) : 0, lane });
   const releaseIfMissing = async (e: unknown) => {
     const msg = e instanceof Error ? e.message : String(e);
@@ -137,7 +145,7 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
     const target = targets[idx]!;
     const remaining = deadline - Date.now();
     const hasNext = idx < targets.length - 1;
-    const firstByte = hasNext ? firstByteTimeoutMs(callTimeout, remaining) : null;
+    const firstByte = hasNext ? firstByteTimeoutMs(callTimeout, remaining, target) : null;
     try {
       const res = await post("/chat/completions", payload, target, signal, Math.max(1_000, remaining), firstByte ?? undefined);
       holdReservation(res, reserved, lane);
@@ -151,6 +159,14 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
         console.warn(`[llm] ${describe(target)} timed out (${msg.slice(0, 40)}), falling back to ${describe(targets[idx + 1]!)}`);
         moveTo(idx + 1);
         busyRetried = false;
+        continue;
+      }
+      // A server that doesn't take cache breakpoints: send the plain system string instead.
+      if (/LLM API (400|422)/.test(msg) && /prompt_cache/i.test(msg) && !dropped.get(target.baseUrl)?.has(CACHE_BREAKPOINT)) {
+        const set = dropped.get(target.baseUrl) ?? new Set<string>();
+        set.add(CACHE_BREAKPOINT);
+        dropped.set(target.baseUrl, set);
+        payload = payloadFor(target);
         continue;
       }
       // Optional extras some providers reject (Mistral, GitHub Models…): drop the one named in the error.
@@ -210,6 +226,29 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
 }
 const OPTIONAL_FIELDS = ["reasoning_effort", "stream_options"];
 
+/** Body key (stripped before sending) carrying the system blocks, so OpenAI can get a cache breakpoint. */
+const SYSTEM_PARTS = "__systemParts";
+/** Pseudo-field in the per-endpoint drop list: this endpoint rejected prompt_cache_breakpoint. */
+const CACHE_BREAKPOINT = "__cacheBreakpoint";
+type SystemPart = { text: string; cache?: boolean };
+
+/**
+ * The system message as text parts with an explicit prompt_cache_breakpoint after the last
+ * cacheable block (Botly's static instructions + knowledge). The text the model sees is
+ * the same as the joined string. https://developers.openai.com/api/docs/guides/prompt-caching
+ */
+export function withCacheBreakpoint(messages: OaiMessage[], parts: SystemPart[]): OaiMessage[] {
+  const last = parts.map((p) => Boolean(p.cache)).lastIndexOf(true);
+  if (last < 0 || !parts[0]?.text || messages[0]?.role !== "system") return messages;
+  // Same text as the joined string (parts.join("\n\n")), split so the breakpoint sits after the stable part.
+  const content = parts.map((p, i) => ({
+    type: "text" as const,
+    text: i === 0 ? p.text : `\n\n${p.text}`,
+    ...(i === last ? { prompt_cache_breakpoint: { mode: "explicit" as const } } : {}),
+  }));
+  return [{ role: "system", content } as unknown as OaiMessage, ...messages.slice(1)];
+}
+
 /** The next model in the fallback chain after this one, if any. */
 function fallbackAfter(model: string): string | null {
   const chain = [...new Set(openaiCompat.targets(null).map((t) => t.model))];
@@ -232,17 +271,30 @@ const MIN_FALLBACK_MS = 4_000;
  */
 export function chatTimeoutMs(): number {
   const v = Number(process.env.LLM_TIMEOUT_MS);
-  return Number.isFinite(v) && v >= 5_000 ? Math.min(v, 50_000) : 25_000;
+  if (Number.isFinite(v) && v >= 5_000) return Math.min(v, 50_000);
+  // OpenAI GPT-6 Luna can take longer to start than Groq: give it room before the fallback.
+  return openaiCompat.mainTarget(openaiCompat.model()).tokenParam === "max_completion_tokens" ? OPENAI_CHAT_TIMEOUT_MS : 25_000;
 }
 
+/** Defaults on api.openai.com: 25 s for the response to start, 35 s for the whole call. */
+const OPENAI_FIRST_TOKEN_MS = 25_000;
+const OPENAI_CHAT_TIMEOUT_MS = 35_000;
+
 /**
- * How long the first model may take to start answering before the next model is tried:
- * about half the chat budget (8–15 s), leaving the fallback enough time. Long onboarding
- * calls (60 s+) wait the full time.
+ * How long a model may take to start answering before the next model is tried.
+ * LLM_FIRST_TOKEN_TIMEOUT_MS overrides. Defaults: 25 s on OpenAI, otherwise about half the
+ * chat budget (8–15 s). Only applied when the next model still gets enough time; long
+ * onboarding calls (60 s+) wait the full time.
  */
-export function firstByteTimeoutMs(callTimeout: number, remaining: number): number | null {
+export function firstByteTimeoutMs(callTimeout: number, remaining: number, target?: LlmTarget): number | null {
   if (callTimeout >= 60_000) return null;
-  const t = Math.min(15_000, Math.max(8_000, Math.round(callTimeout / 2)));
+  const env = Number(process.env.LLM_FIRST_TOKEN_TIMEOUT_MS);
+  const t =
+    Number.isFinite(env) && env >= 1_000
+      ? Math.floor(env)
+      : target?.tokenParam === "max_completion_tokens"
+        ? OPENAI_FIRST_TOKEN_MS
+        : Math.min(15_000, Math.max(8_000, Math.round(callTimeout / 2)));
   return remaining - t >= MIN_FALLBACK_MS * 2 ? t : null;
 }
 
@@ -315,6 +367,7 @@ export class OpenAiCompatLlm implements LlmClient {
         stream: true,
         stream_options: { include_usage: true },
         messages: toOpenAiMessages(req.system.map((b) => b.text).join("\n\n"), req.messages),
+        ...(req.system.some((b) => b.cache) ? { [SYSTEM_PARTS]: req.system.map((b) => ({ text: b.text, cache: b.cache })) } : {}),
         ...(req.tools.length ? { tools: toOpenAiTools(req.tools), tool_choice: "auto" } : {}),
       },
       req.signal,

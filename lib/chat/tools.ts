@@ -54,7 +54,7 @@ export const TOOL_REPORT_UNANSWERED: ToolDef = {
 export const TOOL_SUGGEST_FOLLOWUPS: ToolDef = {
   name: "suggest_followups",
   description:
-    "Show up to 3 short follow-up questions as tappable chips, in the visitor's language and script. Only questions the knowledge can answer. Max 40 characters each.",
+    "Show up to 3 short follow-up questions as tappable chips, in the visitor's language and script. Only questions the knowledge can answer. Max 40 characters each. Call it only after you have written your answer text in this same reply, never on its own.",
   input_schema: {
     type: "object",
     properties: { questions: { type: "array", items: { type: "string" }, maxItems: 3 } },

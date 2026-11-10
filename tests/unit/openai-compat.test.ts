@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { OpenAiCompatLlm, chatTimeoutMs, firstByteTimeoutMs, openAiForcedToolCall, salvageTextToolCalls, toOpenAiMessages } from "../../lib/llm/openai-compat";
+import { OpenAiCompatLlm, chatTimeoutMs, firstByteTimeoutMs, openAiForcedToolCall, salvageTextToolCalls, toOpenAiMessages, withCacheBreakpoint } from "../../lib/llm/openai-compat";
 import { llmProvider, resolveModel } from "../../lib/llm/provider";
 import { pricingFor } from "../../lib/cost";
 import type { ToolDef } from "../../lib/llm/types";
@@ -393,5 +393,103 @@ describe("OpenAI preset with Groq fallback", () => {
     await expect(new OpenAiCompatLlm().stream({ ...req, model: "openai/gpt-oss-120b" }, () => {})).rejects.toThrow("LLM API 401");
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe("https://api.groq.com/openai/v1/chat/completions");
+  });
+});
+
+describe("OpenAI reply speed: cache breakpoint and timeouts", () => {
+  const openaiEnv = () => {
+    vi.stubEnv("LLM_PROVIDER", "openai");
+    vi.stubEnv("LLM_API_KEY", "");
+    vi.stubEnv("OPENAI_API_KEY", "sk-openai-test");
+    vi.stubEnv("GROQ_API_KEY", "gsk-groq-test");
+  };
+  const req = {
+    model: "gpt-6-luna",
+    system: [{ text: "STATIC", cache: true }, { text: "CONTEXT" }],
+    messages: [{ role: "user" as const, content: "x" }],
+    tools: TOOLS,
+    maxTokens: 50,
+  };
+
+  it("sends the system prompt as parts with a cache breakpoint after the static part (same text)", async () => {
+    openaiEnv();
+    mockFetch(() => sse([delta({ content: "ok" }, "stop")]));
+    await new OpenAiCompatLlm().stream(req, () => {});
+    const sys = (calls[0]!.body.messages as { role: string; content: { text: string; prompt_cache_breakpoint?: unknown }[] }[])[0]!;
+    expect(sys.role).toBe("system");
+    expect(sys.content.map((p) => p.text).join("")).toBe("STATIC\n\nCONTEXT");
+    expect(sys.content[0]!.prompt_cache_breakpoint).toEqual({ mode: "explicit" });
+    expect(sys.content[1]!.prompt_cache_breakpoint).toBeUndefined();
+    expect(calls[0]!.body.__systemParts).toBeUndefined();
+  });
+
+  it("Groq (fallback or main) still gets the plain system string", async () => {
+    openaiEnv();
+    let n = 0;
+    mockFetch(() => (n++ === 0 ? new Response(JSON.stringify({ error: { message: "Incorrect API key provided" } }), { status: 401 }) : sse([delta({ content: "ok" }, "stop")])));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await new OpenAiCompatLlm().stream(req, () => {});
+    warn.mockRestore();
+    expect(calls[1]!.url).toBe("https://api.groq.com/openai/v1/chat/completions");
+    expect((calls[1]!.body.messages as { content: unknown }[])[0]!.content).toBe("STATIC\n\nCONTEXT");
+  });
+
+  it("retries with the plain string when the server rejects prompt_cache_breakpoint", async () => {
+    openaiEnv();
+    let n = 0;
+    mockFetch(() => (n++ === 0 ? new Response(JSON.stringify({ error: { message: "prompt_cache_breakpoint is not supported on this model" } }), { status: 400 }) : sse([delta({ content: "ok" }, "stop")])));
+    await new OpenAiCompatLlm().stream(req, () => {});
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.url).toBe("https://api.openai.com/v1/chat/completions");
+    expect((calls[1]!.body.messages as { content: unknown }[])[0]!.content).toBe("STATIC\n\nCONTEXT");
+  });
+
+  it("leaves messages alone without a cacheable block", () => {
+    const m = [{ role: "system" as const, content: "S" }];
+    expect(withCacheBreakpoint(m, [{ text: "S" }])).toBe(m);
+  });
+
+  it("OpenAI waits 25 s for the response to start and 35 s in total; env overrides", async () => {
+    const { openaiCompat } = await import("../../lib/llm/provider");
+    openaiEnv();
+    expect(chatTimeoutMs()).toBe(35_000);
+    const luna = openaiCompat.mainTarget("gpt-6-luna");
+    expect(firstByteTimeoutMs(35_000, 35_000, luna)).toBe(25_000);
+    // Groq targets keep the old window.
+    expect(firstByteTimeoutMs(25_000, 25_000, openaiCompat.fallbackTargets()[0])).toBe(12_500);
+    vi.stubEnv("LLM_FIRST_TOKEN_TIMEOUT_MS", "18000");
+    expect(firstByteTimeoutMs(35_000, 35_000, luna)).toBe(18_000);
+    vi.stubEnv("LLM_TIMEOUT_MS", "45000");
+    expect(chatTimeoutMs()).toBe(45_000);
+    // Not enough left for the fallback: no early give-up.
+    vi.stubEnv("LLM_FIRST_TOKEN_TIMEOUT_MS", "");
+    expect(firstByteTimeoutMs(30_000, 30_000, luna)).toBeNull();
+  });
+
+  it("a slow OpenAI start falls back to Groq only after 25 s", async () => {
+    openaiEnv();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const seen: { url: string; at: number }[] = [];
+      const t0 = Date.now();
+      vi.stubGlobal("fetch", (url: string, init: RequestInit) => {
+        seen.push({ url, at: Date.now() - t0 });
+        if (url.includes("openai.com"))
+          return new Promise((_, reject) => init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))));
+        return Promise.resolve(sse([delta({ content: "ok" }, "stop")]));
+      });
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const p = new OpenAiCompatLlm().stream(req, () => {});
+      await vi.advanceTimersByTimeAsync(24_000);
+      expect(seen).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(2_000);
+      const turn = await p;
+      warn.mockRestore();
+      expect(turn.content).toEqual([{ type: "text", text: "ok" }]);
+      expect(seen[1]!.url).toContain("api.groq.com");
+      expect(seen[1]!.at).toBeGreaterThanOrEqual(25_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -42,7 +42,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       ))}
       {children}
-      <script src="https://botly.in/widget.js" data-key="pk_d613ae9530884c74b420b42c" async></script>
     </AppShell>
   );
 }
