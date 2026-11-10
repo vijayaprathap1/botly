@@ -265,3 +265,20 @@ describe("site copy", () => {
     expect(html).toContain("Order-status lookup (Shopify, WooCommerce)");
   });
 });
+
+describe("health ?plans=1", () => {
+  it("reports each env plan id against the site price, with no secrets, cached", async () => {
+    const { checkRazorpayPlans, resetPlanCheckCache } = await import("@/lib/billing/plan-check");
+    resetPlanCheckCache();
+    const amounts: Record<string, [number, string]> = { plan_S: [799, "monthly"], plan_G: [9999, "monthly"], plan_P: [4999, "monthly"], plan_SY: [7990, "yearly"], plan_GY: [19990, "yearly"], plan_PY: [49990, "yearly"], plan_GF: [999, "monthly"] };
+    rzp.fetchPlan.mockImplementation(async (id: string) => rzpPlan(amounts[id]![0], amounts[id]![1]));
+    const r = (await checkRazorpayPlans(1_000))!;
+    expect(r.mode).toBe("test");
+    expect(r.plans).toHaveLength(7);
+    expect(r.plans.filter((p) => p.ok).length).toBe(6);
+    expect(r.plans.find((p) => p.env === "RAZORPAY_PLAN_GROWTH")).toMatchObject({ ok: false, problem: expect.stringContaining("₹9999 in Razorpay") });
+    expect(JSON.stringify(r)).not.toContain("secret_key");
+    await checkRazorpayPlans(2_000);
+    expect(rzp.fetchPlan).toHaveBeenCalledTimes(7);
+  });
+});
