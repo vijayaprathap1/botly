@@ -29,10 +29,10 @@ export function checkEnv(env: Record<string, string | undefined> = process.env):
   need("NEXT_PUBLIC_SUPABASE_URL", "Supabase → Project Settings → API → Project URL (looks like https://abcdefghijklmnop.supabase.co)");
   need("NEXT_PUBLIC_SUPABASE_ANON_KEY", "Supabase → Project Settings → API keys → anon / publishable key");
   need("SUPABASE_SERVICE_ROLE_KEY", "Supabase → Project Settings → API keys → service_role / secret key (keep it server-only)");
-  const openaiCompat = ["nvidia", "gemini", "groq", "cerebras", "mistral", "github", "openrouter", "openai", "openai-compatible"].includes(v("LLM_PROVIDER").trim().toLowerCase());
+  const openaiCompat = ["nvidia", "gemini", "groq", "cerebras", "mistral", "github", "openrouter", "sarvam", "openai", "openai-compatible"].includes(v("LLM_PROVIDER").trim().toLowerCase());
   if (openaiCompat) {
-    if (["LLM_API_KEY", "NVIDIA_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY", "GITHUB_TOKEN", "OPENROUTER_API_KEY"].every((k) => PLACEHOLDER.test(v(k))))
-      out.push({ name: "LLM_API_KEY", problem: v("LLM_API_KEY") ? "still a placeholder" : "missing", fix: "Gemini: aistudio.google.com/apikey · Groq: console.groq.com/keys · Cerebras: cloud.cerebras.ai · Mistral: console.mistral.ai/api-keys · GitHub: github.com/settings/personal-access-tokens · OpenRouter: openrouter.ai/keys" });
+    if (["LLM_API_KEY", "OPENAI_API_KEY", "NVIDIA_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY", "GITHUB_TOKEN", "OPENROUTER_API_KEY", "SARVAM_API_KEY"].every((k) => PLACEHOLDER.test(v(k))))
+      out.push({ name: "LLM_API_KEY", problem: v("LLM_API_KEY") ? "still a placeholder" : "missing", fix: "OpenAI (LLM_PROVIDER=openai): OPENAI_API_KEY from platform.openai.com/api-keys · Gemini: aistudio.google.com/apikey · Groq: console.groq.com/keys · Cerebras: cloud.cerebras.ai · Mistral: console.mistral.ai/api-keys · GitHub: github.com/settings/personal-access-tokens · OpenRouter: openrouter.ai/keys" });
     if (v("LLM_PROVIDER").trim().toLowerCase() === "openrouter" && !v("LLM_MODEL").trim())
       out.push({ name: "LLM_API_KEY", problem: "OpenRouter needs a model", fix: "Set LLM_MODEL to a free model id from openrouter.ai/models?max_price=0 (ends in :free)" });
   } else need("ANTHROPIC_API_KEY", "console.anthropic.com → API Keys (starts with sk-ant-), or set LLM_PROVIDER=nvidia with LLM_API_KEY");

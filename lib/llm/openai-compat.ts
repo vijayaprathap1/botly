@@ -6,7 +6,7 @@
  */
 import type { LlmClient, LlmMessage, LlmRequest, LlmTurn, TextPart, ToolDef, ToolUsePart } from "./types";
 import { acquireAiBudget, adjustAiBudget, AiBudgetError, type BudgetLane, estimateRequestTokens, holdReservation, noteAiUsage, tokensToReserve } from "./budget";
-import { openaiCompat } from "./provider";
+import { llmKeyName, openaiCompat, type LlmTarget } from "./provider";
 import { rateLimitWaitMs } from "./rate-limit";
 import { parseTextToolCalls, TextToolFilter } from "./text-tool-filter";
 
@@ -89,13 +89,34 @@ function noteMissingModel(model: string, message: string) {
   console.warn(`[llm] model ${model} is not available (${message.slice(0, 140)}); trying the next configured model`);
 }
 
-/** Adds reasoning_effort when configured; retries once without it if the server rejects it. */
-async function postChat(body: Record<string, unknown>, signal?: AbortSignal, timeoutMs?: number, lane: BudgetLane = "customer"): Promise<Response> {
-  const effort = openaiCompat.reasoningEffort();
-  let payload: Record<string, unknown> = effort ? { ...body, reasoning_effort: effort } : body;
-  // Requested id, then the configured default, then fallbacks. A 404 skips the busy retry.
-  const models = [...new Set([String(body.model), openaiCompat.model(), ...openaiCompat.fallbackModels()].filter(Boolean))];
-  let modelIdx = 0;
+/**
+ * Sends one Chat Completions request down the target chain (see openaiCompat.targets):
+ * the requested model, the configured model, same-provider fallbacks, then the fallback
+ * provider (its own base URL, key, model and reasoning effort). Adds reasoning_effort
+ * when configured and retries once without an optional field the server rejects.
+ */
+async function postChat(body: Record<string, unknown>, signal?: AbortSignal, timeoutMs?: number, lane: BudgetLane = "customer", opts: { mainOnly?: boolean } = {}): Promise<Response> {
+  let targets = openaiCompat.targets(body.model ? String(body.model) : null);
+  if (opts.mainOnly) targets = targets.filter((t) => !t.crossProvider);
+  if (!targets.length) throw new Error(`${llmKeyName()} is not set`);
+  // Optional fields a server rejected, per endpoint (so the fallback provider starts clean).
+  const dropped = new Map<string, Set<string>>();
+  const payloadFor = (t: LlmTarget): Record<string, unknown> => {
+    const { max_tokens, max_completion_tokens, reasoning_effort: _effort, ...rest } = body;
+    const limit = max_tokens ?? max_completion_tokens;
+    const out: Record<string, unknown> = { ...rest, model: t.model };
+    if (limit !== undefined) out[t.tokenParam] = limit;
+    if (t.reasoningEffort) out.reasoning_effort = t.reasoningEffort;
+    for (const f of dropped.get(t.baseUrl) ?? []) delete out[f];
+    return out;
+  };
+  let idx = 0;
+  let payload = payloadFor(targets[0]!);
+  const moveTo = (next: number) => {
+    idx = next;
+    payload = payloadFor(targets[idx]!);
+  };
+  const describe = (t: LlmTarget) => (t.crossProvider ? `${t.label} ${t.model}` : t.model);
   let busyRetried = false;
   let waited = false;
   let fieldDrops = 0;
@@ -103,7 +124,7 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
   // Onboarding drafts use a long timeout. Wait out a per-minute budget dip instead of failing the import.
   // Demo builds are long too, but they must not take the onboarding reserve.
   const longCall = callTimeout >= 60_000;
-  const estimate = tokensToReserve(estimateRequestTokens(body, Number(body.max_tokens) || 400), { longCall, lane });
+  const estimate = tokensToReserve(estimateRequestTokens(body, Number(body.max_tokens ?? body.max_completion_tokens) || 400), { longCall, lane });
   const reserved = await acquireAiBudget({ tokens: estimate, waitMs: longCall && lane !== "demo" ? Math.min(45_000, callTimeout - 30_000) : 0, lane });
   const releaseIfMissing = async (e: unknown) => {
     const msg = e instanceof Error ? e.message : String(e);
@@ -113,11 +134,12 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
   // within its first-byte window is treated as busy and the next model gets the rest.
   const deadline = Date.now() + callTimeout;
   for (;;) {
+    const target = targets[idx]!;
     const remaining = deadline - Date.now();
-    const hasNext = modelIdx < models.length - 1;
+    const hasNext = idx < targets.length - 1;
     const firstByte = hasNext ? firstByteTimeoutMs(callTimeout, remaining) : null;
     try {
-      const res = await post("/chat/completions", payload, signal, Math.max(1_000, remaining), firstByte ?? undefined);
+      const res = await post("/chat/completions", payload, target, signal, Math.max(1_000, remaining), firstByte ?? undefined);
       holdReservation(res, reserved, lane);
       return res;
     } catch (e) {
@@ -125,9 +147,9 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
       const msg = e instanceof Error ? e.message : "";
       // No first byte in time (stuck queue, slow free tier): try the next model while time is left.
       if (isTimeout(msg) && !signal?.aborted) {
-        if (++modelIdx >= models.length || deadline - Date.now() < MIN_FALLBACK_MS) throw e;
-        console.warn(`[llm] ${models[modelIdx - 1]} timed out (${msg.slice(0, 40)}), falling back to ${models[modelIdx]}`);
-        payload = { ...payload, model: models[modelIdx] };
+        if (idx + 1 >= targets.length || deadline - Date.now() < MIN_FALLBACK_MS) throw e;
+        console.warn(`[llm] ${describe(target)} timed out (${msg.slice(0, 40)}), falling back to ${describe(targets[idx + 1]!)}`);
+        moveTo(idx + 1);
         busyRetried = false;
         continue;
       }
@@ -135,28 +157,39 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
       const field = fieldDrops < 2 && /LLM API (400|422)/.test(msg) ? OPTIONAL_FIELDS.find((f) => f in payload && new RegExp(f.split("_")[0]!, "i").test(msg)) : undefined;
       if (field) {
         fieldDrops++;
-        const { [field]: _dropped, ...rest } = payload;
-        payload = rest;
+        const set = dropped.get(target.baseUrl) ?? new Set<string>();
+        set.add(field);
+        dropped.set(target.baseUrl, set);
+        payload = payloadFor(target);
         continue;
       }
       // Unknown or retired id: do not retry it. Walk default + fallbacks once.
       if (missingModel(msg) && !signal?.aborted) {
         noteMissingModel(String(payload.model), msg);
-        if (++modelIdx >= models.length) {
+        if (idx + 1 >= targets.length) {
           await releaseIfMissing(e);
           throw e;
         }
-        payload = { ...payload, model: models[modelIdx] };
+        moveTo(idx + 1);
         busyRetried = false;
         continue;
       }
-      if (!/LLM API (429|500|502|503|504|529)/.test(msg) || signal?.aborted) throw e;
+      if (!/LLM API (429|500|502|503|504|529)/.test(msg) || signal?.aborted) {
+        // Any other failure on the main provider (bad or missing key, no credit, a request it
+        // refuses): the fallback provider gets the request instead of the visitor getting an error.
+        const cross = signal?.aborted || target.crossProvider ? -1 : targets.findIndex((t, i) => i > idx && t.crossProvider);
+        if (cross < 0 || deadline - Date.now() < MIN_FALLBACK_MS) throw e;
+        console.warn(`[llm] ${target.label} ${target.model} failed (${msg.slice(0, 80)}), falling back to ${describe(targets[cross]!)}`);
+        moveTo(cross);
+        busyRetried = false;
+        continue;
+      }
       if (!busyRetried) {
         busyRetried = true;
         await new Promise((r) => setTimeout(r, 700));
         continue;
       }
-      if (++modelIdx >= models.length) {
+      if (idx + 1 >= targets.length) {
         // Every model is rate-limited. Per-minute limits refill within seconds: when the
         // provider says how long, wait once (if it fits the request) and start over.
         const waitMs = /LLM API 429/.test(msg) ? rateLimitWaitMs(msg) : null;
@@ -165,13 +198,12 @@ async function postChat(body: Record<string, unknown>, signal?: AbortSignal, tim
         console.warn(`[llm] all models rate-limited, waiting ${Math.round(waitMs / 100) / 10}s`);
         await new Promise((r) => setTimeout(r, waitMs));
         if (signal?.aborted) throw e;
-        modelIdx = 0;
-        payload = { ...payload, model: models[0] };
+        moveTo(0);
         busyRetried = true; // one attempt per model after the wait
         continue;
       }
-      console.warn(`[llm] ${models[modelIdx - 1]} busy (${msg.slice(0, 60)}), falling back to ${models[modelIdx]}`);
-      payload = { ...payload, model: models[modelIdx] };
+      console.warn(`[llm] ${describe(target)} busy (${msg.slice(0, 60)}), falling back to ${describe(targets[idx + 1]!)}`);
+      moveTo(idx + 1);
       busyRetried = false;
     }
   }
@@ -180,7 +212,7 @@ const OPTIONAL_FIELDS = ["reasoning_effort", "stream_options"];
 
 /** The next model in the fallback chain after this one, if any. */
 function fallbackAfter(model: string): string | null {
-  const chain = [...new Set([openaiCompat.model(), ...openaiCompat.fallbackModels()].filter(Boolean))];
+  const chain = [...new Set(openaiCompat.targets(null).map((t) => t.model))];
   const i = chain.indexOf(model);
   if (i === -1) return chain.find((m) => m !== model) ?? null;
   return chain[i + 1] ?? null;
@@ -218,9 +250,9 @@ function isTimeout(msg: string): boolean {
   return /^LLM API timed out after/.test(msg);
 }
 
-async function post(path: string, body: unknown, signal?: AbortSignal, timeoutMs = chatTimeoutMs(), firstByteMs?: number): Promise<Response> {
-  const key = openaiCompat.apiKey();
-  if (!key) throw new Error("LLM_API_KEY is not set");
+async function post(path: string, body: unknown, target: LlmTarget, signal?: AbortSignal, timeoutMs = chatTimeoutMs(), firstByteMs?: number): Promise<Response> {
+  const key = target.apiKey;
+  if (!key) throw new Error(`${target.crossProvider ? "LLM_FALLBACK_API_KEY" : llmKeyName()} is not set`);
   // Two limits: the response must start within firstByteMs (when set), and the whole
   // response, including the streamed body, must finish within timeoutMs.
   const started = Date.now();
@@ -237,7 +269,7 @@ async function post(path: string, body: unknown, signal?: AbortSignal, timeoutMs
   const headerTimer = arm(Math.min(firstByteMs ?? timeoutMs, timeoutMs));
   let res: Response;
   try {
-    res = await fetch(`${openaiCompat.baseUrl()}${path}`, {
+    res = await fetch(`${target.baseUrl}${path}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", Accept: body && (body as { stream?: boolean }).stream ? "text/event-stream" : "application/json" },
       body: JSON.stringify(body),
@@ -431,11 +463,14 @@ function extractJsonObject(s: string): Record<string, unknown> | null {
   return Object.keys(v).length ? v : null;
 }
 
-/** 1-token live check. Returns the provider's own error text, never the key. */
-export async function openAiPing(): Promise<string | null> {
+/**
+ * 1-token live check. Returns the provider's own error text, never the key.
+ * mainOnly skips the fallback provider, so a broken main provider is reported.
+ */
+export async function openAiPing(opts: { mainOnly?: boolean } = {}): Promise<string | null> {
   try {
     // max_tokens > 1: thinking models spend a few tokens before answering.
-    await postChat({ model: openaiCompat.model(), max_tokens: 16, messages: [{ role: "user", content: "Say ok" }] }, undefined, 20_000);
+    await postChat({ model: openaiCompat.model(), max_tokens: 16, messages: [{ role: "user", content: "Say ok" }] }, undefined, 20_000, "customer", opts);
     return null;
   } catch (e) {
     return e instanceof Error ? e.message : "unreachable";

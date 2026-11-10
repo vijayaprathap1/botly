@@ -9,7 +9,7 @@ import { checkEnv } from "../lib/env-check";
 import { fetchPlan, razorpayConfigured, razorpayMode } from "../lib/billing/razorpay";
 import { plans } from "../lib/plans";
 import { openAiPing } from "../lib/llm/openai-compat";
-import { llmProvider, openaiCompat, providerLabel } from "../lib/llm/provider";
+import { llmKeyName, llmProvider, openaiCompat, providerLabel } from "../lib/llm/provider";
 
 for (const f of [".env.local", ".env"]) {
   if (!existsSync(f)) continue;
@@ -152,10 +152,11 @@ async function main() {
   } else warn("Razorpay not set up: customers can't upgrade yet (README → Payments)");
 
   if (llmProvider() === "openai" && !bad_.includes("LLM_API_KEY")) {
-    const err = await openAiPing();
+    // The main provider on its own: a working fallback must not hide a broken main key.
+    const err = await openAiPing({ mainOnly: true });
     if (!err) ok(`${providerLabel()} works (model ${openaiCompat.model()})`);
     else {
-      bad(`${providerLabel()} call failed: ${err}`, "Check LLM_API_KEY, LLM_MODEL and LLM_BASE_URL. Run `npm run llm:check` for a full tool-calling test.");
+      bad(`${providerLabel()} call failed: ${err}`, `Check ${llmKeyName()}, LLM_MODEL and LLM_BASE_URL. Run \`npm run llm:check\` for a full tool-calling test.`);
       failures++;
     }
   }
