@@ -51,7 +51,11 @@ effort `none` (its default is `medium`), so Botly sends `"none"` explicitly and 
 
 When OpenAI errors (bad key, no credit, overload), times out before the first token, or has
 no key, the same request goes to Groq `openai/gpt-oss-120b` (then `gpt-oss-20b`) with Groq's
-`low` effort. Each switch is logged as `[llm] … falling back to Groq …`. While Groq is the
+`low` effort. Each switch is logged as `[llm] … falling back to Groq …`. OpenAI gets 25 s to start
+answering (`LLM_FIRST_TOKEN_TIMEOUT_MS`) and 35 s in total (`LLM_TIMEOUT_MS`) before Groq is
+tried; the system prompt carries a prompt-cache breakpoint after the stable instructions and
+knowledge, so repeat visitors' first messages reuse OpenAI's cache. Every reply logs one
+`[chat] timing … setup= context= first_token= total= rounds=` line (no message text). While Groq is the
 backup, requests stay under Groq's free-tier size (7,500 tokens); set `LLM_REQUEST_TOKEN_LIMIT`
 to raise it once Groq is on a paid plan. Rollback: set `LLM_PROVIDER=groq` and redeploy.
 

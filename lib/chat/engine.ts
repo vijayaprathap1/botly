@@ -117,16 +117,18 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     return fail("inactive", "This preview has ended.");
   }
 
-  // 2. Rate limits ------------------------------------------------------------------
-  const blocked = await checkLimits(deps.limiter, [
-    { key: `v:${bot.id}:${req.visitorId}`, limit: config.visitorLimitPer10Min, windowSeconds: 600, reason: "visitor" },
-    ...(ctx.ip ? [{ key: `ip:${ctx.ip}`, limit: config.visitorLimitPer10Min * 3, windowSeconds: 600, reason: "ip" }] : []),
-    { key: `b:${bot.id}`, limit: config.botLimitPerMin, windowSeconds: 60, reason: "bot" },
+  // 2. Rate limits + 2b. plan gate (free-trial replies and days, suspended accounts).
+  // Both only read the bot, so they run together: one database round trip fewer per message.
+  const [blocked, gate] = await Promise.all([
+    checkLimits(deps.limiter, [
+      { key: `v:${bot.id}:${req.visitorId}`, limit: config.visitorLimitPer10Min, windowSeconds: 600, reason: "visitor" },
+      ...(ctx.ip ? [{ key: `ip:${ctx.ip}`, limit: config.visitorLimitPer10Min * 3, windowSeconds: 600, reason: "ip" }] : []),
+      { key: `b:${bot.id}`, limit: config.botLimitPerMin, windowSeconds: 60, reason: "bot" },
+    ]),
+    deps.store.checkReply(bot.org.id),
   ]);
   if (blocked) return fail("rate_limited", "You're sending messages quickly. Please wait a minute and try again.");
 
-  // 2b. Plan gate: free-trial replies and days, suspended accounts ---------------------
-  const gate = await deps.store.checkReply(bot.org.id);
   if (gate.status !== "ok") {
     emit("tool_card", { type: "fallback_contact", reason: "quota", contact: bot.fallback_contact } satisfies ToolCard);
     emit("done", { conversationId: req.conversationId ?? null, quota: gate.status === "suspended" ? "suspended" : "trial_ended" });
@@ -167,6 +169,8 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   outcome.conversationId = conversationId;
   emit("meta", { conversationId, isNew: isNewConversation });
 
+  // Stage times for the "[chat] timing" log line (no message text, no visitor data).
+  const contextAt = Date.now();
   // 4. Context: knowledge, history, facts -------------------------------------------
   const [sources, rows, lead, aiReplies] = await Promise.all([
     deps.store.getApprovedKnowledge(bot.id),
@@ -291,6 +295,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     return p.ok && visitorDigits.includes(digits(p.e164).slice(-10));
   };
 
+  const modelAt = Date.now();
   // 5. Model + tool loop ---------------------------------------------------------------
   const tools = toolsForPlan(bot.org.plan);
   const baseMessages = structuredClone(messages);
@@ -468,6 +473,9 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
 
   // 6. Persist + account ---------------------------------------------------------------
   outcome.latencyMs = Date.now() - started;
+  console.info(
+    `[chat] timing bot=${bot.id} setup=${contextAt - started}ms context=${modelAt - contextAt}ms first_token=${outcome.firstTokenMs ?? "-"}ms total=${outcome.latencyMs}ms rounds=${rounds} tools=${outcome.toolCalls.map((t) => t.name).join(",") || "-"} model=${model}`,
+  );
   const { pricing } = pricingFor(model);
   outcome.costUsd = computeCostUsd(outcome.usage, pricing);
 
