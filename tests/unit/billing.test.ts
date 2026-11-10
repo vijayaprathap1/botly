@@ -30,10 +30,11 @@ describe("billing", () => {
     expect(planForRazorpayPlan("nope")).toBeNull();
     const a = fakeDb();
     await applySubscription(a.db, "o", { id: "sub_1", plan_id: "plan_S", status: "active", current_start: 1, current_end: 1_900_000_000, ended_at: null });
-    expect(a.updates[0]).toMatchObject({ plan: "starter", subscription_status: "active", monthly_conversation_quota: 2000 });
+    expect(a.updates[0]).toMatchObject({ plan: "starter", subscription_status: "active", monthly_conversation_quota: 500 });
     const b = fakeDb();
     await applySubscription(b.db, "o", { id: "sub_1", plan_id: "plan_S", status: "halted", current_start: 1, current_end: 2, ended_at: null });
-    expect(b.updates[0]).toMatchObject({ plan: "trial", subscription_status: "halted", trial_reply_limit: 0 });
+    // A paid plan that ends falls back to Free (50 a month), not to a dead trial.
+    expect(b.updates[0]).toMatchObject({ plan: "free", subscription_status: "halted", monthly_conversation_quota: 50 });
   });
 
   it("trial state", () => {

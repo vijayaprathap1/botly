@@ -4,12 +4,14 @@ import { updateBotSettings, type ActionState } from "@/app/app/actions";
 import { SubmitButton, useFormAction } from "@/components/client";
 import { Card, Field, inputClass, Notice } from "@/components/ui";
 import { DAYS } from "@/lib/hours";
+import { canHideBranding } from "@/lib/plans";
 import type { BotWithOrg } from "@/lib/types";
 import { readableTextOn } from "@/widget/src/color";
 
 const DAY_LABEL = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday", sun: "Sunday" } as const;
 
 export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin?: boolean }) {
+  const canHide = canHideBranding(bot.org.plan);
   const [state, action, actionPending] = useFormAction<ActionState>(updateBotSettings.bind(null, bot.id), null);
   const [toast, setToast] = useState<string | null>(null);
   useEffect(() => {
@@ -132,7 +134,7 @@ export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin
               </select>
             </Field>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" name="show_powered_by" defaultChecked={bot.branding.show_powered_by} disabled={!isAdmin && bot.org.plan !== "growth"} /> Show &quot;Powered by Botly&quot;{!isAdmin && bot.org.plan !== "growth" ? " (can be hidden on Growth)" : ""}
+              <input type="checkbox" name="show_powered_by" defaultChecked={bot.branding.show_powered_by} disabled={!isAdmin && !canHide} /> Show &quot;Powered by Botly&quot;{!isAdmin && !canHide ? " (can be hidden on Growth and Pro)" : ""}
             </label>
             <Field label="Privacy notice URL" htmlFor="privacy_url" hint="Linked in the widget footer. Leave empty to use Botly's default notice.">
               <input id="privacy_url" name="privacy_url" type="url" defaultValue={bot.privacy_url ?? ""} className={inputClass} />
@@ -186,8 +188,10 @@ export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin
             <Field label="Plan" htmlFor="plan">
               <select id="plan" name="plan" defaultValue={bot.org.plan} className={inputClass}>
                 <option value="trial">Free trial</option>
+                <option value="free">Free</option>
                 <option value="starter">Starter</option>
                 <option value="growth">Growth</option>
+                <option value="pro">Pro</option>
               </select>
             </Field>
             <Field label="Monthly conversations (plan)" htmlFor="org_quota">

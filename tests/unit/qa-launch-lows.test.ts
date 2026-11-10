@@ -48,7 +48,7 @@ describe("QA launch lows 2026-10-25", () => {
   });
 
   describe("5. policy pages carry the full date", () => {
-    it("is 25 October 2026", () => expect(POLICIES_LAST_UPDATED).toBe("25 October 2026"));
+    it("is 10 November 2026 (new pricing)", () => expect(POLICIES_LAST_UPDATED).toBe("10 November 2026"));
     for (const page of ["refund-policy", "terms", "privacy-policy", "privacy", "shipping-policy"]) {
       it(`${page} shows it and never the build year`, () => {
         const src = readFileSync(`app/${page}/page.tsx`, "utf8");

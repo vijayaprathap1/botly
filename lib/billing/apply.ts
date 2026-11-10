@@ -1,14 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { plans } from "../plans";
-import type { Plan } from "../types";
+import { FOUNDING, plans, razorpayPlanIds, type PaidPlan } from "../plans";
+import type { BillingInterval } from "../types";
 import { cancelSubscription, type RzpSubscription } from "./razorpay";
 
+/** Which of our plans a Razorpay plan id sells (monthly, yearly or the founding price), from env. */
+export function razorpayPlanInfo(planId: string): { plan: PaidPlan; interval: BillingInterval; founding: boolean } | null {
+  if (!planId) return null;
+  const hit = razorpayPlanIds().find((p) => p.id === planId);
+  return hit ? { plan: hit.plan, interval: hit.interval, founding: hit.founding } : null;
+}
+
 /** Maps a Razorpay plan id back to our plan. */
-export function planForRazorpayPlan(planId: string): Plan | null {
-  for (const p of Object.values(plans())) {
-    if (p.razorpayPlanEnv && process.env[p.razorpayPlanEnv] === planId) return p.id;
-  }
-  return null;
+export function planForRazorpayPlan(planId: string): PaidPlan | null {
+  return razorpayPlanInfo(planId)?.plan ?? null;
 }
 
 /**
@@ -21,19 +25,25 @@ export const isPaidStatus = (status: RzpSubscription["status"]) => status === "a
 
 /**
  * Brings an organization in line with its Razorpay subscription. Paid and active →
- * that plan's quota; ended/halted → service stops (visitors see contact details).
+ * that plan's quota; ended/halted → back to the Free plan (50 conversations a month).
  * Not yet paid (created/authenticated) → nothing changes. Safe to apply the same
  * state twice, and an out-of-order `authenticated` event never undoes `active`.
  */
 export async function applySubscription(db: SupabaseClient, orgId: string, sub: RzpSubscription): Promise<void> {
-  const plan = planForRazorpayPlan(sub.plan_id);
+  const info = razorpayPlanInfo(sub.plan_id);
+  const plan = info?.plan ?? null;
   const periodEnd = sub.current_end ? new Date(sub.current_end * 1000).toISOString() : null;
   const base = { razorpay_subscription_id: sub.id, razorpay_plan_id: sub.plan_id, current_period_end: periodEnd };
-  if (isPaidStatus(sub.status) && plan && plan !== "trial") {
+  if (isPaidStatus(sub.status) && plan) {
     await db
       .from("organizations")
       .update({ ...base, plan, subscription_status: "active", monthly_conversation_quota: plans()[plan].conversations, suspended: false, cancel_at_period_end: false })
       .eq("id", orgId);
+    // Founding price: count the slot (idempotent) and record the 12-month lock.
+    if (info?.founding) {
+      const { error } = await db.rpc("confirm_founding_slot", { p_org_id: orgId, p_subscription_id: sub.id, p_lock_months: FOUNDING.lockMonths });
+      if (error) console.error("[billing] founding confirm", error.message);
+    }
     return;
   }
   if (sub.status === "pending") {
@@ -47,10 +57,9 @@ export async function applySubscription(db: SupabaseClient, orgId: string, sub: 
       .update({
         ...base,
         subscription_status: sub.status === "halted" ? "halted" : sub.status === "cancelled" ? "cancelled" : "expired",
-        // Service off: behaves like an ended trial until they subscribe again.
-        plan: "trial",
-        trial_ends_at: new Date().toISOString(),
-        trial_reply_limit: 0,
+        // Paid service ended: the workspace keeps working on the Free plan.
+        plan: "free",
+        monthly_conversation_quota: plans().free.conversations,
         cancel_at_period_end: false,
       })
       .eq("id", orgId);

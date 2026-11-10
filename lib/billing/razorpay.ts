@@ -2,8 +2,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 /**
  * Razorpay Subscriptions (server side). Needs RAZORPAY_KEY_ID + RAZORPAY_KEY_SECRET
- * (Dashboard → Account & Settings → API keys) and a plan per paid tier
- * (Dashboard → Subscriptions → Plans) in RAZORPAY_PLAN_STARTER / RAZORPAY_PLAN_GROWTH.
+ * (Dashboard → Account & Settings → API keys) and a plan id per paid tier and interval
+ * (Dashboard → Subscriptions → Plans) in RAZORPAY_PLAN_{STARTER,GROWTH,PRO}[_YEARLY]
+ * and RAZORPAY_PLAN_GROWTH_FOUNDING. Top-up packs are one-time Orders (no plan needed).
  */
 const base = () => process.env.RAZORPAY_API_URL || "https://api.razorpay.com/v1";
 export const razorpayConfigured = () => Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
@@ -42,21 +43,43 @@ export type RzpSubscription = {
  * `replaces` = the subscription this one takes over from when a paying customer switches
  * plans. It is only cancelled once the new one is paid (see activateSubscription).
  */
-export function createSubscription(args: { planId: string; orgId: string; email: string | null; replaces?: string; billingName?: string }) {
+export function createSubscription(args: { planId: string; orgId: string; email: string | null; replaces?: string; billingName?: string; yearly?: boolean; founding?: boolean }) {
   return call<RzpSubscription>("/subscriptions", {
     method: "POST",
     body: {
       plan_id: args.planId,
-      total_count: 120,
+      // Ten years of renewals either way; the customer can cancel any time.
+      total_count: args.yearly ? 10 : 120,
       quantity: 1,
       customer_notify: 1,
-      notes: { org_id: args.orgId, email: args.email ?? "", replaces: args.replaces ?? "", billing_name: args.billingName ?? "" },
+      notes: { org_id: args.orgId, email: args.email ?? "", replaces: args.replaces ?? "", billing_name: args.billingName ?? "", offer: args.founding ? "founding" : "" },
     },
   });
 }
 
+export type RzpOrder = { id: string; amount: number; amount_paid: number; currency: string; status: "created" | "attempted" | "paid"; receipt?: string; notes?: Record<string, string> };
+
+/** One-time payment (top-up pack). Amount in paise. */
+export function createOrder(args: { amountPaise: number; receipt: string; notes: Record<string, string> }) {
+  return call<RzpOrder>("/orders", { method: "POST", body: { amount: args.amountPaise, currency: "INR", receipt: args.receipt.slice(0, 40), notes: args.notes } });
+}
+
+export const fetchOrder = (id: string) => call<RzpOrder>(`/orders/${encodeURIComponent(id)}`);
+
 export type RzpPlan = { id: string; period: string; interval: number; item: { name: string; amount: number; currency: string } };
 export const fetchPlan = (id: string) => call<RzpPlan>(`/plans/${encodeURIComponent(id)}`);
+
+/**
+ * Why a Razorpay plan must not be sold at the price we show, or null when it matches.
+ * Guards against an env var still pointing at an old plan (e.g. ₹2,999 after a price change).
+ */
+export function planMismatch(rp: Pick<RzpPlan, "period" | "interval" | "item">, expect: { amountInr: number; yearly: boolean }): string | null {
+  const period = expect.yearly ? "yearly" : "monthly";
+  if (rp.period !== period || rp.interval !== 1) return `billed every ${rp.interval} ${rp.period}, expected ${period}`;
+  if (rp.item.currency !== "INR") return `currency ${rp.item.currency}, expected INR`;
+  if (rp.item.amount !== Math.round(expect.amountInr * 100)) return `₹${rp.item.amount / 100} in Razorpay but the website shows ₹${expect.amountInr}`;
+  return null;
+}
 
 /** "test" or "live" from the key id, for setup messages. */
 export const razorpayMode = () => (process.env.RAZORPAY_KEY_ID?.startsWith("rzp_live_") ? "live" : "test");
@@ -75,6 +98,12 @@ const safeEqual = (a: string, b: string) => {
 /** Checkout success: hmac_sha256(payment_id + "|" + subscription_id, key_secret). */
 export function verifyPaymentSignature(paymentId: string, subscriptionId: string, signature: string): boolean {
   const expected = createHmac("sha256", process.env.RAZORPAY_KEY_SECRET ?? "").update(`${paymentId}|${subscriptionId}`).digest("hex");
+  return safeEqual(expected, signature);
+}
+
+/** Order checkout success: hmac_sha256(order_id + "|" + payment_id, key_secret). */
+export function verifyOrderSignature(orderId: string, paymentId: string, signature: string): boolean {
+  const expected = createHmac("sha256", process.env.RAZORPAY_KEY_SECRET ?? "").update(`${orderId}|${paymentId}`).digest("hex");
   return safeEqual(expected, signature);
 }
 

@@ -8,7 +8,7 @@ export default async function NewClientPage() {
   return (
     <>
       <PageHeader title="New client" sub="Creates the business and its website assistant. Next you'll paste their website to draft the knowledge." />
-      <NewClientForm starterQuota={config.defaultQuota("starter")} growthQuota={config.defaultQuota("growth")} />
+      <NewClientForm quotas={{ free: config.defaultQuota("free"), starter: config.defaultQuota("starter"), growth: config.defaultQuota("growth"), pro: config.defaultQuota("pro") }} />
     </>
   );
 }

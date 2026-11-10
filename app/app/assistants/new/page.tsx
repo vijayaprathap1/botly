@@ -28,8 +28,8 @@ export default async function NewAssistantPage() {
       <PageHeader title="Add an assistant" sub={`For another website or brand. Your ${plan.name} plan includes ${plan.bots} assistant${plan.bots === 1 ? "" : "s"}; you're using ${used}.`} />
       {full ? (
         <Notice tone="amber">
-          You&apos;ve used all {plan.bots} assistant{plan.bots === 1 ? "" : "s"} on {plan.name}. {plan.id === "growth" ? "Contact us for more." : `Growth includes up to ${planDef("growth").bots}.`}{" "}
-          {plan.id !== "growth" ? <Link className="font-medium underline" href="/app/billing">See plans</Link> : null}
+          You&apos;ve used all {plan.bots} assistant{plan.bots === 1 ? "" : "s"} on {plan.name}. {plan.id === "pro" ? "Contact us for more." : `Pro includes up to ${planDef("pro").bots}.`}{" "}
+          {plan.id !== "pro" ? <Link className="font-medium underline" href="/app/billing">See plans</Link> : null}
         </Notice>
       ) : (
         <Card title="New assistant" sub="It starts with your current branding, lead emails and contact details. Next you'll import its website.">

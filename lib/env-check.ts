@@ -61,14 +61,15 @@ export function checkEnv(env: Record<string, string | undefined> = process.env):
   // Without Resend nothing breaks, but no lead, invite, trial or alert email is ever sent: say so.
   if (!rk) out.push({ name: "RESEND_API_KEY", problem: "missing (optional)", fix: "resend.com → API Keys. Until it is set, leads are saved but nobody is emailed" });
   else if (!/^re_[A-Za-z0-9_]{10,}$/.test(rk)) out.push({ name: "RESEND_API_KEY", problem: "placeholder or malformed (optional)", fix: "resend.com → API Keys, or delete the line to run without lead emails" });
-  // Payments (optional until you sell): all four together, and test/live keys not mixed up.
-  const rzp = ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_PLAN_STARTER", "RAZORPAY_PLAN_GROWTH", "RAZORPAY_WEBHOOK_SECRET"];
+  // Payments (optional until you sell): keys, webhook and the three monthly plans together,
+  // and test/live keys not mixed up. Yearly and founding plan ids are optional.
+  const rzp = ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_PLAN_STARTER", "RAZORPAY_PLAN_GROWTH", "RAZORPAY_PLAN_PRO", "RAZORPAY_WEBHOOK_SECRET"];
   const rzpSet = rzp.filter((k) => !PLACEHOLDER.test(v(k)));
   if (rzpSet.length === 0) out.push({ name: "RAZORPAY", problem: "not set up", fix: "Customers can't pay yet. README → Payments (Razorpay)" });
   else if (rzpSet.length < rzp.length) out.push({ name: "RAZORPAY", problem: `missing ${rzp.filter((k) => !rzpSet.includes(k)).join(", ")}`, fix: "README → Payments (Razorpay)" });
   const kid = v("RAZORPAY_KEY_ID");
   if (kid && !PLACEHOLDER.test(kid) && !/^rzp_(test|live)_[A-Za-z0-9]+$/.test(kid)) out.push({ name: "RAZORPAY", problem: "RAZORPAY_KEY_ID doesn't look like a Razorpay key id", fix: "It starts with rzp_test_ or rzp_live_" });
-  for (const k of ["RAZORPAY_PLAN_STARTER", "RAZORPAY_PLAN_GROWTH"]) {
+  for (const k of ["RAZORPAY_PLAN_STARTER", "RAZORPAY_PLAN_GROWTH", "RAZORPAY_PLAN_PRO", "RAZORPAY_PLAN_STARTER_YEARLY", "RAZORPAY_PLAN_GROWTH_YEARLY", "RAZORPAY_PLAN_PRO_YEARLY", "RAZORPAY_PLAN_GROWTH_FOUNDING"]) {
     const pv = v(k);
     if (pv && !PLACEHOLDER.test(pv) && !/^plan_[A-Za-z0-9_]+$/.test(pv)) out.push({ name: "RAZORPAY", problem: `${k} isn't a plan id`, fix: "Copy the id that starts with plan_ from Subscriptions → Plans" });
   }

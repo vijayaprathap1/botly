@@ -165,7 +165,7 @@ test("client access: owner sees only their business, no cost, can suggest answer
   // Invoiced client: billing shows the current plan, no checkout buttons.
   await owner.goto(`${APP}/app/billing`);
   await expect(owner.getByText("Billed by invoice").first()).toBeVisible();
-  await expect(owner.getByRole("button", { name: "Choose Starter" })).toHaveCount(0);
+  await expect(owner.getByRole("button", { name: "₹799/month" })).toHaveCount(0);
   // Clients edit their own assistant, but never platform settings (model, plan, quota).
   await owner.goto(`${APP}/app/bots/${BOT}/settings`);
   await expect(owner.getByLabel("Greeting")).toBeVisible();

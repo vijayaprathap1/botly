@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { HOURS_NOT_SET, parseHoursText } from "@/lib/hours";
-import { TRIAL } from "@/lib/plans";
+import { plans } from "@/lib/plans";
 import { normalizeOrigin } from "@/lib/security/origin";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { estimateTokens } from "@/lib/tokens";
@@ -30,7 +30,7 @@ const schema = z.object({
   consent: z.literal("on", { message: "Please confirm you represent this business" }),
 });
 
-/** Self-serve sign-up: creates the business workspace, a free trial and the assistant. */
+/** Self-serve sign-up: creates the business workspace (on the Free plan) and the assistant. */
 export async function startWorkspace(_: StartState, form: FormData): Promise<StartState> {
   const session = await requireSession();
   if (session.orgIds.length) return { error: "You already have a workspace.", botId: undefined };
@@ -71,22 +71,21 @@ export async function startWorkspace(_: StartState, form: FormData): Promise<Sta
 
   const db = supabaseAdmin();
   const email = (session.email ?? "").toLowerCase();
-  // One free trial per email address.
+  // Every new workspace starts on Free (monthly cap, no end date). Trials and pilots are
+  // granted by the super admin. trial_claims still records the email so a later trial
+  // grant can see it was used (one trial per email address).
   const { data: claimed } = await db.from("trial_claims").select("email").eq("email", email).maybeSingle();
-  const trialEnds = claimed ? new Date() : new Date(Date.now() + TRIAL.days * 86_400_000);
 
   const { data: org, error } = await db
     .from("organizations")
     .insert({
       name: d.businessName,
       business_type: d.businessType,
-      plan: "trial",
-      monthly_conversation_quota: config.defaultQuota("trial"),
+      plan: "free",
+      monthly_conversation_quota: config.defaultQuota("free"),
       self_serve: true,
       created_by: session.userId,
-      trial_ends_at: trialEnds.toISOString(),
-      trial_reply_limit: claimed ? 0 : TRIAL.replies,
-      subscription_status: claimed ? "expired" : "trialing",
+      subscription_status: "none",
       billing_email: email || null,
       website_url: d.website || null,
       social_links: social,
@@ -96,7 +95,7 @@ export async function startWorkspace(_: StartState, form: FormData): Promise<Sta
     .single();
   if (error || !org) return { error: "Couldn't create your workspace. Please try again." };
   // All or nothing: a workspace without a membership or an assistant is a dead end the
-  // customer can't get out of (and would burn their one free trial).
+  // customer can't get out of.
   const undo = async (what: string, message?: string) => {
     console.error("[start] rolled back:", what, message ?? "");
     await db.from("trial_claims").delete().eq("org_id", org.id);

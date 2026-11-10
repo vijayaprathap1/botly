@@ -13,6 +13,7 @@ const good = {
   RAZORPAY_KEY_SECRET: "secret",
   RAZORPAY_PLAN_STARTER: "plan_Starter1",
   RAZORPAY_PLAN_GROWTH: "plan_Growth1",
+  RAZORPAY_PLAN_PRO: "plan_Pro1",
   RAZORPAY_WEBHOOK_SECRET: "hook",
   RESEND_API_KEY: "re_" + "a".repeat(24),
 };
@@ -50,7 +51,7 @@ describe("env check", () => {
     expect(blockingProblems({ ...good, RESEND_API_KEY: "" })).toHaveLength(0);
   });
   it("payments: not set up, partly set up and malformed ids are feature problems", () => {
-    const none = { ...good, RAZORPAY_KEY_ID: "", RAZORPAY_KEY_SECRET: "", RAZORPAY_PLAN_STARTER: "", RAZORPAY_PLAN_GROWTH: "", RAZORPAY_WEBHOOK_SECRET: "" };
+    const none = { ...good, RAZORPAY_KEY_ID: "", RAZORPAY_KEY_SECRET: "", RAZORPAY_PLAN_STARTER: "", RAZORPAY_PLAN_GROWTH: "", RAZORPAY_PLAN_PRO: "", RAZORPAY_WEBHOOK_SECRET: "" };
     expect(featureProblems(none).map((p) => p.problem)).toEqual(["not set up"]);
     expect(blockingProblems(none)).toHaveLength(0);
     expect(featureProblems({ ...good, RAZORPAY_WEBHOOK_SECRET: "" })[0]!.problem).toBe("missing RAZORPAY_WEBHOOK_SECRET");

@@ -1,5 +1,6 @@
 import { activateSubscription, applySubscription, isPaidActive } from "@/lib/billing/apply";
-import { verifyWebhookSignature, type RzpSubscription } from "@/lib/billing/razorpay";
+import { verifyWebhookSignature, type RzpOrder, type RzpSubscription } from "@/lib/billing/razorpay";
+import { applyTopupOrder, readTopupOrder } from "@/lib/billing/topup";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -7,13 +8,14 @@ export const dynamic = "force-dynamic";
 
 /**
  * Razorpay webhook (Dashboard → Webhooks → URL https://YOUR_DOMAIN/api/billing/webhook,
- * secret = RAZORPAY_WEBHOOK_SECRET, events: subscription.*). Idempotent by event id.
+ * secret = RAZORPAY_WEBHOOK_SECRET, events: subscription.* and order.paid). Idempotent by
+ * event id (and top-ups again by order id).
  */
 export async function POST(req: Request) {
   const raw = await req.text();
   const sig = req.headers.get("x-razorpay-signature") ?? "";
   if (!verifyWebhookSignature(raw, sig)) return new Response("Invalid signature", { status: 400 });
-  let evt: { event?: string; payload?: { subscription?: { entity?: RzpSubscription } } };
+  let evt: { event?: string; payload?: { subscription?: { entity?: RzpSubscription }; order?: { entity?: RzpOrder }; payment?: { entity?: { id?: string } } } };
   try {
     evt = JSON.parse(raw);
   } catch {
@@ -21,10 +23,22 @@ export async function POST(req: Request) {
   }
   const eventId = req.headers.get("x-razorpay-event-id") ?? `${evt.event}:${Date.now()}`;
   const sub = evt.payload?.subscription?.entity;
+  const order = evt.event === "order.paid" ? evt.payload?.order?.entity : undefined;
+  const topup = order ? readTopupOrder(order) : null;
   const db = supabaseAdmin();
-  const orgId = sub?.notes?.org_id;
+  const orgId = sub?.notes?.org_id ?? topup?.orgId;
   const { error: dup } = await db.from("billing_events").insert({ id: eventId, org_id: orgId && /^[0-9a-f-]{36}$/i.test(orgId) ? orgId : null, event: evt.event ?? "unknown", payload: evt });
   if (dup?.code === "23505") return Response.json({ ok: true, duplicate: true });
+  if (order && topup) {
+    try {
+      await applyTopupOrder(db, order, evt.payload?.payment?.entity?.id ?? null);
+    } catch (e) {
+      console.error("[billing] webhook topup failed", e instanceof Error ? e.message : e);
+      await db.from("billing_events").delete().eq("id", eventId);
+      return new Response("Retry later", { status: 500 });
+    }
+    return Response.json({ ok: true });
+  }
   if (sub && orgId && /^[0-9a-f-]{36}$/i.test(orgId)) {
     try {
       const { data: org } = await db.from("organizations").select("razorpay_subscription_id").eq("id", orgId).maybeSingle();

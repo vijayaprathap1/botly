@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-/** Mondays 09:00 IST: weekly summary email for Growth-plan clients. */
+/** Mondays 09:00 IST: weekly summary email for Growth and Pro clients. */
 export async function GET(req: Request) {
   if (!cronAuthorized(req)) return new Response("Unauthorized", { status: 401 });
   try {

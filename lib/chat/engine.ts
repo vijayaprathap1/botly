@@ -16,6 +16,7 @@ import { reportError } from "../alerts";
 import { dispatchNotice } from "../notify/dispatch";
 import type { Notifier } from "../notify/types";
 import { buildSystemPrompt } from "../prompts/assistant";
+import { hasGrowthTools, monthlyCap } from "../plans";
 import { effectiveQuota, monthKey, shouldSendQuotaWarning } from "../quota";
 import { checkLimits, type RateLimiter } from "../security/rate-limit";
 import type { BotWithOrg, ConversationRow, LeadType, ToolCallLog } from "../types";
@@ -138,7 +139,8 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
 
   // 3. Conversation (+ quota on the first message) ---------------------------------
   const month = monthKey(now, bot.org.timezone);
-  const quota = effectiveQuota(bot.org.monthly_conversation_quota, bot.monthly_conversation_quota);
+  // Plan cap (or the admin's per-assistant override) plus any top-up packs bought this month.
+  const quota = monthlyCap(effectiveQuota(bot.org.monthly_conversation_quota, bot.monthly_conversation_quota), bot.org, month);
   let conversation: ConversationRow | null = null;
   if (req.conversationId) {
     const c = await deps.store.getConversation(req.conversationId);
@@ -263,7 +265,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     businessName: bot.org.name,
     businessType: bot.org.business_type,
     tone: bot.tone,
-    growth: bot.org.plan === "growth",
+    growth: hasGrowthTools(bot.org.plan),
     approvedKnowledge: approvedKnowledgeText,
     retrievedKnowledge,
     nowInBusinessTimezone: formatNow(now, bot.org.timezone),
@@ -706,7 +708,7 @@ async function executeTool(use: ToolUsePart, t: ToolCtx): Promise<Record<string,
     }
 
     case "lookup_order": {
-      if (bot.org.plan !== "growth") return { ok: false, error: "Order lookup is not available." };
+      if (!hasGrowthTools(bot.org.plan)) return { ok: false, error: "Order lookup is not available." };
       const orderNumber = str(input.order_number, 40);
       const contact = str(input.phone_or_email, 200);
       if (!orderNumber || !contact) return { ok: false, error: "Ask for both the order number and the phone number or email used on the order." };
@@ -732,7 +734,7 @@ async function executeTool(use: ToolUsePart, t: ToolCtx): Promise<Record<string,
     }
 
     case "request_callback": {
-      if (bot.org.plan !== "growth") return { ok: false, error: "Callback booking is not available." };
+      if (!hasGrowthTools(bot.org.plan)) return { ok: false, error: "Callback booking is not available." };
       const today = new Intl.DateTimeFormat("en-CA", { timeZone: bot.org.timezone }).format(new Date());
       const name = str(input.name, 80);
       const phone = str(input.phone, 40);

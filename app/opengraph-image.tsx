@@ -23,7 +23,7 @@ export default function OpenGraphImage() {
           <div style={{ fontSize: 28, color: "#c7d2fe", maxWidth: 980 }}>Answers in English, Tamil and Hindi, plus Hinglish and Tanglish. Sends you the leads.</div>
         </div>
         <div style={{ display: "flex", gap: 12, fontSize: 24, color: "#a5b4fc" }}>
-          <div style={{ display: "flex", padding: "8px 16px", borderRadius: 999, border: "1px solid #4338ca" }}>Free 14-day trial</div>
+          <div style={{ display: "flex", padding: "8px 16px", borderRadius: 999, border: "1px solid #4338ca" }}>Free plan · no card needed</div>
           <div style={{ display: "flex", padding: "8px 16px", borderRadius: 999, border: "1px solid #4338ca" }}>One line to install</div>
         </div>
       </div>

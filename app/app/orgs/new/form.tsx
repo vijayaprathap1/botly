@@ -4,9 +4,11 @@ import { createOrgAndBot, type ActionState } from "@/app/app/actions";
 import { SubmitButton, useFormAction } from "@/components/client";
 import { Card, Field, inputClass, Notice } from "@/components/ui";
 
-export function NewClientForm({ starterQuota, growthQuota }: { starterQuota: number; growthQuota: number }) {
+type ClientPlan = "free" | "starter" | "growth" | "pro";
+
+export function NewClientForm({ quotas }: { quotas: Record<ClientPlan, number> }) {
   const [state, action, actionPending] = useFormAction<ActionState>(createOrgAndBot, null);
-  const [plan, setPlan] = useState<"starter" | "growth">("starter");
+  const [plan, setPlan] = useState<ClientPlan>("starter");
   return (
     <form onSubmit={action} className="grid max-w-2xl gap-4">
       <Card title="Business">
@@ -18,13 +20,15 @@ export function NewClientForm({ starterQuota, growthQuota }: { starterQuota: num
             <input id="businessType" name="businessType" required className={inputClass} defaultValue="online store" />
           </Field>
           <Field label="Plan" htmlFor="plan">
-            <select id="plan" name="plan" className={inputClass} value={plan} onChange={(e) => setPlan(e.target.value as "starter" | "growth")}>
+            <select id="plan" name="plan" className={inputClass} value={plan} onChange={(e) => setPlan(e.target.value as ClientPlan)}>
+              <option value="free">Free</option>
               <option value="starter">Starter</option>
               <option value="growth">Growth</option>
+              <option value="pro">Pro</option>
             </select>
           </Field>
           <Field label="Monthly conversations" htmlFor="quota">
-            <input id="quota" name="quota" type="number" min={0} className={inputClass} key={plan} defaultValue={plan === "growth" ? growthQuota : starterQuota} />
+            <input id="quota" name="quota" type="number" min={0} className={inputClass} key={plan} defaultValue={quotas[plan]} />
           </Field>
           <Field label="Timezone" htmlFor="timezone">
             <input id="timezone" name="timezone" className={inputClass} defaultValue="Asia/Kolkata" />

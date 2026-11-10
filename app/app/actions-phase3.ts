@@ -4,16 +4,17 @@ import { revalidatePath } from "next/cache";
 import { requireBotEditor } from "@/lib/bot-access";
 import { requireAdmin } from "@/lib/auth";
 import { encryptJson } from "@/lib/crypto";
+import { growthToolsPlan, hasGrowthTools } from "@/lib/plans";
 import { makeProvider, normalizeStoreUrl, type IntegrationCreds } from "@/lib/orders";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { ActionState } from "./actions";
 
 const text = (v: FormDataEntryValue | null) => String(v ?? "").trim();
 
-/** Growth plan: connect Shopify or WooCommerce for order lookup. Credentials are tested, then encrypted. */
+/** Growth and Pro plans: connect Shopify or WooCommerce for order lookup. Credentials are tested, then encrypted. */
 export async function saveIntegration(botId: string, _: ActionState, form: FormData): Promise<ActionState> {
   const { session, bot: editable } = await requireBotEditor(botId);
-  if (!session.isAdmin && editable.org.plan !== "growth") return { error: "Order lookup is part of the Growth plan. Upgrade in Billing." };
+  if (!session.isAdmin && !hasGrowthTools(editable.org.plan)) return { error: `Order lookup is part of the ${growthToolsPlan().name} and Pro plans. Upgrade in Billing.` };
   const provider = text(form.get("provider"));
   if (provider !== "shopify" && provider !== "woocommerce") return { error: "Pick Shopify or WooCommerce" };
   const storeUrl = normalizeStoreUrl(text(form.get("store_url")));

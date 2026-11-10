@@ -130,12 +130,28 @@ Add new migrations as `0004_…sql` and so on.
 ### Give the client their own login
 Bot → Overview → **Client access** → enter their email → **Give access**. They get an email with the sign-in link (or send them `/login`). They see only their business: Conversations, Leads, Unanswered (they can suggest answers, which you approve with one click), Reports and the install snippet. No cost, model settings or other clients.
 
-### Growth plan: order lookup and callbacks
-1. Settings → **Plan** → Growth.
+### Plans
+
+All plan numbers live in `lib/plans.ts` (prices are flat INR: exactly what the customer pays). Env overrides: `PRICE_{STARTER,GROWTH,PRO}_INR`, `DEFAULT_QUOTA_{FREE,STARTER,GROWTH,PRO}`, `TOPUP_PRICE_INR`, `TOPUP_CONVERSATIONS`, `FOUNDING_PRICE_INR`, `FOUNDING_SLOTS`.
+
+| Plan | Monthly | Yearly (10×) | Conversations / month | Assistants | Pages learned | Extras |
+| --- | --- | --- | --- | --- | --- | --- |
+| Free (sign-up default) | ₹0 | – | 50 | 1 | 10 | "Powered by Botly" always on |
+| Starter | ₹799 | ₹7,990 | 500 | 1 | 40 | unanswered inbox, monthly report |
+| Growth | ₹1,999 | ₹19,990 | 2,000 | 1 | 40 | Shopify/WooCommerce order lookup, callback booking, weekly summary, branding can be hidden |
+| Pro | ₹4,999 | ₹49,990 | 10,000 | 3 | 100 | everything in Growth |
+
+- **Top-up:** ₹249 adds 500 conversations for the current calendar month (one-time Razorpay order, Billing → "Add 500 conversations"). Stored in `organizations.topup_month/topup_conversations`, ledger in `quota_topups` (idempotent by order id).
+- **Founding offer:** the first 25 shops get Growth at ₹999/month, locked for 12 months. Sold from Billing once `RAZORPAY_PLAN_GROWTH_FOUNDING` is set (until then the site says "Contact us"). Slots are held for 30 minutes during checkout and counted atomically in `founding_claims`; `locked_until` records the lock. After 12 months, move a founding subscription to the regular Growth plan in Razorpay by hand (or leave it).
+- **Trials:** sign-up starts on Free. Super admin → Actions → "Start 14-day trial" (`TRIAL_DAYS`/`TRIAL_REPLIES`) or "Start 30-day pilot" (`PILOT_DAYS`/`PILOT_REPLIES`, setup done by us). An ended trial can move itself to Free from Billing.
+- Conversation caps are per assistant per month (`usage_monthly`), enforced by `begin_conversation`.
+
+### Growth and Pro: order lookup and callbacks
+1. Settings → **Plan** → Growth (or Pro).
 2. Settings → **Order lookup** → Shopify (store URL + Admin API token from a custom app with `read_orders`, plus `read_all_orders` for orders older than 60 days) or WooCommerce (site URL + a **Read** REST API key/secret). Botly tests the connection before saving and stores the credentials encrypted (`ENCRYPTION_KEY`).
 3. Visitors can then ask "where is my order #1042?". The assistant asks for the phone or email used on the order and shows status, courier, tracking link and expected date only if they match. Wrong details get the same "couldn't find it" answer as a wrong number, and each visitor gets 5 lookups per 10 minutes.
 4. "Can someone call me tomorrow evening?" opens a booking form (date + slot). It's saved as a `callback` lead and the owner is notified.
-5. Growth clients get a summary email every Monday at 09:00 IST.
+5. Growth and Pro clients get a summary email every Monday at 09:00 IST.
 
 ## Selling it as self-serve SaaS
 
@@ -149,8 +165,8 @@ Anyone can now sign up at your site, build an assistant from their public profil
 1. Landing page `/` → **Start free** → `/login` (Google or email link).
 2. First sign-in goes to `/start`: business name and type, website, social profile links and pasted bios, contact details and hours.
 3. Botly reads up to 15 public pages (plus Shopify products), Claude writes a **business profile document**, FAQs and a policy summary (all approved automatically for self-serve), picks a greeting, suggested questions and tone, then runs the 4 prompt-injection safety checks. If they pass, the bot goes live.
-4. The customer lands on their Overview: trial meter, live preview, their business profile (edit/download), the install snippet and a Go live / Pause switch.
-5. Free trial: `TRIAL_DAYS` days and `TRIAL_REPLIES` AI replies (preview replies count), once per email. When it ends, visitors see the business's phone/WhatsApp/email instead of AI replies, and the owner sees "Choose a plan".
+4. The customer lands on their Overview (on the Free plan): live preview, their business profile (edit/download), the install snippet and a Go live / Pause switch.
+5. Free plan: 50 conversations a month per assistant. At the cap, visitors see the business's phone/WhatsApp/email instead of AI replies until next month, a top-up or an upgrade. Trials (admin-granted): `TRIAL_DAYS` days and `TRIAL_REPLIES` AI replies (preview replies count); when one ends the owner can choose a plan or move to Free.
 6. `/app/billing` → Razorpay Checkout (UPI, cards, net banking) → subscription active → plan quota applies. Renewals, failures and cancellations arrive by webhook.
 
 **Why social profiles aren't scraped:** Instagram, Facebook, LinkedIn and Google Maps forbid automated reading of their pages, and Google's Places API terms don't allow storing its data. Customers paste their bios instead; the links are kept in their profile.
@@ -184,16 +200,28 @@ Setup: run `supabase/migrations/0009_demos.sql` and `supabase/migrations/0013_de
 1. **Account:** sign up at razorpay.com and complete KYC (PAN, bank account, business details). Ask support to enable **Subscriptions** if it isn't in the menu.
 2. **Business details on your site** (Razorpay reviews these pages before approving live payments): set `BUSINESS_LEGAL_NAME`, `SUPPORT_EMAIL`, `SUPPORT_PHONE`, `BUSINESS_ADDRESS`, `BUSINESS_CITY`, `GRIEVANCE_OFFICER`. They appear on `/contact`, `/terms`, `/privacy-policy` and `/refund-policy` (all linked in the footer).
 3. **Test mode first:** Account & Settings → API Keys → generate test keys → `RAZORPAY_KEY_ID` (`rzp_test_…`) and `RAZORPAY_KEY_SECRET`.
-4. **Plans:** Subscriptions → Plans → create "Botly Starter" (monthly, every 1 month, ₹2,999) and "Botly Growth" (monthly, ₹9,999). Copy the `plan_…` ids into `RAZORPAY_PLAN_STARTER` / `RAZORPAY_PLAN_GROWTH`. The amounts must match `PRICE_STARTER_INR` / `PRICE_GROWTH_INR`. The site shows these as flat monthly prices.
-5. **Webhook:** Account & Settings → Webhooks → Add. URL `https://YOUR_DOMAIN/api/billing/webhook`, a secret you make up (put the same value in `RAZORPAY_WEBHOOK_SECRET`), events: all `subscription.*`.
+4. **Plans:** Subscriptions → Plans → create one plan per row below (every 1 period, INR) and copy each `plan_…` id into its env var. Checkout refuses a plan whose amount or period doesn't match the price on the site, and `npm run check` reports any mismatch.
+
+   | Razorpay plan name | Period | Amount | Env var |
+   | --- | --- | --- | --- |
+   | Botly Starter | monthly | ₹799 (79900 paise) | `RAZORPAY_PLAN_STARTER` |
+   | Botly Growth | monthly | ₹1,999 (199900) | `RAZORPAY_PLAN_GROWTH` |
+   | Botly Pro | monthly | ₹4,999 (499900) | `RAZORPAY_PLAN_PRO` |
+   | Botly Starter Yearly | yearly | ₹7,990 (799000) | `RAZORPAY_PLAN_STARTER_YEARLY` |
+   | Botly Growth Yearly | yearly | ₹19,990 (1999000) | `RAZORPAY_PLAN_GROWTH_YEARLY` |
+   | Botly Pro Yearly | yearly | ₹49,990 (4999000) | `RAZORPAY_PLAN_PRO_YEARLY` |
+   | Botly Growth Founding | monthly | ₹999 (99900) | `RAZORPAY_PLAN_GROWTH_FOUNDING` |
+
+   Top-ups need no plan (they are one-time Orders).
+5. **Webhook:** Account & Settings → Webhooks → Add. URL `https://YOUR_DOMAIN/api/billing/webhook`, a secret you make up (put the same value in `RAZORPAY_WEBHOOK_SECRET`), events: all `subscription.*` and `order.paid` (top-ups).
 6. **Check:** `npm run check` confirms the keys work, both plans exist in the same mode, they're monthly INR, and their prices match the website.
-7. **Try it:** sign in as a customer → Plan & billing → Choose Starter → pay with a Razorpay test card or test UPI id → the plan turns Starter within seconds, and the payment appears in Super admin → Latest billing events.
+7. **Try it:** sign in as a customer → Plan & billing → Starter ₹799/month → pay with a Razorpay test card or test UPI id → the plan turns Starter within seconds, and the payment appears in Super admin → Latest billing events.
 8. **Go live:** after KYC approval, switch the dashboard to Live mode and repeat steps 3–5 there (live keys, live plans, live webhook — ids differ between modes). Update the environment and redeploy.
 
 How it behaves:
 - Nothing changes until Razorpay confirms payment. Closing the checkout never touches the customer's current plan.
 - Switching plans: the new plan starts once paid, and the old subscription is cancelled at that moment, so nobody is billed twice.
-- Renewal fails → status "past due", service stays on while Razorpay retries. Retries exhausted ("halted"), cancelled or ended → the widget shows contact details instead of AI replies.
+- Renewal fails → status "past due", service stays on while Razorpay retries. Retries exhausted ("halted"), cancelled or ended → the workspace moves to the Free plan (50 conversations a month).
 - Every webhook is stored in `billing_events` (visible in Super admin). A webhook that can't be applied returns 500 so Razorpay retries it.
 
 ## Alerts, trial emails and updates
@@ -201,8 +229,9 @@ How it behaves:
 - **Error alerts:** every server error and every AI-provider failure emails `ALERT_EMAIL` (or the first `ADMIN_EMAILS` address), at most once per 15 minutes per kind of error, including across serverless instances once migration 0011 is applied. Needs `RESEND_API_KEY`. For uptime, point a free monitor (UptimeRobot, Better Stack) at `https://YOUR_DOMAIN/api/health` (no `deep=1`). That check is public and does not call the model. `GET /api/health?deep=1` does call the model: send `Authorization: Bearer $CRON_SECRET` (the secret must be at least 16 characters), or open it while signed in as an admin. Without that, `deep=1` only repeats a result cached for 5 minutes and never starts a new call.
 - **Migration 0011** (trial replies counted only after a successful answer, shared AI budget, alert dedupe, cached health): run `supabase/migrations/0011_launch_guards.sql` in the Supabase SQL editor before or with this deploy. Until it is applied, trial replies are still counted up front and the shared budget is not enforced (chats keep working).
 - **Migration 0013** (demo share of the AI budget, flagged-draft count): run `supabase/migrations/0013_demo_guards.sql` in the Supabase SQL editor. It replaces `ai_budget_try` / `ai_budget_add` from 0011 with the same names plus a demo lane. Customer calls omit the new arguments and behave as before.
-- **AI budget and chat caps** (env, defaults in `.env.example`): `RATE_LIMIT_BOT_PER_MIN=30`, `MAX_AI_REPLIES_PER_CONVERSATION=30` (same for every plan, including Growth; set `MAX_AI_REPLIES_PER_CONVERSATION_GROWTH` to override one plan), `DEMO_MAX_AI_REPLIES_PER_CONVERSATION=15` (demo conversations only), `AI_BUDGET_REQUESTS_PER_MIN=40`, `AI_BUDGET_TOKENS_PER_MIN=200000`, `AI_BUDGET_REQUESTS_PER_DAY=10000`, `AI_BUDGET_TOKENS_PER_DAY=15000000`, `AI_BUDGET_DEMO_SHARE=0.15`. Set these in Vercel even if you like the defaults, so a previously saved `RATE_LIMIT_BOT_PER_MIN=120` does not stay in force. A model id on a bot that is not `LLM_MODEL`, a fallback, or `LLM_EXTRA_MODELS` is rewritten to the default. Optional cleanup if `select id, name, model from bots where model not in ('openai/gpt-oss-120b','openai/gpt-oss-20b')` shows rows you do not want to keep: `update bots set model = 'openai/gpt-oss-120b' where model not in ('openai/gpt-oss-120b','openai/gpt-oss-20b');`
-- **Trial emails:** the daily job (9 am IST) sends each trial one welcome, one "80% of replies used", one "2 days left" and one "trial ended" email.
+- **AI budget and chat caps** (env, defaults in `.env.example`): `RATE_LIMIT_BOT_PER_MIN=30`, `MAX_AI_REPLIES_PER_CONVERSATION=30` (same for every plan; set e.g. `MAX_AI_REPLIES_PER_CONVERSATION_FREE` or `_GROWTH` to override one plan), `DEMO_MAX_AI_REPLIES_PER_CONVERSATION=15` (demo conversations only), `AI_BUDGET_REQUESTS_PER_MIN=40`, `AI_BUDGET_TOKENS_PER_MIN=200000`, `AI_BUDGET_REQUESTS_PER_DAY=10000`, `AI_BUDGET_TOKENS_PER_DAY=15000000`, `AI_BUDGET_DEMO_SHARE=0.15`. Set these in Vercel even if you like the defaults, so a previously saved `RATE_LIMIT_BOT_PER_MIN=120` does not stay in force. A model id on a bot that is not `LLM_MODEL`, a fallback, or `LLM_EXTRA_MODELS` is rewritten to the default. Optional cleanup if `select id, name, model from bots where model not in ('openai/gpt-oss-120b','openai/gpt-oss-20b')` shows rows you do not want to keep: `update bots set model = 'openai/gpt-oss-120b' where model not in ('openai/gpt-oss-120b','openai/gpt-oss-20b');`
+- **Trial emails:** the daily job (9 am IST) sends each trial one welcome, one "80% of replies used", one "2 days left" and one "trial ended" email. New Free workspaces get the welcome email only.
+- **Migration 0015** (new pricing: `free`/`pro` plans, top-ups, founding slots): run `supabase/migrations/0015_new_pricing.sql` in the Supabase SQL editor **before** deploying the pricing update. It is additive and changes no existing workspace.
 - **Migration 0007** (billing name, GSTIN, trial email log): run `supabase/migrations/0007_billing_details.sql` in the Supabase SQL editor after pulling this update.
 - **Migration 0010** (only if you ran an earlier draft of 0009 and see "cannot change return type of existing function"): run `supabase/migrations/0010_demos_upgrade.sql`. It is safe to run on any database.
 - **Migration 0008** (business hours "not set" instead of a made-up Mon–Sat 10–7 default): run `supabase/migrations/0008_hours_not_set.sql` the same way. It also resets existing bots that still carry the untouched old default; a business that really keeps those hours re-enters them in Settings.
@@ -264,7 +293,7 @@ Playwright embeds the widget on hostile pages served from a different origin: ag
 
 `vercel.json` schedules two Vercel Cron jobs; set `CRON_SECRET` so only Vercel can call them:
 - `/api/cron/retention` nightly at 03:00 IST: deletes conversations and leads older than each client's retention setting (default 12 months).
-- `/api/cron/weekly` Mondays at 09:00 IST: weekly summary email for Growth clients.
+- `/api/cron/weekly` Mondays at 09:00 IST: weekly summary email for Growth and Pro clients.
 
 ## 7. Credentials you need to create
 
@@ -275,9 +304,9 @@ Playwright embeds the widget on hostile pages served from a different origin: ag
 | Resend API key + verified domain | resend.com | Lead emails. Until a domain is verified you can only send to your own Resend address. `RESEND_API_KEY`, `EMAIL_FROM` |
 | WhatsApp Cloud API (Phase 2) | developers.facebook.com → WhatsApp | A permanent System User token, phone number ID, and an **approved utility template** named `new_lead` with 4 body variables, e.g. *"New lead for {{1}}: {{2}}, {{3}}. Need: {{4}}"*. Until then each lead logs "WhatsApp pending" and email still goes out. |
 | `CRON_SECRET` | any long random string | Protects the scheduled jobs |
-| `ENCRYPTION_KEY` (Growth) | `openssl rand -base64 32` | Encrypts store credentials. Never change it after connecting stores. |
+| `ENCRYPTION_KEY` (Growth/Pro) | `openssl rand -base64 32` | Encrypts store credentials. Never change it after connecting stores. |
 | Voyage AI key (optional) | voyageai.com | Semantic search when a client's knowledge exceeds 25k tokens. Without it, retrieval uses keyword search. |
-| Shopify custom app / WooCommerce API key (Growth, per client) | the client's store admin | Order lookup |
+| Shopify custom app / WooCommerce API key (Growth/Pro, per client) | the client's store admin | Order lookup |
 | Vercel project + domain | vercel.com | Hosting the app and `widget.js` |
 
 ## Status

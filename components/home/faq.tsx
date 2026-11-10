@@ -1,5 +1,5 @@
 import { SPOKEN_LANGUAGES } from "@/lib/business";
-import { TRIAL } from "@/lib/plans";
+import { FOUNDING, fmtInr, plans, TOPUP } from "@/lib/plans";
 import { SupportEmail } from "@/components/marketing/support-contact";
 import { Eyebrow, h2, lede, section, wrap } from "./ui";
 
@@ -12,10 +12,22 @@ export function homeFaqs() {
     { q: "Do I need a website?", a: "No. You can start from what you type in, plus the bio you paste from your Instagram or Google profile. A website gives it more to learn from." },
     { q: "Which languages does it speak?", a: `${SPOKEN_LANGUAGES}. It replies in the same language and script the customer used.` },
     {
-      q: "What happens after the free trial?",
-      a: `Your ${TRIAL.days}-day trial includes ${TRIAL.replies} AI replies. After that, visitors see your phone, WhatsApp and email instead of AI replies until you pick a plan. Nothing breaks on your site.`,
+      q: "How much does Botly cost?",
+      a: (() => {
+        const { free, starter, growth, pro } = plans();
+        const line = (p: typeof starter) => `${p.name} ${fmtInr(p.priceInr)}/month (${p.conversations.toLocaleString("en-IN")} conversations)`;
+        return `Free is ${fmtInr(0)} with ${free.conversations} conversations a month. ${line(starter)}, ${line(growth)} with Shopify and WooCommerce order lookup, and ${line(pro)}. Paying yearly costs 10 months' price. The price you see is the price you pay.`;
+      })(),
     },
-    { q: "Can I cancel any time?", a: "Yes, from Billing. Your plan runs until the end of the month you paid for." },
+    {
+      q: "What happens when I run out of conversations?",
+      a: `Visitors see your phone, WhatsApp and email instead of AI replies until next month. Nothing breaks on your site. You can add ${TOPUP.conversations.toLocaleString("en-IN")} conversations for ${fmtInr(TOPUP.priceInr)} or upgrade any time.`,
+    },
+    {
+      q: "What is the founding offer?",
+      a: `The first ${FOUNDING.slots} shops get Growth at ${fmtInr(FOUNDING.priceInr)}/month, locked for ${FOUNDING.lockMonths} months.`,
+    },
+    { q: "Can I cancel any time?", a: "Yes, from Billing. Your plan runs until the end of the period you paid for, then your assistant moves to the Free plan." },
     {
       q: "Is my customers' data safe?",
       a: "Conversations are visible only to you and our support team. You can export everything and delete a customer's data on request.",

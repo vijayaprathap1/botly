@@ -3,6 +3,7 @@ import { config } from "./config";
 import { LANGUAGE_LABEL, type Lang } from "./language";
 import { escapeHtml, sendEmail } from "./notify/email";
 import { buildReport, type Report } from "./reports";
+import { hasGrowthTools } from "./plans";
 import type { BotWithOrg } from "./types";
 
 export function renderWeeklyEmail(bot: BotWithOrg, r: Report): { subject: string; html: string; text: string } {
@@ -27,10 +28,10 @@ ${tops.length ? `<h3 style="font-size:15px;margin:16px 0 6px">Top questions</h3>
   return { subject, html, text };
 }
 
-/** Weekly report email for every active Growth bot (P14, Phase 3). */
+/** Weekly report email for every active Growth or Pro bot (P14, Phase 3). */
 export async function sendWeeklyReports(db: SupabaseClient, now = new Date()): Promise<{ bots: number; sent: number; failed: number }> {
   const { data } = await db.from("bots").select("*, org:organizations(*)").eq("active", true);
-  const bots = ((data ?? []) as BotWithOrg[]).filter((b) => b.org.plan === "growth");
+  const bots = ((data ?? []) as BotWithOrg[]).filter((b) => hasGrowthTools(b.org.plan));
   const to = now.toISOString();
   const from = new Date(now.getTime() - 7 * 86_400_000).toISOString();
   const fmt = (d: string) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(new Date(d));

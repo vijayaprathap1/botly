@@ -2,29 +2,33 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { config } from "./config";
 import { sendEmail } from "./notify/email";
 import { brandEmail, type BrandEmail } from "./notify/layout";
-import { planDef, trialState } from "./plans";
+import { fmtInr, planDef, plans, trialState } from "./plans";
 import type { OrgRow } from "./types";
 
 export type TrialEmailKey = "welcome" | "replies80" | "ending" | "ended";
 
 /**
  * The one trial email an organization should get today, or null. Each is sent once;
- * later stages win (an ended trial never gets "2 days left").
+ * later stages win (an ended trial never gets "2 days left"). New Free workspaces get
+ * only the welcome email.
  */
 export function nextTrialEmail(org: Pick<OrgRow, "plan" | "trial_ends_at" | "trial_reply_limit" | "trial_replies_used" | "trial_emails" | "suspended"> & { created_at?: string }, now = new Date()): TrialEmailKey | null {
+  const sent = org.trial_emails ?? {};
+  const age = org.created_at ? now.getTime() - Date.parse(org.created_at) : Infinity;
+  if (org.plan === "free") return !org.suspended && age < 3 * 86_400_000 && !sent.welcome ? "welcome" : null;
   const t = trialState(org, now);
   if (!t || org.suspended) return null;
-  const sent = org.trial_emails ?? {};
   if (t.over) return sent.ended ? null : "ended";
   if (t.daysLeft <= 2 && !sent.ending) return "ending";
   if (t.used >= Math.ceil(t.limit * 0.8) && !sent.replies80) return "replies80";
-  const age = org.created_at ? now.getTime() - Date.parse(org.created_at) : Infinity;
   if (age < 3 * 86_400_000 && !sent.welcome) return "welcome";
   return null;
 }
 
-export function renderTrialEmail(key: TrialEmailKey, org: Pick<OrgRow, "name" | "trial_reply_limit" | "trial_replies_used" | "trial_ends_at">, now = new Date()) {
+export function renderTrialEmail(key: TrialEmailKey, org: Pick<OrgRow, "name" | "trial_reply_limit" | "trial_replies_used" | "trial_ends_at"> & { plan?: OrgRow["plan"] }, now = new Date()) {
   const t = trialState({ ...org, plan: "trial" }, now)!;
+  const onFree = org.plan === "free";
+  const free = plans().free;
   const app = config.appUrl;
   const billing = `${app}/app/billing`;
   const starter = planDef("starter");
@@ -34,7 +38,9 @@ export function renderTrialEmail(key: TrialEmailKey, org: Pick<OrgRow, "name" | 
       lines: [
         "Your AI assistant has read your business details and is ready to answer customers.",
         "Three quick steps: try it in Preview, check the business profile, then paste the one-line install code on your website.",
-        `Your free trial includes ${t.limit} AI replies over ${t.daysLeft} days.`,
+        onFree
+          ? `You're on the Free plan: ${free.conversations} conversations a month. Upgrade any time from Billing.`
+          : `Your free trial includes ${t.limit} AI replies over ${t.daysLeft} days.`,
       ],
       cta: ["Open your assistant", `${app}/app`],
     },
@@ -50,7 +56,7 @@ export function renderTrialEmail(key: TrialEmailKey, org: Pick<OrgRow, "name" | 
       subject: `${org.name}: your free trial ends in ${t.daysLeft} day${t.daysLeft === 1 ? "" : "s"}`,
       lines: [
         `Your free trial ends in ${t.daysLeft} day${t.daysLeft === 1 ? "" : "s"}. After that, the assistant shows your contact details instead of answering.`,
-        "Choose a plan to keep it answering. Everything you set up stays as it is.",
+        `Choose a plan to keep it answering, or move to the Free plan (${free.conversations} conversations a month). Everything you set up stays as it is.`,
       ],
       cta: ["Keep my assistant on", billing],
     },
@@ -58,7 +64,7 @@ export function renderTrialEmail(key: TrialEmailKey, org: Pick<OrgRow, "name" | 
       subject: `${org.name}: your free trial has ended`,
       lines: [
         "Your free trial has ended, so your website chat now shows your contact details instead of AI answers.",
-        "Your knowledge, conversations and leads are all saved. Choose a plan and the assistant starts answering again straight away.",
+        `Your knowledge, conversations and leads are all saved. Choose a plan, or move to the Free plan (${free.conversations} conversations a month), and the assistant starts answering again straight away.`,
       ],
       cta: ["Turn answers back on", billing],
     },
@@ -76,8 +82,11 @@ export function renderTrialEmail(key: TrialEmailKey, org: Pick<OrgRow, "name" | 
       badge: "&#127881;",
       eyebrow: "You're all set",
       heading: `Your ${org.name} assistant is ready`,
-      paragraphs: ["Your AI assistant has read your business details and is ready to answer customers on your website."],
-      stats: usage,
+      paragraphs: [
+        "Your AI assistant has read your business details and is ready to answer customers on your website.",
+        ...(onFree ? [`You're on the Free plan: ${free.conversations} conversations a month. Upgrade any time from Billing.`] : []),
+      ],
+      stats: onFree ? [{ value: `${free.conversations}`, label: "free conversations a month" }, { value: fmtInr(planDef("starter").priceInr), label: "Starter, per month" }] : usage,
       steps: {
         title: "Three quick steps",
         items: ["Try it in Preview: ask what your customers ask.", "Check the business profile it wrote and fix anything that's off.", "Paste the one-line install code on your website. That's it."],
@@ -91,22 +100,21 @@ export function renderTrialEmail(key: TrialEmailKey, org: Pick<OrgRow, "name" | 
     preheader: c.lines[0],
     paragraphs: c.lines,
     cta: { label: c.cta[0], url: c.cta[1] },
-    reason: `You're getting this because you started a Botly trial for ${org.name}.`,
+    reason: onFree ? `You're getting this because you created a Botly account for ${org.name}.` : `You're getting this because you started a Botly trial for ${org.name}.`,
     ...design[key],
   });
   return { subject: c.subject, html, text };
 }
 
-/** Daily: sends at most one trial email per trial workspace and records it. */
+/** Daily: sends at most one email per trial workspace (and new Free workspace) and records it. */
 export async function sendTrialEmails(db: SupabaseClient, now = new Date()): Promise<{ sent: number; skipped: number }> {
-  const { data } = await db
-    .from("organizations")
-    .select("*")
-    .eq("plan", "trial")
-    .limit(1000);
+  const [{ data: trials }, { data: fresh }] = await Promise.all([
+    db.from("organizations").select("*").eq("plan", "trial").limit(1000),
+    db.from("organizations").select("*").eq("plan", "free").gte("created_at", new Date(now.getTime() - 3 * 86_400_000).toISOString()).limit(1000),
+  ]);
   let sent = 0;
   let skipped = 0;
-  for (const org of (data ?? []) as (OrgRow & { created_at: string })[]) {
+  for (const org of [...(trials ?? []), ...(fresh ?? [])] as (OrgRow & { created_at: string })[]) {
     if (org.is_demo) continue;
     const key = nextTrialEmail(org, now);
     if (!key) continue;
