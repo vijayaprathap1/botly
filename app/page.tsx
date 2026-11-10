@@ -45,6 +45,7 @@ export default function Landing() {
         Skip to content
       </a>
       <HomeNav />
+      <script src="https://botly.in/widget.js" data-key="pk_d613ae9530884c74b420b42c" async></script>
       <main id="main">
         <Hero />
         <WorksOn />
