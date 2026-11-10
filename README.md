@@ -32,6 +32,32 @@ If something is missing, `npm run check` says exactly what and where to get it, 
 
 Open http://localhost:3000, sign in with an address listed in `ADMIN_EMAILS`. The first sign-in makes you the platform admin.
 
+### OpenAI GPT-6 Luna with Groq as the backup
+
+`LLM_PROVIDER=openai` sends replies to OpenAI's Chat Completions API with `gpt-6-luna` and
+`reasoning_effort: "none"`. GPT-6 Luna only supports tool calling in Chat Completions with
+effort `none` (its default is `medium`), so Botly sends `"none"` explicitly and uses
+`max_completion_tokens`. See https://developers.openai.com/api/docs/models/gpt-6-luna.
+
+| Variable | Value |
+|---|---|
+| `LLM_PROVIDER` | `openai` |
+| `OPENAI_API_KEY` | secret, from https://platform.openai.com/api-keys |
+| `GROQ_API_KEY` | secret, the Groq key used for the fallback (or `LLM_FALLBACK_API_KEY`) |
+| `LLM_MODEL` | optional, default `gpt-6-luna` |
+| `LLM_REASONING_EFFORT` | optional, default `none` (`off` = don't send it) |
+| `LLM_FALLBACK_PROVIDER` | optional, default `groq`; `off` disables |
+| `LLM_FALLBACK_PROVIDER_MODELS` | optional, default `openai/gpt-oss-120b,openai/gpt-oss-20b` |
+
+When OpenAI errors (bad key, no credit, overload), times out before the first token, or has
+no key, the same request goes to Groq `openai/gpt-oss-120b` (then `gpt-oss-20b`) with Groq's
+`low` effort. Each switch is logged as `[llm] … falling back to Groq …`. While Groq is the
+backup, requests stay under Groq's free-tier size (7,500 tokens); set `LLM_REQUEST_TOKEN_LIMIT`
+to raise it once Groq is on a paid plan. Rollback: set `LLM_PROVIDER=groq` and redeploy.
+
+Test the language quality with `npm run eval:languages` (and tool calling with `npm run llm:check`).
+Both test the main provider on its own; `ALLOW_PROVIDER_FALLBACK=1` keeps the fallback on.
+
 ### Free LLM for testing
 
 Botly can run on a free OpenAI-compatible API instead of Claude while you test. Put two lines in

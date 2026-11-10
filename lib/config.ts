@@ -6,6 +6,8 @@ export type ModelPricing = { input: number; output: number; cache_write: number;
 const DEFAULT_PRICING: Record<string, ModelPricing> = {
   // Fallback only. The source of truth is LLM_PRICING_JSON in the environment.
   "claude-haiku-4-5": { input: 1, output: 5, cache_write: 1.25, cache_read: 0.1 },
+  // https://developers.openai.com/api/docs/models/gpt-6-luna (read 10 Nov 2026)
+  "gpt-6-luna": { input: 0.1, output: 0.5, cache_write: 0.125, cache_read: 0.01 },
 };
 
 function int(name: string, fallback: number): number {

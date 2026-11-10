@@ -292,3 +292,106 @@ describe("QA retest 2026-10-25: per-call timeout falls back to the smaller model
     }
   });
 });
+
+describe("OpenAI preset with Groq fallback", () => {
+  const openaiEnv = () => {
+    vi.stubEnv("LLM_PROVIDER", "openai");
+    vi.stubEnv("LLM_API_KEY", "");
+    vi.stubEnv("OPENAI_API_KEY", "sk-openai-test");
+    vi.stubEnv("GROQ_API_KEY", "gsk-groq-test");
+  };
+  const req = { model: "gpt-6-luna", system: [], messages: [{ role: "user" as const, content: "x" }], tools: TOOLS, maxTokens: 50 };
+
+  it("sends gpt-6-luna to OpenAI with reasoning_effort none, max_completion_tokens and tools", async () => {
+    openaiEnv();
+    mockFetch(() => sse([delta({ tool_calls: [{ index: 0, id: "c1", function: { name: "report_unanswered", arguments: '{"question":"q"}' } }] }, "tool_calls")]));
+    expect(resolveModel("claude-haiku-4-5")).toBe("gpt-6-luna");
+    const turn = await new OpenAiCompatLlm().stream(req, () => {});
+    expect(calls[0]!.url).toBe("https://api.openai.com/v1/chat/completions");
+    expect(calls[0]!.auth).toBe("Bearer sk-openai-test");
+    expect(calls[0]!.body.reasoning_effort).toBe("none");
+    expect(calls[0]!.body.max_completion_tokens).toBe(50);
+    expect(calls[0]!.body.max_tokens).toBeUndefined();
+    expect(calls[0]!.body.tools).toHaveLength(2);
+    expect(turn.stopReason).toBe("tool_use");
+    expect(turn.content).toEqual([{ type: "tool_use", id: "c1", name: "report_unanswered", input: { question: "q" } }]);
+  });
+
+  it("falls back to Groq gpt-oss-120b with Groq's key and effort when OpenAI rejects the key", async () => {
+    openaiEnv();
+    let n = 0;
+    mockFetch(() => (n++ === 0 ? new Response(JSON.stringify({ error: { message: "Incorrect API key provided" } }), { status: 401 }) : sse([delta({ content: "ok" }, "stop")])));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const turn = await new OpenAiCompatLlm().stream(req, () => {});
+    warn.mockRestore();
+    expect(turn.content).toEqual([{ type: "text", text: "ok" }]);
+    expect(calls[1]!.url).toBe("https://api.groq.com/openai/v1/chat/completions");
+    expect(calls[1]!.auth).toBe("Bearer gsk-groq-test");
+    expect(calls[1]!.body.model).toBe("openai/gpt-oss-120b");
+    expect(calls[1]!.body.reasoning_effort).toBe("low");
+    expect(calls[1]!.body.max_tokens).toBe(50);
+    expect(calls[1]!.body.max_completion_tokens).toBeUndefined();
+  });
+
+  it("falls back to Groq when OpenAI is overloaded (429 twice)", async () => {
+    openaiEnv();
+    let n = 0;
+    mockFetch(() => (n++ < 2 ? new Response(JSON.stringify({ error: { message: "You exceeded your current quota" } }), { status: 429 }) : sse([delta({ content: "ok" }, "stop")])));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await new OpenAiCompatLlm().stream(req, () => {});
+    warn.mockRestore();
+    expect(calls.map((c) => c.body.model)).toEqual(["gpt-6-luna", "gpt-6-luna", "openai/gpt-oss-120b"]);
+  });
+
+  it("goes straight to Groq when the OpenAI key is missing", async () => {
+    openaiEnv();
+    vi.stubEnv("OPENAI_API_KEY", "");
+    mockFetch(() => sse([delta({ content: "ok" }, "stop")]));
+    await new OpenAiCompatLlm().stream(req, () => {});
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("https://api.groq.com/openai/v1/chat/completions");
+  });
+
+  it("uses LLM_API_KEY for Groq only when it is not the OpenAI key", async () => {
+    const { openaiCompat } = await import("../../lib/llm/provider");
+    openaiEnv();
+    vi.stubEnv("GROQ_API_KEY", "");
+    vi.stubEnv("LLM_API_KEY", "gsk-old-groq");
+    expect(openaiCompat.apiKey()).toBe("sk-openai-test");
+    expect(openaiCompat.fallbackApiKey()).toBe("gsk-old-groq");
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("LLM_API_KEY", "sk-openai-test");
+    expect(openaiCompat.apiKey()).toBe("sk-openai-test");
+    expect(openaiCompat.fallbackApiKey()).toBe("");
+  });
+
+  it("is switchable by env: effort, fallback off, and back to groq", async () => {
+    const { openaiCompat, requestTokenLimit, providerLabel } = await import("../../lib/llm/provider");
+    openaiEnv();
+    expect(providerLabel()).toBe("OpenAI");
+    expect(requestTokenLimit()).toBe(7500); // stays under the Groq fallback's free-tier size
+    vi.stubEnv("LLM_REASONING_EFFORT", "low");
+    expect(openaiCompat.reasoningEffort()).toBe("low");
+    vi.stubEnv("LLM_REASONING_EFFORT", "off");
+    expect(openaiCompat.reasoningEffort()).toBeNull();
+    vi.stubEnv("LLM_FALLBACK_PROVIDER", "off");
+    expect(openaiCompat.fallbackTargets()).toEqual([]);
+    expect(requestTokenLimit()).toBeNull();
+    vi.stubEnv("LLM_PROVIDER", "groq");
+    vi.stubEnv("LLM_FALLBACK_PROVIDER", "");
+    vi.stubEnv("LLM_REASONING_EFFORT", "");
+    expect(openaiCompat.fallbackTargets()).toEqual([]);
+    expect(openaiCompat.baseUrl()).toBe("https://api.groq.com/openai/v1");
+    expect(openaiCompat.reasoningEffort()).toBe("low");
+  });
+
+  it("does not fall back from Groq to another provider (existing groq path unchanged)", async () => {
+    vi.stubEnv("LLM_PROVIDER", "groq");
+    vi.stubEnv("LLM_API_KEY", "gsk-test");
+    vi.stubEnv("OPENAI_API_KEY", "sk-openai-test");
+    mockFetch(() => new Response(JSON.stringify({ error: { message: "Invalid API Key" } }), { status: 401 }));
+    await expect(new OpenAiCompatLlm().stream({ ...req, model: "openai/gpt-oss-120b" }, () => {})).rejects.toThrow("LLM API 401");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("https://api.groq.com/openai/v1/chat/completions");
+  });
+});

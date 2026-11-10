@@ -1,7 +1,9 @@
 /**
  * Opt-in live check for English, Hindi, Hinglish, Tamil and Tanglish.
  *   npm run eval:languages
- * Calls the real model only when GROQ_API_KEY or LLM_API_KEY is set.
+ * Calls the real model only when OPENAI_API_KEY, GROQ_API_KEY or LLM_API_KEY is set.
+ * Tests the configured main provider only: the fallback provider is switched off so a
+ * Groq answer can't pass for an OpenAI one (ALLOW_PROVIDER_FALLBACK=1 keeps it on).
  * Uses the in-memory bookshop fixture in lib/eval/languages.ts. It does not
  * connect to Supabase and does not read or write production data.
  */
@@ -10,7 +12,7 @@ import { runChat } from "../lib/chat/engine";
 import { MemoryStore } from "../lib/chat/memory-store";
 import { BOOKSHOP_CHUNKS, LANGUAGE_CASES, bookshopBot } from "../lib/eval/languages";
 import { getLlm } from "../lib/llm";
-import { llmKeyPresent } from "../lib/llm/provider";
+import { llmKeyPresent, openaiCompat, providerLabel, resolveModel } from "../lib/llm/provider";
 import { declinesKnowledge, replyMatchesVisitor } from "../lib/reply-style";
 import { fuseRanks } from "../lib/retrieval/chunk";
 import { keywordRank } from "../lib/retrieval/rank";
@@ -21,9 +23,12 @@ for (const f of [".env.local", ".env"]) {
   if (!existsSync(f)) continue;
   for (const line of readFileSync(f, "utf8").split("\n")) {
     const m = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
-    if (m && process.env[m[1]!] === undefined) process.env[m[1]!] = m[2]!.replace(/^"(.*)"$/, "$1");
+    // `vercel env pull` writes [SENSITIVE] for secrets it can't read back: treat that as unset.
+    if (m && process.env[m[1]!] === undefined && !/^"?\[SENSITIVE\]"?$/.test(m[2]!.trim())) process.env[m[1]!] = m[2]!.replace(/^"(.*)"$/, "$1");
   }
 }
+
+if (!process.env.ALLOW_PROVIDER_FALLBACK) process.env.LLM_FALLBACK_PROVIDER = "off";
 
 if (process.env.GROQ_API_KEY && !process.env.LLM_PROVIDER) {
   process.env.LLM_PROVIDER = "groq";
@@ -36,8 +41,9 @@ function skip(reason: string): never {
 }
 
 async function main() {
-  if (!process.env.GROQ_API_KEY && !process.env.LLM_API_KEY) skip("set GROQ_API_KEY or LLM_API_KEY");
+  if (!process.env.OPENAI_API_KEY && !process.env.GROQ_API_KEY && !process.env.LLM_API_KEY) skip("set OPENAI_API_KEY, GROQ_API_KEY or LLM_API_KEY");
   if (!llmKeyPresent()) skip("no API key for the configured provider");
+  console.log(`Provider: ${providerLabel()} · model: ${resolveModel(null)} · reasoning effort: ${openaiCompat.reasoningEffort() ?? "provider default"}\n`);
   // Force retrieval mode so the fixture chunks are chosen by search, not pasted in full.
   process.env.KNOWLEDGE_TOKEN_CAP = "1";
 

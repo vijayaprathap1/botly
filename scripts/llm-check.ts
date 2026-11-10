@@ -10,9 +10,13 @@ for (const f of [".env.local", ".env"]) {
   if (!existsSync(f)) continue;
   for (const raw of readFileSync(f, "utf8").split(/\r?\n/)) {
     const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(raw);
-    if (m && process.env[m[1]!] === undefined) process.env[m[1]!] = m[2]!.replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
+    // `vercel env pull` writes [SENSITIVE] for secrets it can't read back: treat that as unset.
+    if (m && process.env[m[1]!] === undefined && !/^"?\[SENSITIVE\]"?$/.test(m[2]!.trim())) process.env[m[1]!] = m[2]!.replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
   }
 }
+
+// Test the configured main provider on its own (ALLOW_PROVIDER_FALLBACK=1 keeps the fallback on).
+if (!process.env.ALLOW_PROVIDER_FALLBACK) process.env.LLM_FALLBACK_PROVIDER = "off";
 
 async function main() {
   const { llmKeyName, llmKeyPresent, llmProvider, providerLabel, resolveModel } = await import("../lib/llm/provider");
