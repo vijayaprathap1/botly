@@ -1,10 +1,11 @@
-import { isDevOrigin, resolveAccess } from "@/lib/chat/access";
+import { resolveAccess } from "@/lib/chat/access";
 import { SupabaseStore } from "@/lib/chat/supabase-store";
 import { config } from "@/lib/config";
 import { isOpenNow } from "@/lib/hours";
 import { clientIp, json, preflight } from "@/lib/http";
 import { effectiveQuota, monthKey, replyGateFromOrg } from "@/lib/quota";
 import { PostgresRateLimiter } from "@/lib/security/rate-limit";
+import { requestOrigin } from "@/lib/security/origin";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { configQuerySchema } from "@/lib/validation/schemas";
 
@@ -14,7 +15,9 @@ export const OPTIONS = preflight;
 
 /**
  * Public widget config. When the bot is inactive, unknown or the origin isn't
- * allowed it answers 200 {enabled:false} so the widget stays silent (no console errors).
+ * allowed it answers 200 {enabled:false, reason} so the widget shows nothing and logs one
+ * console warning saying why (domain not allowed, bot paused or draft, wrong key).
+ * The reason is safe to show anywhere: it names the page's own origin and a fixed code.
  */
 export async function GET(req: Request) {
   try {
@@ -28,12 +31,12 @@ export async function GET(req: Request) {
 async function handle(req: Request) {
   const url = new URL(req.url);
   const parsed = configQuerySchema.safeParse({ key: url.searchParams.get("key"), testToken: url.searchParams.get("t") });
-  // Local testing only: tell a developer on localhost, a LAN IP or a .local/.test host WHY the
-  // widget is off (one console line). Public client sites get no detail.
-  const origin = req.headers.get("origin");
-  const devPage = isDevOrigin(origin);
-  const off = (reason?: string) =>
-    json(req, devPage && reason ? { enabled: false, reason, origin } : { enabled: false }, 200, { "Cache-Control": devPage ? "no-store" : "private, max-age=60" });
+  const origin = requestOrigin(req);
+  // Not cached, so fixing the allowed domains or switching the bot on shows up on the next load.
+  // A page that isn't on the bot's allowed domains (or a bad test token) gets 403; an unknown
+  // key 404; a bot that is switched off or still a draft 200 {enabled:false}.
+  const status = (reason?: string) => (reason === "origin" || reason === "bad_token" ? 403 : reason === "unknown_key" ? 404 : 200);
+  const off = (reason?: string) => json(req, reason ? { enabled: false, reason, origin } : { enabled: false }, status(reason), { "Cache-Control": "no-store" });
   if (!parsed.success) return off();
 
   const db = supabaseAdmin();
@@ -45,7 +48,7 @@ async function handle(req: Request) {
   const store = new SupabaseStore(db);
   const bot = await store.getBotByKey(parsed.data.key);
   if (!bot) return off("unknown_key");
-  const access = resolveAccess(bot, req.headers.get("origin"), parsed.data.testToken);
+  const access = resolveAccess(bot, origin, parsed.data.testToken);
   if (!access.allowed) return off(access.reason);
 
   const month = monthKey(new Date(), bot.org.timezone);

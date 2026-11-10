@@ -210,6 +210,15 @@ export class BotlyWidget {
 
     this.root.appendChild(this.wrap);
     (document.body ?? document.documentElement).appendChild(this.host);
+    // Some sites swap the whole <body> on navigation (Turbo, Astro view transitions, page
+    // builders). Put the launcher back when that happens instead of disappearing.
+    try {
+      new MutationObserver(() => {
+        if (!this.host.isConnected && document.body) document.body.appendChild(this.host);
+      }).observe(document.documentElement, { childList: true });
+    } catch {
+      /* MutationObserver missing: nothing to do */
+    }
 
     this.offline = typeof navigator !== "undefined" && navigator.onLine === false;
     window.addEventListener("online", () => this.setOffline(false));

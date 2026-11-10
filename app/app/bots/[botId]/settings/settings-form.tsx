@@ -154,7 +154,7 @@ export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin
                 ))}
               </div>
             </fieldset>
-            <Field label="Allowed domains (one per line)" htmlFor="allowed_origins" hint="example.com (also www), https://shop.example.com, *.myshopify.com. To test locally add the page’s exact address, e.g. http://127.0.0.1:5500 (VS Code Live Server) or http://localhost:3000.">
+            <Field label="Allowed domains (one per line)" htmlFor="allowed_origins" hint="The assistant shows and chats only on these sites. example.com also covers www.example.com; http/https, ports and paths don’t matter. Subdomains need their own line or *.example.com. To test locally add localhost (or 127.0.0.1). Empty = shows nowhere.">
               <textarea id="allowed_origins" name="allowed_origins" rows={4} defaultValue={bot.allowed_origins.join("\n")} className={inputClass} />
             </Field>
             <div className="grid gap-4">

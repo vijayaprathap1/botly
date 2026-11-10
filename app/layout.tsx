@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-dvh font-sans antialiased">
         {children}
         {/* Botly's own assistant, once for every page (except /t/ test links). */}
-       <script src="https://botly.in/widget.js" data-key="pk_d613ae9530884c74b420b42c" async />
+        <SiteWidget />
       </body>
     </html>
   );

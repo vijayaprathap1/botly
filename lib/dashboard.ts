@@ -73,3 +73,62 @@ export async function botMetrics(bots: BotWithOrg[]): Promise<Map<string, BotMet
 export function installSnippet(appUrl: string, key: string) {
   return `<script src="${appUrl}/widget.js" data-key="${key}" async></script>`;
 }
+
+/** Install code per platform, shown under the one-line snippet on the bot's Overview page. */
+export function installGuides(appUrl: string, key: string): { id: string; title: string; where: string; label: string; code: string }[] {
+  const src = `${appUrl}/widget.js`;
+  return [
+    {
+      id: "html",
+      title: "Plain HTML, Shopify, Wix, Squarespace",
+      where: "Paste anywhere in the page: in <head> or just before </body>. Shopify: Online Store → Themes → Edit code → theme.liquid. Wix: Settings → Custom code → Body end.",
+      label: "HTML",
+      code: installSnippet(appUrl, key),
+    },
+    {
+      id: "react",
+      title: "React (Vite, Create React App)",
+      where: "Easiest: paste the HTML line into index.html before </body>. Or load it once from your root component:",
+      label: "App.tsx",
+      code: `import { useEffect } from "react";
+
+export function BotlyWidget() {
+  useEffect(() => {
+    if (document.querySelector('script[src="${src}"]')) return;
+    const s = document.createElement("script");
+    s.src = "${src}";
+    s.async = true;
+    s.dataset.key = "${key}";
+    document.body.appendChild(s);
+  }, []);
+  return null;
+}
+// Render <BotlyWidget /> once, e.g. in App.`,
+    },
+    {
+      id: "next",
+      title: "Next.js (App Router or Pages Router)",
+      where: "Add it once in app/layout.tsx (or pages/_app.tsx). It stays on screen across page changes.",
+      label: "app/layout.tsx",
+      code: `import Script from "next/script";
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        {children}
+        <Script src="${src}" data-key="${key}" strategy="afterInteractive" />
+      </body>
+    </html>
+  );
+}`,
+    },
+    {
+      id: "wordpress",
+      title: "WordPress",
+      where: "Use a header/footer plugin (e.g. WPCode → Code Snippets → Header & Footer → Footer) and paste the HTML line. Or add it to your theme's footer.php just before </body>. Clear any cache plugin afterwards.",
+      label: "HTML",
+      code: installSnippet(appUrl, key),
+    },
+  ];
+}

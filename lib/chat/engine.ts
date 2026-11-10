@@ -59,7 +59,8 @@ export type EngineDeps = {
   orders?: (botId: string) => Promise<OrderProvider | null>;
 };
 
-export type EngineContext = { origin: string | null; ip: string | null; debug: boolean };
+/** `bot`: already loaded by the route (the origin check before streaming), so it isn't read twice. */
+export type EngineContext = { origin: string | null; ip: string | null; debug: boolean; bot?: BotWithOrg | null };
 
 export type ChatOutcome = {
   jobs: (() => Promise<void>)[];
@@ -100,7 +101,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   };
 
   // 1. Bot + access -----------------------------------------------------------------
-  const bot = await deps.store.getBotByKey(req.key);
+  const bot = ctx.bot ?? (await deps.store.getBotByKey(req.key));
   if (!bot) return fail("not_found", "This chat isn't available.");
   const access = resolveAccess(bot, ctx.origin, req.testToken);
   if (!access.allowed) {
