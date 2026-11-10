@@ -4,6 +4,7 @@ import { requestOrigin } from "@/lib/security/origin";
 import { serverDeps } from "@/lib/chat/deps";
 import { saveLead } from "@/lib/chat/leads";
 import { clientIp, json, preflight, readJsonBody } from "@/lib/http";
+import { hasGrowthTools, monthlyCap } from "@/lib/plans";
 import { effectiveQuota, monthKey } from "@/lib/quota";
 import { checkLimits } from "@/lib/security/rate-limit";
 import { detectLanguage } from "@/lib/language";
@@ -62,7 +63,7 @@ async function handle(req: Request) {
       pageTitle: input.pageTitle ?? null,
       language: input.need ? detectLanguage(input.need) : null,
       month,
-      quota: effectiveQuota(bot.org.monthly_conversation_quota, bot.monthly_conversation_quota),
+      quota: monthlyCap(effectiveQuota(bot.org.monthly_conversation_quota, bot.monthly_conversation_quota), bot.org, month),
       isTest: access.isTest,
     });
     // At quota the lead is still saved (without a conversation). Leads are never dropped.
@@ -70,7 +71,7 @@ async function handle(req: Request) {
 
   const handoff = input.type === "human";
   if (input.type === "callback") {
-    if (bot.org.plan !== "growth") return json(req, { ok: false, error: "Not available" }, 403);
+    if (!hasGrowthTools(bot.org.plan)) return json(req, { ok: false, error: "Not available" }, 403);
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: bot.org.timezone }).format(new Date());
     if (!input.preferredDate || input.preferredDate < today) return json(req, { ok: false, field: "date", error: "Please pick today or a later date." }, 422);
   }

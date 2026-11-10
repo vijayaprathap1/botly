@@ -132,7 +132,7 @@ export default async function BotOverview({ params, searchParams }: { params: Pr
       </Card>
 
       {!session.isAdmin ? (
-        <Card title={bot.status === "live" ? "Live on your website" : "Go live"} sub={bot.status === "live" ? `Plan: ${plan.name}${bot.org.plan !== "trial" ? ` · ${fmtInr(plan.priceInr)}/month` : ""}` : undefined}>
+        <Card title={bot.status === "live" ? "Live on your website" : "Go live"} sub={bot.status === "live" ? `Plan: ${plan.name}${plan.priceInr > 0 ? ` · ${fmtInr(plan.priceInr)}/month` : ""}` : undefined}>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <p className="max-w-xl text-[13.5px] text-zinc-600">
               {bot.status === "live"

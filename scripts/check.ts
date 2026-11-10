@@ -6,8 +6,8 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { checkEnv } from "../lib/env-check";
-import { fetchPlan, razorpayConfigured, razorpayMode } from "../lib/billing/razorpay";
-import { plans } from "../lib/plans";
+import { fetchPlan, planMismatch, razorpayConfigured, razorpayMode } from "../lib/billing/razorpay";
+import { plans, razorpayPlanIds } from "../lib/plans";
 import { openAiPing } from "../lib/llm/openai-compat";
 import { llmKeyName, llmProvider, openaiCompat, providerLabel } from "../lib/llm/provider";
 
@@ -126,24 +126,22 @@ async function main() {
 
   if (razorpayConfigured()) {
     const mode = razorpayMode();
-    for (const p of [plans().starter, plans().growth]) {
-      const id = process.env[p.razorpayPlanEnv!];
-      if (!id) continue;
+    for (const p of razorpayPlanIds()) {
+      const label = `${plans()[p.plan].name} ${p.founding ? "founding" : p.interval}`;
+      if (!p.id) {
+        warn(`${p.env} is not set: ${label} can't be bought online yet`);
+        continue;
+      }
       try {
-        const rp = await fetchPlan(id);
-        const rupees = rp.item.amount / 100;
-        const problems = [
-          rp.period !== "monthly" || rp.interval !== 1 ? `billed every ${rp.interval} ${rp.period}, expected monthly` : "",
-          rp.item.currency !== "INR" ? `currency ${rp.item.currency}, expected INR` : "",
-          rupees !== p.priceInr ? `₹${rupees} in Razorpay but the website shows ₹${p.priceInr} (set PRICE_${p.id.toUpperCase()}_INR=${rupees} or fix the plan)` : "",
-        ].filter(Boolean);
-        if (problems.length) {
-          bad(`Razorpay ${p.name} plan (${mode}): ${problems.join("; ")}`);
+        const rp = await fetchPlan(p.id);
+        const problem = planMismatch(rp, { amountInr: p.amountInr, yearly: p.interval === "yearly" });
+        if (problem) {
+          bad(`Razorpay ${label} plan (${mode}): ${problem}`, "Create a new plan at the right price and put its id in " + p.env);
           failures++;
-        } else ok(`Razorpay ${p.name} plan found (${mode} mode, ₹${rupees}/month)`);
+        } else ok(`Razorpay ${label} plan found (${mode} mode, ₹${rp.item.amount / 100}/${p.interval === "yearly" ? "year" : "month"})`);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        bad(`Razorpay ${p.name} plan ${id}: ${msg}`, /401/.test(msg) ? "Key id/secret wrong, or test and live keys mixed up" : "Plan ids differ between test and live mode: copy it from the same mode as your keys");
+        bad(`Razorpay ${label} plan ${p.id}: ${msg}`, /401/.test(msg) ? "Key id/secret wrong, or test and live keys mixed up" : "Plan ids differ between test and live mode: copy it from the same mode as your keys");
         failures++;
       }
     }

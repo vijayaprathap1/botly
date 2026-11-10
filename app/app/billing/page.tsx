@@ -1,12 +1,15 @@
 import { redirect } from "next/navigation";
 import { Badge, Card, PageHeader } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
+import { razorpayPlanInfo } from "@/lib/billing/apply";
+import { foundingSlotsLeft } from "@/lib/billing/founding";
 import { fmtDate } from "@/lib/format";
-import { fmtInr, paidPlans, planDef, TRIAL, trialState } from "@/lib/plans";
+import { FOUNDING, fmtInr, foundingConfigured, paidPlans, planDef, plans, TOPUP, trialState } from "@/lib/plans";
+import { monthKey } from "@/lib/quota";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { OrgRow } from "@/lib/types";
 import { BillingDetailsForm } from "./details-form";
-import { PlanButtons } from "./plan-buttons";
+import { PlanButtons, SwitchToFreeButton, TopupButton, type CheckoutOption } from "./plan-buttons";
 
 export const dynamic = "force-dynamic";
 
@@ -14,17 +17,26 @@ export default async function BillingPage() {
   const session = await requireSession();
   if (!session.orgIds.length) redirect(session.isAdmin ? "/app/admin" : "/start");
   const orgId = session.orgIds[0]!;
-  const { data } = await supabaseAdmin().from("organizations").select("*").eq("id", orgId).single();
+  const db = supabaseAdmin();
+  const { data } = await db.from("organizations").select("*").eq("id", orgId).single();
   const org = data as OrgRow;
   // Clients you set up and bill yourself (plan set in Super admin, no Razorpay subscription).
-  const invoiced = org.plan !== "trial" && !org.razorpay_subscription_id;
+  const invoiced = org.plan !== "trial" && org.plan !== "free" && !org.razorpay_subscription_id;
   const support = process.env.SUPPORT_EMAIL;
   const trial = trialState(org);
   const current = planDef(org.plan);
+  const paying = org.subscription_status === "active";
+  const info = org.razorpay_plan_id ? razorpayPlanInfo(org.razorpay_plan_id) : null;
+  const price = info?.founding ? `${fmtInr(FOUNDING.priceInr)}/month (founding price)` : info?.interval === "yearly" ? `${fmtInr(current.yearlyInr)}/year` : `${fmtInr(current.priceInr)}/month`;
+  const slotsLeft = foundingConfigured() ? await foundingSlotsLeft(db) : null;
+  const month = monthKey(new Date(), org.timezone || "Asia/Kolkata");
+  const topupThisMonth = org.topup_month?.slice(0, 10) === month ? (org.topup_conversations ?? 0) : 0;
+  const free = plans().free;
   const statusLabel: Record<string, string> = {
-    none: "No subscription", trialing: "Free trial", pending: "Waiting for payment", active: "Active", past_due: "Payment failed, retrying",
+    none: org.plan === "free" ? "Free" : "No subscription", trialing: "Free trial", pending: "Waiting for payment", active: "Active", past_due: "Payment failed, retrying",
     halted: "Stopped: payment failed", cancelled: "Cancelled", expired: "Ended",
   };
+  const contact = (subject: string) => (support ? `mailto:${support}?subject=${encodeURIComponent(subject)}` : null);
 
   return (
     <div className="grid gap-4">
@@ -34,55 +46,79 @@ export default async function BillingPage() {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-lg font-semibold">{current.name}</span>
-              <Badge tone={invoiced || org.subscription_status === "active" ? "green" : trial?.over || org.subscription_status === "halted" ? "red" : "blue"}>{invoiced ? "Billed by invoice" : statusLabel[org.subscription_status ?? "none"]}</Badge>
+              <Badge tone={invoiced || paying ? "green" : trial?.over || org.subscription_status === "halted" ? "red" : "blue"}>{invoiced ? "Billed by invoice" : statusLabel[org.subscription_status ?? "none"]}</Badge>
             </div>
             <p className="mt-1 text-sm text-zinc-600">
               {trial
                 ? trial.over
-                  ? "Your free trial has ended. Visitors see your contact details instead of AI replies until you choose a plan."
+                  ? "Your free trial has ended. Visitors see your contact details instead of AI replies until you choose a plan, or move to Free."
                   : `${trial.left} of ${trial.limit} AI replies and ${trial.daysLeft} days left in your free trial.`
-                : invoiced
-                  ? `${fmtInr(current.priceInr)}/month, billed by invoice. To change your plan, contact us${support ? ` at ${support}` : ""}.`
-                  : org.cancel_at_period_end
-                  ? `Cancelled. Your plan stays active until ${org.current_period_end ? fmtDate(org.current_period_end, org.timezone) : "the end of this billing period"}.`
-                  : org.current_period_end
-                    ? `Renews on ${fmtDate(org.current_period_end, org.timezone)} · ${fmtInr(current.priceInr)}/month.`
-                    : `${fmtInr(current.priceInr)}/month.`}
+                : org.plan === "free"
+                  ? `${free.conversations.toLocaleString("en-IN")} conversations a month, free. Upgrade any time for more conversations and features.`
+                  : invoiced
+                    ? `${fmtInr(current.priceInr)}/month, billed by invoice. To change your plan, contact us${support ? ` at ${support}` : ""}.`
+                    : org.cancel_at_period_end
+                      ? `Cancelled. Your plan stays active until ${org.current_period_end ? fmtDate(org.current_period_end, org.timezone) : "the end of this billing period"}, then moves to Free.`
+                      : org.current_period_end
+                        ? `Renews on ${fmtDate(org.current_period_end, org.timezone)} · ${price}.`
+                        : `${price}.`}
             </p>
+            {topupThisMonth > 0 ? <p className="mt-1 text-sm text-emerald-700">+{topupThisMonth.toLocaleString("en-IN")} extra conversations from top-ups this month.</p> : null}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {trial && !paying ? <SwitchToFreeButton orgId={orgId} label={`Move to Free (${free.conversations}/month)`} /> : null}
+            {org.plan !== "trial" && !org.suspended ? <TopupButton orgId={orgId} label={`Add ${TOPUP.conversations.toLocaleString("en-IN")} conversations · ${fmtInr(TOPUP.priceInr)}`} /> : null}
           </div>
         </div>
       </Card>
-      <div className="grid gap-4 md:grid-cols-2">
-        {paidPlans().map((p) => (
-          <Card key={p.id}>
-            <div className="flex items-baseline justify-between gap-2">
-              <h2 className="text-lg font-semibold">{p.name}</h2>
-              <div><span className="text-2xl font-bold">{fmtInr(p.priceInr)}</span><span className="text-sm text-zinc-500">/month</span></div>
-            </div>
-            <p className="mt-1 text-sm text-zinc-600">{p.blurb}</p>
-            <ul className="mt-3 space-y-1 text-sm">
-              {p.features.map((f) => <li key={f}>✓ {f}</li>)}
-            </ul>
-            <div className="mt-4">
-              {invoiced ? (
-                org.plan === p.id ? (
-                  <Badge tone="green">Your current plan</Badge>
-                ) : support ? (
-                  <a className="text-[13.5px] font-medium text-brand-700 underline underline-offset-4" href={`mailto:${support}?subject=${encodeURIComponent(`Switch ${org.name} to ${p.name}`)}`}>Ask to switch to {p.name}</a>
-                ) : null
-              ) : (
-                <PlanButtons orgId={orgId} plan={p.id as "starter" | "growth"} current={org.plan === p.id && org.subscription_status === "active"} cancelling={Boolean(org.cancel_at_period_end)} />
-              )}
-            </div>
-          </Card>
-        ))}
+      <div className="grid gap-4 md:grid-cols-3">
+        {paidPlans().map((p) => {
+          const options: CheckoutOption[] = [
+            { interval: "monthly", label: `${fmtInr(p.priceInr)}/month` },
+            { interval: "yearly", label: `${fmtInr(p.yearlyInr)}/year` },
+          ];
+          const foundingOpen = p.id === FOUNDING.plan && !paying && slotsLeft !== null && slotsLeft > 0;
+          if (foundingOpen) options.unshift({ interval: "monthly", founding: true, label: `Founding price ${fmtInr(FOUNDING.priceInr)}/month` });
+          const foundingMail = p.id === FOUNDING.plan && !paying && !foundingConfigured() ? contact(`Founding offer for ${org.name}`) : null;
+          return (
+            <Card key={p.id}>
+              <div className="flex items-baseline justify-between gap-2">
+                <h2 className="text-lg font-semibold">{p.name}</h2>
+                <div><span className="text-2xl font-bold">{fmtInr(p.priceInr)}</span><span className="text-sm text-zinc-500">/month</span></div>
+              </div>
+              <p className="mt-1 text-sm text-zinc-600">{p.blurb}</p>
+              <p className="mt-1 text-xs text-zinc-500">or {fmtInr(p.yearlyInr)}/year (2 months free)</p>
+              <ul className="mt-3 space-y-1 text-sm">
+                {p.features.map((f) => <li key={f}>✓ {f}</li>)}
+              </ul>
+              {p.id === FOUNDING.plan && !paying ? (
+                <p className="mt-3 rounded-md bg-amber-50 p-2 text-[13px] text-amber-900">
+                  Founding offer: the first {FOUNDING.slots} shops get {p.name} at {fmtInr(FOUNDING.priceInr)}/month, locked for {FOUNDING.lockMonths} months.
+                  {foundingOpen ? ` ${slotsLeft} left.` : foundingConfigured() ? " All slots are taken." : ""}
+                  {foundingMail ? <> <a className="font-medium underline" href={foundingMail}>Contact us to claim it</a>.</> : null}
+                </p>
+              ) : null}
+              <div className="mt-4">
+                {invoiced ? (
+                  org.plan === p.id ? (
+                    <Badge tone="green">Your current plan</Badge>
+                  ) : contact(`Switch ${org.name} to ${p.name}`) ? (
+                    <a className="text-[13.5px] font-medium text-brand-700 underline underline-offset-4" href={contact(`Switch ${org.name} to ${p.name}`)!}>Ask to switch to {p.name}</a>
+                  ) : null
+                ) : (
+                  <PlanButtons orgId={orgId} plan={p.id as "starter" | "growth" | "pro"} options={options} current={org.plan === p.id && paying} cancelling={Boolean(org.cancel_at_period_end)} />
+                )}
+              </div>
+            </Card>
+          );
+        })}
       </div>
       <Card title="Billing details" sub="Printed on your invoices.">
         <BillingDetailsForm orgId={orgId} billingName={org.billing_name ?? null} email={org.billing_email ?? session.email ?? null} />
       </Card>
       <p className="text-xs text-zinc-500">
-        Payments by Razorpay (UPI, cards, net banking). Prices are as shown, with nothing added at checkout. Cancel any time; your plan runs until the end of the paid month.
-        The free trial includes {TRIAL.replies} AI replies over {TRIAL.days} days, once per email address.
+        Payments by Razorpay (UPI, cards, net banking). Prices are as shown, with nothing added at checkout. Cancel any time; your plan runs until the end of the paid period, then moves to Free.
+        Top-ups add {TOPUP.conversations.toLocaleString("en-IN")} conversations for the current calendar month and don&apos;t carry over.
       </p>
     </div>
   );

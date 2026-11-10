@@ -1,4 +1,6 @@
 import { requestTokenLimit, resolveModel } from "./llm/provider";
+import { plans } from "./plans";
+import type { Plan } from "./types";
 
 /** Server-side configuration read from the environment (never sent to the browser). */
 export type ModelPricing = { input: number; output: number; cache_write: number; cache_read: number };
@@ -47,7 +49,7 @@ export const config = {
   },
   /**
    * AI replies (model calls) allowed in one conversation. 0 disables the cap.
-   * MAX_AI_REPLIES_PER_CONVERSATION_TRIAL / _STARTER / _GROWTH override the shared value.
+   * MAX_AI_REPLIES_PER_CONVERSATION_TRIAL / _FREE / _STARTER / _GROWTH / _PRO override the shared value.
    */
   maxAiReplies(plan?: string) {
     const specific = plan ? process.env[`MAX_AI_REPLIES_PER_CONVERSATION_${plan.toUpperCase()}`] : undefined;
@@ -71,9 +73,10 @@ export const config = {
   get crawlMaxPages() {
     return int("CRAWL_MAX_PAGES", 40);
   },
-  defaultQuota(plan: "trial" | "starter" | "growth") {
+  /** Monthly conversations per assistant for a plan (see lib/plans.ts; DEFAULT_QUOTA_* override). */
+  defaultQuota(plan: Plan) {
     if (plan === "trial") return 1_000_000; // trials are limited by replies, not conversations
-    return plan === "growth" ? int("DEFAULT_QUOTA_GROWTH", 10_000) : int("DEFAULT_QUOTA_STARTER", 2_000);
+    return plans()[plan].conversations;
   },
   get adminEmails(): string[] {
     return (process.env.ADMIN_EMAILS ?? "")

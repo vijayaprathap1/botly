@@ -9,6 +9,7 @@ import { requireBotEditor } from "@/lib/bot-access";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireAdmin, requireSession } from "@/lib/auth";
 import { config } from "@/lib/config";
+import { canHideBranding, isPlan } from "@/lib/plans";
 import { parseProductCsv, productContent } from "@/lib/csv";
 import { DAYS, HOURS_NOT_SET, type BusinessHours } from "@/lib/hours";
 import { normalizeOrigin } from "@/lib/security/origin";
@@ -43,7 +44,7 @@ function cleanOrigins(list: string[]): string[] {
 const createSchema = z.object({
   orgName: z.string().trim().min(1).max(200),
   businessType: z.string().trim().min(1).max(100),
-  plan: z.enum(["trial", "starter", "growth"]),
+  plan: z.enum(["trial", "free", "starter", "growth", "pro"]),
   quota: z.coerce.number().int().min(0).max(1_000_000).optional(),
   timezone: z.string().trim().min(1).max(64),
   botName: z.string().trim().min(1).max(120),
@@ -177,8 +178,8 @@ export async function updateBotSettings(botId: string, _: ActionState, form: For
     // Plan-controlled and platform-only fields: only the super admin changes these.
     ...(session.isAdmin ? { model, monthly_conversation_quota: botQuota } : {}),
   };
-  // Free-trial and Starter bots always show "Powered by Botly".
-  if (!session.isAdmin && editable.org.plan !== "growth") patch.branding.show_powered_by = true;
+  // Free, trial and Starter bots always show "Powered by Botly" (Growth and Pro may hide it).
+  if (!session.isAdmin && !canHideBranding(editable.org.plan)) patch.branding.show_powered_by = true;
   const { data: bot, error } = await db.from("bots").update(patch).eq("id", botId).select("org_id").single();
   if (error) return { error: error.message };
 
@@ -187,7 +188,7 @@ export async function updateBotSettings(botId: string, _: ActionState, form: For
   if (session.isAdmin) {
     const plan = text(form.get("plan"));
     const orgQuota = Number(text(form.get("org_quota")));
-    if ((plan === "trial" || plan === "starter" || plan === "growth") && Number.isInteger(orgQuota) && orgQuota >= 0) Object.assign(orgPatch, { plan, monthly_conversation_quota: orgQuota });
+    if (isPlan(plan) && Number.isInteger(orgQuota) && orgQuota >= 0) Object.assign(orgPatch, { plan, monthly_conversation_quota: orgQuota });
   }
   const { error: e2 } = await db.from("organizations").update(orgPatch).eq("id", bot.org_id);
   if (e2) return { error: e2.message };

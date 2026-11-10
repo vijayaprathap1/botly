@@ -1,6 +1,7 @@
 import type { BusinessHours } from "./hours";
 
-export type Plan = "trial" | "starter" | "growth";
+export type Plan = "trial" | "free" | "starter" | "growth" | "pro";
+export type BillingInterval = "monthly" | "yearly";
 export type Branding = {
   primary_color: string;
   avatar_url: string | null;
@@ -36,6 +37,10 @@ export type OrgRow = {
   billing_email?: string | null;
   billing_name?: string | null;
   razorpay_subscription_id?: string | null;
+  razorpay_plan_id?: string | null;
+  /** One-off top-up packs bought for `topup_month` (YYYY-MM-01, org timezone). Migration 0015. */
+  topup_month?: string | null;
+  topup_conversations?: number | null;
   trial_emails?: Record<string, string>;
   created_by?: string | null;
   /** A pitch preview built by the super admin (see lib/demo). Never a customer. */

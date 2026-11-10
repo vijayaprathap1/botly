@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, CircleCheck, Mail, Phone } from "lucide-react";
-import { fmtInr, plans, TRIAL } from "@/lib/plans";
+import { fmtInr, plans } from "@/lib/plans";
 import { HINDI, HINGLISH, TAMIL } from "./copy";
 import { WhatsAppIcon } from "./icons";
 import { ExampleTag, btnLg, btnOutline, btnPrimary, wrap } from "./ui";
@@ -54,7 +54,7 @@ export function Hero() {
             </a>
           </div>
           <ul className="mt-[22px] flex flex-wrap gap-x-4 gap-y-1.5 text-[14.5px] text-ink-2">
-            {[`${TRIAL.days}-day free trial`, `${TRIAL.replies} AI replies`, "No card needed", `From ${from}/month`].map((t) => (
+            {["Free plan", `${plans().free.conversations} conversations a month free`, "No card needed", `Paid plans from ${from}/month`].map((t) => (
               <li key={t} className="inline-flex items-center gap-1.5">
                 <CircleCheck className="h-4 w-4 text-leaf" aria-hidden /> {t}
               </li>

@@ -1,6 +1,7 @@
 import { providerLabel, resolveModel } from "@/lib/llm/provider";
 import { AI_KEY_NAMES, blockingProblems, featureProblems } from "@/lib/env-check";
 import { checkLlmLive, deepCheckMode, peekLlmCache, readSharedLlmCache, writeSharedLlmCache } from "@/lib/ai-check";
+import { checkRazorpayPlans } from "@/lib/billing/plan-check";
 import { cronAuthorized } from "@/lib/cron";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -31,7 +32,9 @@ export async function GET(req: Request) {
   if (mode === "live" && deep) await writeSharedLlmCache(deep);
   const aiOk = !features.some((f) => AI_KEY_NAMES.includes(f));
   const ok = envOk && dbOk && aiOk && (deep ? deep.ok : true);
-  return Response.json({ ok, config: envOk, database: dbOk, ai: aiOk, ai_provider: providerLabel(), email: !features.includes("RESEND_API_KEY"), payments: !features.includes("RAZORPAY"), ...(deep ? { ai_live: deep.ok, ai_error: deep.error, ai_model: resolveModel(null) } : {}) }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
+  // ?plans=1: each Razorpay plan id vs the price on the site (informational; doesn't change `ok`).
+  const plans = new URL(req.url).searchParams.get("plans") === "1" ? await checkRazorpayPlans().catch(() => null) : undefined;
+  return Response.json({ ok, config: envOk, database: dbOk, ai: aiOk, ai_provider: providerLabel(), email: !features.includes("RESEND_API_KEY"), payments: !features.includes("RAZORPAY"), ...(deep ? { ai_live: deep.ok, ai_error: deep.error, ai_model: resolveModel(null) } : {}), ...(plans !== undefined ? { razorpay_plans: plans } : {}) }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }
 
 async function adminRequest(req: Request): Promise<boolean> {

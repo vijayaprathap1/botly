@@ -1,4 +1,5 @@
 import type { ToolDef } from "../llm/types";
+import { hasGrowthTools } from "../plans";
 import type { Plan } from "../types";
 
 const leadTypes = ["purchase", "human", "bulk", "callback", "other"];
@@ -96,10 +97,10 @@ export const TOOL_REQUEST_CALLBACK: ToolDef = {
 /** Tools whose results don't need the model to speak again once it has already answered. */
 export const TERMINAL_TOOLS = new Set(["suggest_followups", "report_unanswered"]);
 
-/** Tools for a plan. Growth adds order lookup and callback booking. */
+/** Tools for a plan. Growth and Pro add order lookup and callback booking. */
 export function toolsForPlan(plan: Plan): ToolDef[] {
   const base = [TOOL_CAPTURE_LEAD, TOOL_HANDOFF, TOOL_REPORT_UNANSWERED, TOOL_SUGGEST_FOLLOWUPS];
-  return plan === "growth" ? [...base, TOOL_LOOKUP_ORDER, TOOL_REQUEST_CALLBACK] : base;
+  return hasGrowthTools(plan) ? [...base, TOOL_LOOKUP_ORDER, TOOL_REQUEST_CALLBACK] : base;
 }
 
 /** Every tool name (used to strip tool calls a model wrote as text). */

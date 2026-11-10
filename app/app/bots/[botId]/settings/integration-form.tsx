@@ -4,6 +4,7 @@ import type { ActionState } from "@/app/app/actions";
 import { removeIntegration, saveIntegration } from "@/app/app/actions-phase3";
 import { SubmitButton, useFormAction } from "@/components/client";
 import { Badge, btn, Card, Field, inputClass, Notice } from "@/components/ui";
+import { hasGrowthTools } from "@/lib/plans";
 
 type Existing = { provider: string; store_url: string; status: string; last_checked_at: string | null } | null;
 
@@ -11,9 +12,9 @@ export function IntegrationForm({ botId, plan, existing }: { botId: string; plan
   const [state, action, actionPending] = useFormAction<ActionState>(saveIntegration.bind(null, botId), null);
   const [provider, setProvider] = useState(existing?.provider ?? "shopify");
   return (
-    <Card title="Order lookup (Growth plan)">
-      {plan !== "growth" ? (
-        <Notice tone="amber">Order lookup and callback booking are part of the Growth plan. Upgrade from Billing to turn them on.</Notice>
+    <Card title="Order lookup (Growth and Pro plans)">
+      {!hasGrowthTools(plan) ? (
+        <Notice tone="amber">Order lookup and callback booking are part of the Growth and Pro plans. Upgrade from Billing to turn them on.</Notice>
       ) : null}
       {existing ? (
         <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">

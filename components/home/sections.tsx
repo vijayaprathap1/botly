@@ -14,7 +14,7 @@ import {
 import { HINDI, HINGLISH, TAMIL } from "./copy";
 import { LogoGlyph, WhatsAppIcon } from "./icons";
 import { ExampleTag, SectionHead, btnLg, h2, lede, section, wrap } from "./ui";
-import { TRIAL } from "@/lib/plans";
+import { growthToolsPlan, plans } from "@/lib/plans";
 
 export function WorksOn() {
   const names = ["Shopify", "WordPress", "WooCommerce", "Wix", "Webflow", "Any HTML site"];
@@ -289,7 +289,7 @@ export function Trust() {
               </span>
               <h3 className="mb-1.5 text-[19px] font-bold leading-[1.3]">
                 {f.title}
-                {f.growth ? <span className="ml-1.5 inline-block rounded-full bg-marigold px-[9px] py-0.5 align-[2px] text-[12px] font-extrabold">Growth</span> : null}
+                {f.growth ? <span className="ml-1.5 inline-block rounded-full bg-marigold px-[9px] py-0.5 align-[2px] text-[12px] font-extrabold">{growthToolsPlan().name}</span> : null}
               </h3>
               <p className="text-[15.5px] text-ink-2">{f.body}</p>
             </li>
@@ -306,7 +306,7 @@ export function FinalCta() {
       <div className="on-dark relative overflow-hidden rounded-[32px] bg-saffron px-[22px] py-[52px] text-center text-white before:absolute before:-left-[120px] before:-top-[140px] before:h-80 before:w-80 before:rounded-full before:bg-marigold/28 before:content-[''] after:absolute after:-bottom-[130px] after:-right-[90px] after:h-[260px] after:w-[260px] after:rounded-full after:bg-marigold/28 after:content-[''] wsm:rounded-[44px] wsm:px-14 wsm:py-[72px]">
         <h2 id="final-title" className={`${h2} relative text-white`}>Your next customer is asking a question right now</h2>
         <p className="relative mt-3.5 text-[16.5px] text-[#FFF1E3] wsm:text-[19px]">
-          Build your assistant in five minutes. Free for {TRIAL.days} days · No card needed
+          Build your assistant in five minutes. Free plan: {plans().free.conversations} conversations a month · No card needed
         </p>
         <div className="relative mt-[30px] flex flex-wrap justify-center gap-3.5">
           <Link href="/login?signup=1" className={`${btnLg} w-full bg-white text-ink wsm:w-auto`}>

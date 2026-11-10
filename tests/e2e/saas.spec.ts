@@ -4,7 +4,7 @@ import http from "node:http";
 import { expect, test, type Page } from "@playwright/test";
 import pg from "pg";
 
-/** Self-serve SaaS: sign-up → onboarding → preview + embed → trial limit → Razorpay → super admin. */
+/** Self-serve SaaS: sign-up (Free) → onboarding → preview + embed → trial limit → Razorpay → super admin. */
 const APP = process.env.E2E_APP_URL ?? "http://localhost:3000";
 const LOG = process.env.MAGIC_LINK_LOG;
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/botly_test" });
@@ -26,6 +26,12 @@ test.beforeAll(async () => {
         const s = { id: `sub_${Date.now()}`, plan_id: body.plan_id, status: "created", current_start: 0, current_end: 0, notes: body.notes };
         subs.set(s.id, s);
         return void res.end(JSON.stringify(s));
+      }
+      // Checkout checks the Razorpay plan's price against the site before charging.
+      const p = /^\/v1\/plans\/([^/]+)$/.exec(req.url!);
+      if (p) {
+        const amount = ({ plan_starter_test: 79900, plan_growth_test: 199900 } as Record<string, number>)[p[1]!];
+        if (amount) return void res.end(JSON.stringify({ id: p[1], period: "monthly", interval: 1, item: { name: p[1], amount, currency: "INR" } }));
       }
       const c = /^\/v1\/subscriptions\/([^/]+)\/cancel$/.exec(req.url!);
       if (req.method === "POST" && c && subs.has(c[1]!)) {
@@ -66,16 +72,16 @@ async function signIn(page: Page, email: string) {
 test("landing page sells: hero, pricing, start free", async ({ page }) => {
   await page.goto(APP);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("in their language");
-  await expect(page.locator("#pricing")).toContainText("₹2,999");
-  await expect(page.locator("#pricing")).toContainText("₹9,999");
+  for (const price of ["₹0", "₹799", "₹1,999", "₹4,999", "₹249", "₹999"]) await expect(page.locator("#pricing")).toContainText(price);
+  await expect(page.locator("#pricing")).not.toContainText("₹2,999");
   await page.getByRole("link", { name: "Build my assistant free" }).first().click();
   await expect(page).toHaveURL(/\/login\?signup=1/);
-  await expect(page.getByRole("heading", { name: "Start your free trial" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create your free account" })).toBeVisible();
   expect((await page.request.get(`${APP}/terms`)).status()).toBe(200);
   expect((await page.request.get(`${APP}/privacy-policy`)).status()).toBe(200);
 });
 
-test("new user signs up, builds an assistant from website + social text, previews it, installs it, hits the trial limit, upgrades", async ({ page, browser }) => {
+test("new user signs up on Free, builds an assistant from website + social text, previews it, installs it, hits the trial limit, upgrades", async ({ page, browser }) => {
   test.skip(page.viewportSize()!.width < 640, "desktop");
   test.setTimeout(120_000);
   const email = `owner${Date.now()}@shop.test`;
@@ -101,8 +107,9 @@ test("new user signs up, builds an assistant from website + social text, preview
   await expect(page).toHaveURL(/\/app\/bots\/[0-9a-f-]+\?welcome=1/, { timeout: 90_000 });
 
   await expect(page.getByText("Your assistant is ready.")).toBeVisible();
-  await expect(page.getByText(/Free trial/).first()).toBeVisible();
-  await expect(page.getByText(/\d+ of 50 replies left/).first()).toBeVisible();
+  // Sign-up starts on the Free plan: 50 conversations a month, no trial clock.
+  expect((await pool.query("select o.plan, o.monthly_conversation_quota q, o.subscription_status s from organizations o join bots b on b.org_id = o.id where b.id = $1", [/\/app\/bots\/([0-9a-f-]+)/.exec(page.url())![1]])).rows[0]).toEqual({ plan: "free", q: 50, s: "none" });
+  await expect(page.getByText(/Free trial/)).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Business profile" })).toBeVisible();
   const snippet = await page.locator("pre code").first().innerText();
   expect(snippet).toMatch(/data-key="pk_[a-z0-9]+"/);
@@ -126,9 +133,9 @@ test("new user signs up, builds an assistant from website + social text, preview
   await expect(page.getByRole("link", { name: "Super admin" })).toHaveCount(0);
   expect((await page.request.get(`${APP}/app/admin`, { maxRedirects: 0 })).status()).toBe(307);
 
-  // The trial limit: set used replies to the limit, then the widget shows contact details instead.
+  // The trial limit (trials are now granted by the admin): an exhausted trial shows contact details instead.
   const { rows: bots } = await pool.query("select public_key, org_id from bots where id = $1", [botId]);
-  await pool.query("update organizations set trial_replies_used = trial_reply_limit where id = $1", [bots[0].org_id]);
+  await pool.query("update organizations set plan = 'trial', subscription_status = 'trialing', trial_ends_at = now() + interval '14 days', trial_reply_limit = 50, trial_replies_used = 50 where id = $1", [bots[0].org_id]);
   const chat = await page.request.post(`${APP}/api/chat`, {
     headers: { "Content-Type": "text/plain", Origin: "http://localhost:4173" },
     data: JSON.stringify({ key: bots[0].public_key, visitorId: "visitor_trial_end_1", message: "Hi" }),
@@ -145,7 +152,7 @@ test("new user signs up, builds an assistant from website + social text, preview
   const { startCheckout } = { startCheckout: null }; void startCheckout;
   // Checkout.js can't load offline; exercise the server steps the button performs.
   const before = subs.size;
-  await page.getByRole("button", { name: "Choose Starter" }).click();
+  await page.getByRole("button", { name: "₹799/month" }).click();
   await expect.poll(() => subs.size).toBe(before + 1);
   const subId = lastSub();
   expect(subs.get(subId)!.notes.org_id).toBe(bots[0].org_id);
@@ -157,7 +164,7 @@ test("new user signs up, builds an assistant from website + social text, preview
   const ok = await page.request.post(`${APP}/api/billing/verify`, { data: { orgId: bots[0].org_id, razorpay_payment_id: "pay_test_1", razorpay_subscription_id: subId, razorpay_signature: sig } });
   expect((await ok.json()).ok).toBe(true);
   const { rows: org } = await pool.query("select plan, subscription_status, monthly_conversation_quota from organizations where id = $1", [bots[0].org_id]);
-  expect(org[0]).toEqual({ plan: "starter", subscription_status: "active", monthly_conversation_quota: 2000 });
+  expect(org[0]).toEqual({ plan: "starter", subscription_status: "active", monthly_conversation_quota: 500 });
   const again = await page.request.post(`${APP}/api/chat`, {
     headers: { "Content-Type": "text/plain", Origin: "http://localhost:4173" },
     data: JSON.stringify({ key: bots[0].public_key, visitorId: "visitor_paid_1", message: "Hi" }),
@@ -166,7 +173,7 @@ test("new user signs up, builds an assistant from website + social text, preview
 
   // Plan switch: opening Growth checkout keeps Starter; paying for Growth cancels Starter.
   await page.goto(`${APP}/app/billing`);
-  await page.getByRole("button", { name: "Choose Growth" }).click();
+  await page.getByRole("button", { name: "₹1,999/month" }).click();
   await expect.poll(() => subs.size).toBe(before + 2);
   const growthId = lastSub();
   expect(subs.get(growthId)!.notes.replaces).toBe(subId);
@@ -183,7 +190,7 @@ test("new user signs up, builds an assistant from website + social text, preview
   await page.request.post(`${APP}/api/billing/webhook`, { headers: { "Content-Type": "application/json", "x-razorpay-signature": createHmac("sha256", "local_hook_secret").update(oldEvt).digest("hex"), "x-razorpay-event-id": "evt_old_cancel" }, data: oldEvt });
   expect((await pool.query("select plan from organizations where id = $1", [bots[0].org_id])).rows[0].plan).toBe("growth");
 
-  // Webhook: bad signature refused; a halted subscription stops the service; duplicates ignored.
+  // Webhook: bad signature refused; a halted subscription drops to Free; duplicates ignored.
   const halted = JSON.stringify({ event: "subscription.halted", payload: { subscription: { entity: { id: growthId, plan_id: "plan_growth_test", status: "halted", current_start: 1, current_end: 2, notes: { org_id: bots[0].org_id } } } } });
   expect((await page.request.post(`${APP}/api/billing/webhook`, { headers: { "Content-Type": "application/json", "x-razorpay-signature": "nope" }, data: halted })).status()).toBe(400);
   const hsig = createHmac("sha256", "local_hook_secret").update(halted).digest("hex");
@@ -191,21 +198,21 @@ test("new user signs up, builds an assistant from website + social text, preview
   expect((await w1.json()).ok).toBe(true);
   const w2 = await page.request.post(`${APP}/api/billing/webhook`, { headers: { "Content-Type": "application/json", "x-razorpay-signature": hsig, "x-razorpay-event-id": "evt_halt_1" }, data: halted });
   expect((await w2.json()).duplicate).toBe(true);
-  expect((await pool.query("select subscription_status from organizations where id = $1", [bots[0].org_id])).rows[0].subscription_status).toBe("halted");
+  expect((await pool.query("select plan, subscription_status, monthly_conversation_quota q from organizations where id = $1", [bots[0].org_id])).rows[0]).toEqual({ plan: "free", subscription_status: "halted", q: 50 });
 
-  // Super admin sees the customer and can extend their trial.
+  // Super admin sees the customer and can grant a trial.
   const admin = await browser.newPage();
   await signIn(admin, "admin@botly.test");
   await admin.goto(`${APP}/app/admin`);
   await expect(admin.getByRole("heading", { name: "Super admin" })).toBeVisible();
   await expect(admin.getByText("Meenakshi Silks").first()).toBeVisible();
   await expect(admin.getByText("MRR", { exact: true })).toBeVisible();
-  await admin.getByLabel("Actions for Meenakshi Silks").first().selectOption("extend");
+  await admin.getByLabel("Actions for Meenakshi Silks").first().selectOption("trial");
   await expect.poll(async () => (await pool.query("select plan from organizations where id = $1", [bots[0].org_id])).rows[0].plan).toBe("trial");
   await admin.close();
 });
 
-test("one free trial per email", async ({ page }) => {
+test("sign-up always starts on Free, even for an email that already used a trial", async ({ page }) => {
   test.skip(page.viewportSize()!.width < 640, "desktop");
   await pool.query("insert into trial_claims (email) values ('repeat@shop.test') on conflict do nothing");
   await signIn(page, "repeat@shop.test");
@@ -216,5 +223,7 @@ test("one free trial per email", async ({ page }) => {
   await page.getByLabel("I own or represent this business", { exact: false }).check();
   await page.getByRole("button", { name: "Create my assistant" }).click();
   await expect(page).toHaveURL(/\/app\/bots\//, { timeout: 90_000 });
-  await expect(page.getByText("Your free trial has ended.").first()).toBeVisible();
+  await expect(page.getByText("Your free trial has ended.")).toHaveCount(0);
+  const { rows } = await pool.query("select o.plan from organizations o where o.name = 'Repeat Shop' order by created_at desc limit 1");
+  expect(rows[0].plan).toBe("free");
 });

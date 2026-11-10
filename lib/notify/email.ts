@@ -1,4 +1,5 @@
 import { business } from "../business";
+import { fmtInr, TOPUP } from "../plans";
 import { brandEmail } from "./layout";
 import type { LeadNotice, Notifier, SendResult } from "./types";
 
@@ -16,7 +17,7 @@ export function renderLeadEmail(n: LeadNotice): { subject: string; html: string;
       heading: `${pct}% of this month's conversations used`,
       paragraphs: [
         `${n.botName} has used ${n.quota.used} of ${n.quota.limit} conversations this month.`,
-        "At 100% the widget shows your contact details instead of AI replies until the month resets or the plan is upgraded.",
+        `At 100% the widget shows your contact details instead of AI replies until the month resets. Add ${TOPUP.conversations} conversations for ${fmtInr(TOPUP.priceInr)} or upgrade from Billing.`,
       ],
       stats: [
         { value: `${n.quota.used}`, label: "conversations used" },

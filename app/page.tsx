@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { SPOKEN_LANGUAGES } from "@/lib/business";
-import { paidPlans, TRIAL } from "@/lib/plans";
+import { plans } from "@/lib/plans";
 import { homeFontVars } from "@/components/home/fonts";
 import { HomeNav } from "@/components/home/nav";
 import { Hero } from "@/components/home/hero";
@@ -12,7 +12,7 @@ import { HomeFooter } from "@/components/home/footer";
 export const metadata: Metadata = {
   // absolute: the layout's "%s · Botly" template would repeat the brand.
   title: { absolute: "Botly: AI customer support in your customers' language" },
-  description: `AI support assistant trained on your website. Answers customers in English, Tamil and Hindi and emails you every lead. Free ${TRIAL.days}-day trial.`,
+  description: `AI support assistant trained on your website. Answers customers in English, Tamil and Hindi and emails you every lead. Free plan, paid plans from ₹${plans().starter.priceInr.toLocaleString("en-IN")}/month.`,
   robots: { index: true, follow: true },
   // One address for search engines: the old vercel.app host and www serve the same page.
   alternates: { canonical: "/" },
@@ -24,7 +24,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: "#FFF7EC" };
 
 export default function Landing() {
-  const offers = paidPlans().map((p) => ({ "@type": "Offer", name: p.name, price: p.priceInr, priceCurrency: "INR", category: "subscription" }));
+  const all = plans();
+  const offers = (["free", "starter", "growth", "pro"] as const).map((id) => ({ "@type": "Offer", name: all[id].name, price: all[id].priceInr, priceCurrency: "INR", category: id === "free" ? "free" : "subscription" }));
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -33,7 +34,7 @@ export default function Landing() {
     operatingSystem: "Web",
     url: "https://botly.in",
     description: `An AI assistant trained on your business that answers website visitors in ${SPOKEN_LANGUAGES} and emails you every lead.`,
-    offers: [{ "@type": "Offer", name: "Free trial", price: 0, priceCurrency: "INR" }, ...offers],
+    offers,
   };
   return (
     <div id="top" className={`home ${homeFontVars} min-h-screen text-[16px] leading-[1.6] wsm:text-[17px]`}>

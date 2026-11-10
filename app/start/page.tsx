@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
-import { TRIAL } from "@/lib/plans";
+import { plans } from "@/lib/plans";
 import { StartForm } from "./start-form";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export default async function StartPage() {
         <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.03em] text-zinc-950">Set up your AI assistant</h1>
         <p className="mt-2 text-[15px] leading-relaxed text-zinc-600">
           Tell us where your business lives online. We read your public pages and write your assistant&apos;s knowledge in about two minutes.
-          Free for {TRIAL.days} days, including {TRIAL.replies} AI replies. No card needed.
+          You start on the Free plan: {plans().free.conversations} conversations a month. No card needed.
         </p>
         <StartForm email={session.email ?? ""} />
       </div>

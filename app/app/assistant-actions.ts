@@ -30,7 +30,7 @@ export async function addAssistant(_: ActionState, form: FormData): Promise<Acti
   if (!org) return { error: "Workspace not found." };
   const limit = planDef(org.plan).bots;
   if (!session.isAdmin && (existing?.length ?? 0) >= limit) {
-    return { error: `Your ${planDef(org.plan).name} plan includes ${limit} assistant${limit === 1 ? "" : "s"}. Upgrade to Growth for up to ${planDef("growth").bots}.` };
+    return { error: `Your ${planDef(org.plan).name} plan includes ${limit} assistant${limit === 1 ? "" : "s"}. Upgrade to Pro for up to ${planDef("pro").bots}.` };
   }
   const name = String(form.get("name") ?? "").trim().slice(0, 80);
   const website = String(form.get("website") ?? "").trim().slice(0, 300);

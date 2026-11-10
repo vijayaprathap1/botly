@@ -3,7 +3,7 @@ import { AutoSubmitSelect } from "@/components/client";
 import { Badge, btn, Card, PageHeader, Stat } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { fmtDate, fmtInt, fmtUsd } from "@/lib/format";
-import { fmtInr, plans, trialState } from "@/lib/plans";
+import { fmtInr, PILOT, planDef, razorpayPlanIds, TRIAL, trialState } from "@/lib/plans";
 import { monthKey } from "@/lib/quota";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { OrgRow } from "@/lib/types";
@@ -27,7 +27,6 @@ export default async function SuperAdminPage({ searchParams }: { searchParams: P
   const allOrgs = (orgRows ?? []) as Org[];
   const demoCount = allOrgs.filter((o) => o.is_demo).length;
   const orgs = allOrgs.filter((o) => !o.is_demo);
-  const P = plans();
   const botsByOrg = new Map<string, string[]>();
   for (const b of bots ?? []) botsByOrg.set(b.org_id, [...(botsByOrg.get(b.org_id) ?? []), b.id]);
   const usageByBot = new Map((usage ?? []).map((u) => [u.bot_id as string, u]));
@@ -39,7 +38,13 @@ export default async function SuperAdminPage({ searchParams }: { searchParams: P
 
   const paying = orgs.filter((o) => o.plan !== "trial" && o.subscription_status === "active");
   const trials = orgs.filter((o) => o.plan === "trial" && !trialState(o)?.over);
-  const mrr = paying.reduce((s, o) => s + P[o.plan].priceInr, 0);
+  // Monthly value: the Razorpay plan they actually pay (yearly ÷ 12, founding price), else the list price.
+  const rzp = razorpayPlanIds();
+  const monthlyValue = (o: { plan: string; razorpay_plan_id?: string | null }) => {
+    const hit = o.razorpay_plan_id ? rzp.find((x) => x.id === o.razorpay_plan_id) : undefined;
+    return hit ? (hit.interval === "yearly" ? Math.round(hit.amountInr / 12) : hit.amountInr) : planDef(o.plan).priceInr;
+  };
+  const mrr = paying.reduce((s, o) => s + monthlyValue(o), 0);
   const aiCostUsd = orgs.reduce((s, o) => s + orgUsage(o.id).cost, 0);
   const usdInr = Number(process.env.USD_INR ?? 88);
   const selfServe = orgs.filter((o) => o.self_serve);
@@ -95,7 +100,7 @@ export default async function SuperAdminPage({ searchParams }: { searchParams: P
                       {firstBot ? <Link className="font-medium hover:underline" href={`/app/bots/${firstBot}`}>{o.name}</Link> : <span className="font-medium">{o.name}</span>}
                       <div className="text-xs text-zinc-500">{o.billing_email ?? "—"} {o.self_serve ? "· self-serve" : "· done-for-you"}</div>
                     </td>
-                    <td><Badge tone={o.plan === "growth" ? "green" : o.plan === "starter" ? "blue" : "gray"}>{P[o.plan].name}</Badge></td>
+                    <td><Badge tone={o.plan === "growth" || o.plan === "pro" ? "green" : o.plan === "starter" ? "blue" : "gray"}>{planDef(o.plan).name}</Badge></td>
                     <td>{o.suspended ? <Badge tone="red" dot>suspended</Badge> : <Badge tone={o.subscription_status === "active" ? "green" : o.subscription_status === "trialing" ? "blue" : ["past_due", "halted", "expired"].includes(o.subscription_status) ? "amber" : "gray"} dot>{o.subscription_status.replace("_", " ")}</Badge>}</td>
                     <td className="whitespace-nowrap text-[12.5px] text-zinc-600">{t ? (t.over ? "ended" : `${t.left}/${t.limit} replies · ${t.daysLeft}d`) : o.current_period_end ? `renews ${fmtDate(o.current_period_end, o.timezone)}` : "—"}</td>
                     <td className="num text-right">{fmtInt(u.conv)}</td>
@@ -106,9 +111,13 @@ export default async function SuperAdminPage({ searchParams }: { searchParams: P
                         <input type="hidden" name="orgId" value={o.id} />
                         <AutoSubmitSelect name="action" defaultValue="" aria-label={`Actions for ${o.name}`} className="h-8 w-40 rounded-md border border-zinc-200 bg-white px-2 text-[12.5px] text-zinc-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10">
                           <option value="" disabled>Choose…</option>
+                          <option value="trial">Start {TRIAL.days}-day trial ({TRIAL.replies} replies)</option>
+                          <option value="pilot">Start {PILOT.days}-day pilot ({PILOT.replies} replies, free setup)</option>
                           <option value="extend">Extend trial (+7 days, +50 replies)</option>
+                          <option value="free">Set Free</option>
                           <option value="starter">Set Starter (paid offline)</option>
                           <option value="growth">Set Growth (paid offline)</option>
+                          <option value="pro">Set Pro (paid offline)</option>
                           {o.suspended ? <option value="unsuspend">Unsuspend</option> : <option value="suspend">Suspend</option>}
                         </AutoSubmitSelect>
                       </form>
