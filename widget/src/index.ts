@@ -1,8 +1,13 @@
 /**
  * Botly embed. Install:
  *   <script src="https://APP_DOMAIN/widget.js" data-key="PUBLIC_KEY" async></script>
+ * Works in <head> or <body>, with or without async/defer, and when injected later by
+ * React, Next.js (next/script), Google Tag Manager or a WordPress plugin.
+ * `data-bot-key` is accepted as an alias of `data-key`.
  * Optional: data-mode="fullscreen" (private test page), data-test-token="…" (test page only).
  */
+import { warnOnce } from "./api";
+import { findScript, keyOf } from "./locate";
 import { BotlyWidget } from "./widget";
 
 type Call = [string, unknown[]];
@@ -22,14 +27,16 @@ declare global {
 }
 
 (function boot() {
-  if (window.__botlyLoaded) return; // script included twice
-  window.__botlyLoaded = true;
+  // Included twice (theme + plugin, or re-run by a SPA): the first copy wins.
+  if (window.__botlyLoaded || document.getElementById("botly-widget")) return;
 
-  const script =
-    (document.currentScript as HTMLScriptElement | null) ??
-    document.querySelector<HTMLScriptElement>('script[data-key][src*="widget.js"]');
-  const key = script?.dataset.key?.trim();
-  if (!script || !key) return;
+  const script = findScript();
+  const key = keyOf(script);
+  if (!script || !key) {
+    warnOnce("nokey", '[Botly] Chat widget not shown: the widget.js <script> tag has no data-key. Copy the install code from Botly → your bot → "Install on your website".');
+    return;
+  }
+  window.__botlyLoaded = true;
 
   let base: string;
   try {

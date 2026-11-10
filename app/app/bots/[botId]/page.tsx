@@ -8,7 +8,7 @@ import { Activity, Inbox, MessagesSquare, UserRound, Wallet } from "lucide-react
 import { btn, Card, Notice, Stat } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { config } from "@/lib/config";
-import { botMetrics, getBot, installSnippet } from "@/lib/dashboard";
+import { botMetrics, getBot, installGuides, installSnippet } from "@/lib/dashboard";
 import { fmtDateTime, fmtInt, fmtUsd } from "@/lib/format";
 import { quotaState } from "@/lib/quota";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -112,10 +112,22 @@ export default async function BotOverview({ params, searchParams }: { params: Pr
         </div>
       ) : null}
 
-      <Card title="Install on your website" sub="Paste this one line just before </body>. Works on Shopify (theme.liquid), WordPress (footer), Wix (Custom code → Body end) and any other site.">
+      <Card title="Install on your website" sub="Paste this one line into your site, in <head> or before </body>. Works on any site: HTML, React, Next.js, WordPress, Shopify, Wix.">
         <CodeBlock code={snippet} />
         <p className="mt-3 text-[12.5px] text-zinc-500">
           Shows only on: <span className="font-medium text-zinc-700">{liveLabel}</span> · <Link className="text-brand-700 hover:underline" href={`/app/bots/${bot.id}/settings`}>change domains</Link>
+        </p>
+        <div className="mt-4 space-y-2">
+          {installGuides(config.appUrl, bot.public_key).map((g) => (
+            <details key={g.id} className="rounded-lg border border-zinc-200 px-3 py-2">
+              <summary className="cursor-pointer text-[13px] font-medium text-zinc-800">{g.title}</summary>
+              <p className="my-2 text-[12.5px] text-zinc-600">{g.where}</p>
+              <CodeBlock code={g.code} label={g.label} />
+            </details>
+          ))}
+        </div>
+        <p className="mt-3 text-[12.5px] text-zinc-500">
+          Not showing? Open the browser console on your site: Botly logs one line saying why (domain not in the list, assistant paused or still a draft, or a blocked script). Sites with a Content-Security-Policy must allow {config.appUrl} in script-src and connect-src.
         </p>
       </Card>
 

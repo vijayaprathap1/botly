@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { resolveAccess } from "@/lib/chat/access";
+import { requestOrigin } from "@/lib/security/origin";
 import { serverDeps } from "@/lib/chat/deps";
 import { saveLead } from "@/lib/chat/leads";
 import { clientIp, json, preflight, readJsonBody } from "@/lib/http";
@@ -36,7 +37,7 @@ async function handle(req: Request) {
   const deps = serverDeps();
   const bot = await deps.store.getBotByKey(input.key);
   if (!bot) return json(req, { ok: false, error: "Not available" }, 404);
-  const access = resolveAccess(bot, req.headers.get("origin"), input.testToken);
+  const access = resolveAccess(bot, requestOrigin(req), input.testToken);
   if (!access.allowed) return json(req, { ok: false, error: "Not available" }, 403);
 
   const ip = clientIp(req);

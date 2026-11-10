@@ -31,15 +31,31 @@ export class Api {
   }
 
   async config(): Promise<WidgetConfig | null> {
-    const res = await fetch(`${this.base}/api/widget/config?${this.q()}`, { credentials: "omit" });
-    if (!res.ok) return null;
-    const data = await res.json();
+    let res: Response;
+    try {
+      res = await fetch(`${this.base}/api/widget/config?${this.q()}`, { credentials: "omit", referrerPolicy: "strict-origin" });
+    } catch {
+      // Blocked before it reached Botly: a Content-Security-Policy, an ad blocker or the network.
+      warnOnce(
+        "network",
+        `[Botly] Chat widget not shown: couldn't reach ${this.base}. If the site has a Content-Security-Policy, allow ${this.base} in script-src and connect-src (and font-src for fonts).`,
+      );
+      return null;
+    }
+    let data: { enabled?: boolean; reason?: string; origin?: string | null } | null = null;
+    try {
+      data = await res.json();
+    } catch {
+      return null;
+    }
+    // 403 (domain not allowed), 404 (unknown key) and 200 {enabled:false} all carry a reason.
     if (data && !data.enabled && data.reason) devHint(data.reason, data.origin ?? "");
+    if (!res.ok) return null;
     return data && data.enabled ? (data as WidgetConfig) : null;
   }
 
   async history(visitorId: string, conversationId: string) {
-    const res = await fetch(`${this.base}/api/widget/history?${this.q({ visitorId, conversationId })}`, { credentials: "omit" });
+    const res = await fetch(`${this.base}/api/widget/history?${this.q({ visitorId, conversationId })}`, { credentials: "omit", referrerPolicy: "strict-origin" });
     if (!res.ok) return { messages: [] as { role: string; content: string; at: string }[] };
     return (await res.json()) as { status?: string; hasLead?: boolean; messages: { role: string; content: string; at: string }[] };
   }
@@ -106,7 +122,7 @@ export class Api {
   }
 }
 
-/** Shown once in the console when a localhost page is not on the allow-list. */
+/** Shown once in the console when a page is not on the allow-list. */
 export function widgetDisabledWarning(reason: string, origin: string): string | null {
   if (reason !== "origin") return null;
   const where = origin || "this page";
@@ -123,24 +139,29 @@ export function widgetDisabledWarning(reason: string, origin: string): string | 
 
 const hinted = new Set<string>();
 
-/**
- * Only reached on developer pages: localhost, 127.x, LAN IPs, .local/.test hosts (the
- * server sends a reason only to those). Warns once per page for each reason and origin.
- */
-export function devHint(reason: string, origin: string) {
-  const k = `${reason}|${origin}`;
+/** One console.warn per page for each distinct message key. Never throws into the host page. */
+export function warnOnce(k: string, message: string) {
   if (hinted.has(k)) return;
   hinted.add(k);
-  const why: Record<string, string> = {
-    unknown_key: "The data-key doesn't match any bot. Copy the install snippet from the bot's Overview page.",
-    inactive: "The bot is switched off (Settings → Active).",
-    not_live: "The bot is a draft. Drafts only work on localhost pages or the private test link.",
-  };
   try {
-    console.warn(widgetDisabledWarning(reason, origin) ?? `[Botly] Chat widget not shown: ${why[reason] ?? reason}`);
+    console.warn(message);
   } catch {
     /* console can be missing in a locked-down page */
   }
+}
+
+/**
+ * Why the widget isn't showing, once per page for each reason and origin. The config route
+ * sends the reason on every site, so the site owner can see it in the browser console.
+ */
+export function devHint(reason: string, origin: string) {
+  const why: Record<string, string> = {
+    unknown_key: "The data-key doesn't match any bot. Copy the install code from the bot's Overview page.",
+    inactive: "The bot is switched off (Settings → Active).",
+    not_live: "The bot is a draft. Drafts only work on localhost pages or the private test link; go live from the bot's Overview page.",
+    bad_token: "The private test link is out of date. Open it again from the dashboard.",
+  };
+  warnOnce(`${reason}|${origin}`, widgetDisabledWarning(reason, origin) ?? `[Botly] Chat widget not shown: ${why[reason] ?? reason}`);
 }
 
 /** How long the widget waits for a reply before giving up. Longer than /api/chat's maxDuration (60 s). */

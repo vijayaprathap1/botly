@@ -14,8 +14,11 @@ describe("origin check", () => {
 
   it.each([
     ["https://ananya.in", true],
-    ["http://ananya.in", false], // exact entry includes the scheme
-    ["https://www.ananya.in", false],
+    ["http://ananya.in", true], // scheme in the entry is ignored
+    ["https://www.ananya.in", true], // www twin is the same site
+    ["https://evilananya.in", false],
+    ["https://ananya.in.evil.io", false],
+    ["https://shop.ananya.in", false], // other subdomains need a *. entry
     ["https://shop.example.com", true],
     ["http://shop.example.com", true],
     ["https://www.shop.example.com", true],
@@ -24,7 +27,7 @@ describe("origin check", () => {
     ["https://myshopify.com", false],
     ["https://myshopify.com.evil.io", false],
     ["http://localhost:3000", true],
-    ["http://localhost:3001", false],
+    ["http://localhost:3001", true], // port in the entry is ignored
     [null, false],
     ["null", false],
   ])("%s → %s", (origin, ok) => {
@@ -42,14 +45,14 @@ describe("origin check", () => {
     expect(widgetDisabledWarning("inactive", "http://localhost:8765")).toBeNull();
   });
 
-  it("a host with no port matches any port, and a host with a port matches only that port", () => {
+  it("ports and schemes in entries are ignored; localhost works only when listed", () => {
     expect(isOriginAllowed("http://localhost:8765", ["localhost"])).toBe(true);
     expect(isOriginAllowed("https://localhost", ["localhost"])).toBe(true);
-    expect(isOriginAllowed("http://localhost:3000", ["localhost"])).toBe(true);
+    expect(isOriginAllowed("http://localhost:3000", ["localhost:8765"])).toBe(true);
+    expect(isOriginAllowed("https://localhost:8443", ["http://localhost:3000"])).toBe(true);
     expect(isOriginAllowed("http://127.0.0.1:8765", ["localhost"])).toBe(false);
-    expect(isOriginAllowed("http://localhost:8765", ["localhost:8765"])).toBe(true);
-    expect(isOriginAllowed("http://localhost:3000", ["localhost:8765"])).toBe(false);
-    expect(isOriginAllowed("http://localhost:3000", ["http://localhost"])).toBe(true);
-    expect(isOriginAllowed("https://localhost:8443", ["http://localhost"])).toBe(false);
+    expect(isOriginAllowed("http://127.0.0.1:8765", ["127.0.0.1:5500"])).toBe(true);
+    expect(isOriginAllowed("http://localhost:3000", ["botly.in"])).toBe(false);
+    expect(isOriginAllowed("http://[::1]:3000", ["[::1]:5000"])).toBe(true);
   });
 });
