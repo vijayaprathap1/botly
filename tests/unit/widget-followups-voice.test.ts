@@ -58,6 +58,14 @@ describe("follow-up pills wait for the reply to finish", () => {
 });
 
 describe("voice input helpers", () => {
+  it("hides voice when the page's Permissions-Policy blocks the microphone", () => {
+    function Rec() {}
+    const blocked = { isSecureContext: true, webkitSpeechRecognition: Rec, document: { featurePolicy: { allowsFeature: (f: string) => f !== "microphone" } } };
+    const allowed = { isSecureContext: true, webkitSpeechRecognition: Rec, document: { featurePolicy: { allowsFeature: () => true } } };
+    expect(speechCtor(blocked as unknown as Record<string, unknown>)).toBeNull();
+    expect(speechCtor(allowed as unknown as Record<string, unknown>)).toBe(Rec);
+  });
+
   it("picks the recognition language from the visitor's script, then the page, then the greeting", () => {
     expect(pickSpeechLang({ lastUserText: "பிளவுஸ் தைக்க எவ்வளவு?" })).toBe("ta-IN");
     expect(pickSpeechLang({ lastUserText: "डिलीवरी कितने दिन?" })).toBe("hi-IN");
