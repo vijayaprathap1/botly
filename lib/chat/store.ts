@@ -1,4 +1,5 @@
 import type { KnowledgeSource } from "../knowledge";
+import type { OrgUsage } from "../quota";
 import type { BotWithOrg, ConversationRow, LeadRow, LeadType, MessageRow, ToolCallLog } from "../types";
 
 export type NewMessage = {
@@ -71,7 +72,8 @@ export interface ChatStore {
     costUsd: number;
   }): Promise<{ conversations: number; quotaWarnedAt: string | null }>;
   claimQuotaWarning(botId: string, month: string): Promise<boolean>;
-  getUsedConversations(botId: string, month: string): Promise<number>;
+  /** This month's conversations across ALL the org's assistants (the plan limit is shared). */
+  getOrgUsage(orgId: string, month: string): Promise<OrgUsage>;
   getLead(id: string): Promise<LeadRow | null>;
   createLead(l: NewLead): Promise<LeadRow>;
   updateLead(id: string, patch: Partial<LeadRow>): Promise<void>;

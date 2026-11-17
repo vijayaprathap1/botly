@@ -1,7 +1,8 @@
 import "server-only";
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import { monthKey } from "./quota";
+import { monthlyCap } from "./plans";
+import { conversationAllowance, monthKey } from "./quota";
 import { supabaseServer } from "./supabase/server";
 import type { BotWithOrg } from "./types";
 import { monthStartIso } from "./format";
@@ -17,19 +18,32 @@ export const getBot = cache(async (botId: string): Promise<BotWithOrg> => {
 
 export type BotMetrics = {
   month: string;
+  /** Conversations this assistant started this month. */
   conversations: number;
   messages: number;
   costUsd: number;
   leads: number;
   unanswered: number;
+  /** The monthly limit this assistant runs against: the workspace's shared plan limit plus this month's top-ups (or a tighter per-assistant override). */
   quota: number;
+  /** What counts toward `quota`: all the workspace's assistants together (or just this one under an override). */
+  quotaUsed: number;
+  /** How many assistants share the workspace's limit. */
+  orgBots: number;
 };
 
 export async function botMetrics(bots: BotWithOrg[]): Promise<Map<string, BotMetrics>> {
   const db = await supabaseServer();
   const out = new Map<string, BotMetrics>();
   if (!bots.length) return out;
-  const ids = bots.map((b) => b.id);
+  // The plan's conversations are one limit per workspace, so count every assistant in each org,
+  // not only the ones on this page (the bot page passes a single bot).
+  const orgIds = [...new Set(bots.map((b) => b.org.id))];
+  const { data: siblings } = await db.from("bots").select("id, org_id").in("org_id", orgIds);
+  const orgOf = new Map<string, string>((siblings ?? []).map((s) => [s.id as string, s.org_id as string]));
+  for (const b of bots) orgOf.set(b.id, b.org.id);
+  const tzOf = new Map(bots.map((b) => [b.org.id, b.org.timezone]));
+  const ids = [...orgOf.keys()];
   const months = [...new Set(bots.map((b) => monthKey(new Date(), b.org.timezone)))];
   const earliest = months.map((m) => monthStartIso(m, "Asia/Kolkata")).sort()[0]!;
   const since = new Date(new Date(earliest).getTime() - 24 * 3600_000).toISOString();
@@ -37,34 +51,46 @@ export async function botMetrics(bots: BotWithOrg[]): Promise<Map<string, BotMet
   const ownerCounts = new Map<string, number>();
   const [usage, leads, unanswered] = await Promise.all([
     db.from("usage_monthly").select("bot_id, month, conversations, messages, cost_usd").in("bot_id", ids).in("month", months),
-    db.from("leads").select("bot_id, created_at").in("bot_id", ids).gte("created_at", since),
-    db.from("unanswered_questions").select("bot_id").in("bot_id", ids).eq("status", "open"),
+    db.from("leads").select("bot_id, created_at").in("bot_id", bots.map((b) => b.id)).gte("created_at", since),
+    db.from("unanswered_questions").select("bot_id").in("bot_id", bots.map((b) => b.id)).eq("status", "open"),
   ]);
   if (!(usage.data ?? []).length) {
     await Promise.all(
-      bots.map(async (b) => {
+      ids.map(async (id) => {
+        const tz = tzOf.get(orgOf.get(id)!) ?? "Asia/Kolkata";
         const { count } = await db
           .from("conversations")
           .select("id", { count: "exact", head: true })
-          .eq("bot_id", b.id)
+          .eq("bot_id", id)
           .eq("is_test", false)
-          .gte("first_message_at", monthStartIso(monthKey(new Date(), b.org.timezone), b.org.timezone));
-        ownerCounts.set(b.id, count ?? 0);
+          .gte("first_message_at", monthStartIso(monthKey(new Date(), tz), tz));
+        ownerCounts.set(id, count ?? 0);
       }),
     );
   }
+  const usedBy = (id: string, m: string) => (usage.data ?? []).find((r) => r.bot_id === id && r.month === m)?.conversations ?? ownerCounts.get(id) ?? 0;
   for (const b of bots) {
     const m = monthKey(new Date(), b.org.timezone);
     const start = monthStartIso(m, b.org.timezone);
     const u = (usage.data ?? []).find((r) => r.bot_id === b.id && r.month === m);
+    const sameOrg = ids.filter((id) => orgOf.get(id) === b.org.id);
+    const conversations = usedBy(b.id, m);
+    const allowance = conversationAllowance({
+      orgCap: monthlyCap(b.org.monthly_conversation_quota, b.org, m),
+      botOverride: b.monthly_conversation_quota,
+      orgUsed: sameOrg.reduce((sum, id) => sum + usedBy(id, m), 0),
+      botUsed: conversations,
+    });
     out.set(b.id, {
       month: m,
-      conversations: u?.conversations ?? ownerCounts.get(b.id) ?? 0,
+      conversations,
       messages: u?.messages ?? 0,
       costUsd: Number(u?.cost_usd ?? 0),
       leads: (leads.data ?? []).filter((l) => l.bot_id === b.id && l.created_at >= start).length,
       unanswered: (unanswered.data ?? []).filter((q) => q.bot_id === b.id).length,
-      quota: b.monthly_conversation_quota ?? b.org.monthly_conversation_quota,
+      quota: allowance.limit,
+      quotaUsed: allowance.used,
+      orgBots: sameOrg.length,
     });
   }
   return out;

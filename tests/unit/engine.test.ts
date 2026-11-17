@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runChat, type ChatEventName, type EngineDeps } from "@/lib/chat/engine";
 import { MemoryStore } from "@/lib/chat/memory-store";
+import { monthKey } from "@/lib/quota";
 import { fixtureToBot, loadEvalFile } from "@/lib/eval/fixture";
 import type { LlmClient, LlmRequest, LlmTurn, ToolUsePart } from "@/lib/llm/types";
 import type { Notifier } from "@/lib/notify/types";
@@ -227,6 +228,53 @@ describe("chat engine", () => {
     expect(llm.calls).toHaveLength(1);
     expect(events[0]).toEqual({ event: "tool_card", data: { type: "fallback_contact", reason: "quota", contact: bot.fallback_contact } });
     expect(events[1]!.event).toBe("done");
+  });
+
+  describe("monthly limit is shared by all the workspace's assistants", () => {
+    // A second assistant in the same workspace (same org object), as on Pro.
+    const addSibling = () => {
+      const first = [...store.bots.values()][0]!;
+      const second = { ...structuredClone(first), id: "00000000-0000-4000-8000-0000000000b2", public_key: "pk_second_bot", org: first.org };
+      store.addBot(second, store.knowledge.get(first.id) ?? []);
+      return { first, second };
+    };
+
+    it("a second assistant can't start conversations once the workspace's total is used", async () => {
+      const { first, second } = addSibling();
+      first.org.monthly_conversation_quota = 1;
+      const llm = new QueueLlm([{ text: "first" }, { text: "should not run" }]);
+      await runChat(deps(llm), req("hi"), ctx, emit);
+      events.length = 0;
+      await runChat(deps(llm), { ...req("hi"), key: second.public_key, visitorId: "other-visitor-2" }, ctx, emit);
+      expect(llm.calls).toHaveLength(1);
+      expect(events[0]).toMatchObject({ event: "tool_card", data: { type: "fallback_contact", reason: "quota" } });
+    });
+
+    it("a top-up adds to the shared total", async () => {
+      const { first, second } = addSibling();
+      first.org.monthly_conversation_quota = 1;
+      first.org.topup_month = monthKey(new Date(), first.org.timezone);
+      first.org.topup_conversations = 1;
+      const llm = new QueueLlm([{ text: "one" }, { text: "two" }, { text: "three" }]);
+      await runChat(deps(llm), req("hi"), ctx, emit);
+      await runChat(deps(llm), { ...req("hi"), key: second.public_key, visitorId: "other-visitor-2" }, ctx, emit);
+      await runChat(deps(llm), { ...req("hi"), visitorId: "other-visitor-3" }, ctx, emit);
+      expect(llm.calls).toHaveLength(2);
+    });
+
+    it("the 80% warning counts the whole workspace and is sent once", async () => {
+      const { first, second } = addSibling();
+      first.org.monthly_conversation_quota = 2;
+      const llm = new QueueLlm([{ text: "one" }, { text: "two" }]);
+      const a = await runChat(deps(llm), req("hi"), ctx, emit);
+      await Promise.all(a.jobs.map((j) => j()));
+      expect(email.sent).toEqual([]); // 1 of 2 = 50%
+      const b = await runChat(deps(llm), { ...req("hi"), key: second.public_key, visitorId: "other-visitor-2" }, ctx, emit);
+      await Promise.all(b.jobs.map((j) => j()));
+      expect(email.sent).toHaveLength(1); // 2 of 2 across both assistants
+      const warn = store.notifications.find((n) => n.kind === "quota_warning");
+      expect(warn).toBeTruthy();
+    });
   });
 
   it("test conversations never count toward quota", async () => {

@@ -17,7 +17,7 @@ Subscriptions → Plans → Create. All INR, "every 1" period. Amounts are what 
 | Botly Pro Yearly | yearly | 49,990 | 4999000 | `RAZORPAY_PLAN_PRO_YEARLY` (new) |
 | Botly Growth Founding | monthly | 999 | 99900 | `RAZORPAY_PLAN_GROWTH_FOUNDING` (new; leave unset to keep "Contact us") |
 
-Top-ups (₹249 = 24900 paise) are one-time Orders: no plan needed.
+Top-ups (₹399 = 39900 paise) are one-time Orders: no plan needed.
 Webhook (Account & Settings → Webhooks, existing `/api/billing/webhook`): **add the `order.paid` event** next to `subscription.*`, or top-ups rely only on the browser callback.
 
 Old ₹2,999 / ₹9,999 plans: leave them in Razorpay (plans can't be deleted, and nobody is subscribed to them).
@@ -65,9 +65,9 @@ Existing plans and quotas are grandfathered (the migration doesn't touch them).
 ## 7. Check after deploy
 
 - `npm run check` with production env: every Razorpay plan "found" at the right amount.
-- Homepage #pricing shows ₹0 / ₹799 / ₹1,999 / ₹4,999, founding banner, ₹249 top-up line.
+- Homepage #pricing shows ₹0 / ₹799 / ₹1,999 / ₹4,999, founding banner, ₹399 top-up line.
 - New sign-up lands on Free (50/month); Billing shows monthly/yearly buttons and the top-up button.
-- One real top-up and one real subscription in live mode (₹249 and ₹799), then refund/cancel them.
+- One real top-up and one real subscription in live mode (₹399 and ₹799), then refund/cancel them.
 
 ## Rollback
 

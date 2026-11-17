@@ -3,13 +3,13 @@ import { SupabaseStore } from "@/lib/chat/supabase-store";
 import { config } from "@/lib/config";
 import { isOpenNow } from "@/lib/hours";
 import { clientIp, json, preflight } from "@/lib/http";
-import { effectiveQuota, monthKey, replyGateFromOrg } from "@/lib/quota";
+import { conversationAllowance, monthKey, replyGateFromOrg } from "@/lib/quota";
 import { PostgresRateLimiter } from "@/lib/security/rate-limit";
 import { requestOrigin } from "@/lib/security/origin";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { configQuerySchema } from "@/lib/validation/schemas";
 import { bookingAllowed, SupabaseBookingSource } from "@/lib/booking/service";
-import { hasBooking } from "@/lib/plans";
+import { hasBooking, monthlyCap } from "@/lib/plans";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,11 +55,19 @@ async function handle(req: Request) {
 
   const month = monthKey(new Date(), bot.org.timezone);
   // Booking settings are read only for plans that include booking (one small primary-key read).
-  const [used, booking] = await Promise.all([
-    access.isTest ? Promise.resolve(0) : store.getUsedConversations(bot.id, month),
+  const [usage, booking] = await Promise.all([
+    access.isTest ? Promise.resolve(null) : store.getOrgUsage(bot.org.id, month),
     hasBooking(bot.org.plan) ? new SupabaseBookingSource(db).enabledSettings(bot.id) : Promise.resolve(null),
   ]);
-  const quota = effectiveQuota(bot.org.monthly_conversation_quota, bot.monthly_conversation_quota);
+  // Same rule as the chat engine: one shared monthly limit for the workspace (plan + this month's
+  // top-ups), so a top-up re-opens the widget and a second assistant can't add a second allowance.
+  const used = usage?.byBot[bot.id] ?? 0;
+  const allowance = conversationAllowance({
+    orgCap: monthlyCap(bot.org.monthly_conversation_quota, bot.org, month),
+    botOverride: bot.monthly_conversation_quota,
+    orgUsed: usage?.total ?? 0,
+    botUsed: used,
+  });
 
   return json(
     req,
@@ -81,7 +89,7 @@ async function handle(req: Request) {
       fallbackContact: bot.fallback_contact,
       // An ended trial, a used-up trial or a suspended account shows the "paused" card on open
       // (the org row is already loaded, so this costs no extra query).
-      quotaExceeded: used >= quota || replyGateFromOrg(bot.org) !== "ok",
+      quotaExceeded: (!access.isTest && used >= allowance.quota) || replyGateFromOrg(bot.org) !== "ok",
       // Only present when the plan includes booking AND the owner switched it on.
       ...(bookingAllowed(bot, booking) ? { booking: { title: booking.title } } : {}),
     },

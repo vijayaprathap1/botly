@@ -5,7 +5,7 @@ import { serverDeps } from "@/lib/chat/deps";
 import { saveLead } from "@/lib/chat/leads";
 import { clientIp, json, preflight, readJsonBody } from "@/lib/http";
 import { hasGrowthTools, monthlyCap } from "@/lib/plans";
-import { effectiveQuota, monthKey } from "@/lib/quota";
+import { conversationAllowance, monthKey } from "@/lib/quota";
 import { checkLimits } from "@/lib/security/rate-limit";
 import { detectLanguage } from "@/lib/language";
 import { leadRequestSchema } from "@/lib/validation/schemas";
@@ -56,6 +56,14 @@ async function handle(req: Request) {
   }
   if (!conversationId) {
     const month = monthKey(new Date(), bot.org.timezone);
+    // The workspace's shared monthly limit (plan + top-ups), as in the chat engine.
+    const usage = access.isTest ? null : await deps.store.getOrgUsage(bot.org.id, month);
+    const allowance = conversationAllowance({
+      orgCap: monthlyCap(bot.org.monthly_conversation_quota, bot.org, month),
+      botOverride: bot.monthly_conversation_quota,
+      orgUsed: usage?.total ?? 0,
+      botUsed: usage?.byBot[bot.id] ?? 0,
+    });
     conversationId = await deps.store.beginConversation({
       botId: bot.id,
       visitorId: input.visitorId,
@@ -63,7 +71,7 @@ async function handle(req: Request) {
       pageTitle: input.pageTitle ?? null,
       language: input.need ? detectLanguage(input.need) : null,
       month,
-      quota: monthlyCap(effectiveQuota(bot.org.monthly_conversation_quota, bot.monthly_conversation_quota), bot.org, month),
+      quota: allowance.quota,
       isTest: access.isTest,
     });
     // At quota the lead is still saved (without a conversation). Leads are never dropped.

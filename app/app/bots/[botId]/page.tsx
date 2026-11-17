@@ -25,7 +25,7 @@ export default async function BotOverview({ params, searchParams }: { params: Pr
   const session = await requireSession();
   const bot = await getBot(botId);
   const m = (await botMetrics([bot])).get(bot.id)!;
-  const q = quotaState(m.conversations, m.quota);
+  const q = quotaState(m.quotaUsed, m.quota);
   const snippet = installSnippet(config.appUrl, bot.public_key);
   const testUrl = `${config.appUrl}/t/${bot.test_token}`;
   const db = await supabaseServer();
@@ -97,7 +97,7 @@ export default async function BotOverview({ params, searchParams }: { params: Pr
       ) : null}
 
       <div className={`grid grid-cols-2 gap-3 ${session.isAdmin ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
-        <Stat label="Conversations" icon={<MessagesSquare className="h-4 w-4" />} value={fmtInt(m.conversations)} hint={bot.org.plan === "trial" ? "this month" : `of ${fmtInt(m.quota)} this month · ${q.percent}%`} />
+        <Stat label="Conversations" icon={<MessagesSquare className="h-4 w-4" />} value={fmtInt(m.conversations)} hint={bot.org.plan === "trial" ? "this month" : m.orgBots > 1 ? `${fmtInt(m.quotaUsed)} of ${fmtInt(m.quota)} shared by your ${m.orgBots} assistants · ${q.percent}%` : `of ${fmtInt(m.quota)} this month · ${q.percent}%`} />
         <Stat label="Leads" icon={<UserRound className="h-4 w-4" />} value={fmtInt(m.leads)} hint="this month" />
         <Stat label="Unanswered" icon={<Inbox className="h-4 w-4" />} value={fmtInt(m.unanswered)} hint={m.unanswered ? <Link className="font-medium text-brand-700 hover:underline" href={`/app/bots/${bot.id}/unanswered`}>Review questions →</Link> : "nothing waiting"} />
         {session.isAdmin ? <Stat label="AI cost" icon={<Wallet className="h-4 w-4" />} value={fmtUsd(m.costUsd)} hint={`${fmtInt(m.messages)} messages · p50 first token ${p50 != null ? `${p50} ms` : "—"}`} /> : null}

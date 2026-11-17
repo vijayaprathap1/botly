@@ -72,7 +72,7 @@ async function signIn(page: Page, email: string) {
 test("landing page sells: hero, pricing, start free", async ({ page }) => {
   await page.goto(APP);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("in their language");
-  for (const price of ["₹0", "₹799", "₹1,999", "₹4,999", "₹249", "₹999"]) await expect(page.locator("#pricing")).toContainText(price);
+  for (const price of ["₹0", "₹799", "₹1,999", "₹4,999", "₹399", "₹999"]) await expect(page.locator("#pricing")).toContainText(price);
   await expect(page.locator("#pricing")).not.toContainText("₹2,999");
   await page.getByRole("link", { name: "Build my assistant free" }).first().click();
   await expect(page).toHaveURL(/\/login\?signup=1/);

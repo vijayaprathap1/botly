@@ -33,7 +33,7 @@ export default async function ClientsPage() {
         <div className="grid gap-3">
           {bots.map((b) => {
             const m = metrics.get(b.id)!;
-            const q = quotaState(m.conversations, m.quota);
+            const q = quotaState(m.quotaUsed, m.quota);
             const trial = trialState(b.org);
             return (
               <Link key={b.id} href={`/app/bots/${b.id}`} className="block rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-brand-600">
@@ -58,9 +58,9 @@ export default async function ClientsPage() {
                     </div>
                   ) : (
                     <div>
-                      <dt className="text-zinc-500">Conversations</dt>
+                      <dt className="text-zinc-500">{m.orgBots > 1 ? "Conversations (this / all)" : "Conversations"}</dt>
                       <dd className={`font-medium tabular-nums ${q.state === "exceeded" ? "text-red-700" : q.state === "warning" ? "text-amber-700" : ""}`}>
-                        {fmtInt(m.conversations)} / {fmtInt(m.quota)}
+                        {m.orgBots > 1 ? `${fmtInt(m.conversations)} · ${fmtInt(m.quotaUsed)}` : fmtInt(m.conversations)} / {fmtInt(m.quota)}
                       </dd>
                     </div>
                   )}

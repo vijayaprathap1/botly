@@ -74,7 +74,7 @@ function fakeDb(org: Record<string, unknown> = {}, rpcAnswers: Record<string, un
 }
 
 const order = (o: Partial<RzpOrder> = {}): RzpOrder => ({
-  id: "order_1", amount: 24900, amount_paid: 24900, currency: "INR", status: "paid", notes: topupNotes(ORG, "2026-11-01"), ...o,
+  id: "order_1", amount: 39900, amount_paid: 39900, currency: "INR", status: "paid", notes: topupNotes(ORG, "2026-11-01"), ...o,
 });
 const rzpPlan = (amountInr: number, period = "monthly") => ({ id: "x", period, interval: 1, item: { name: "x", amount: amountInr * 100, currency: "INR" } });
 
@@ -90,7 +90,7 @@ describe("plan table", () => {
     expect([p.starter.yearlyInr, p.growth.yearlyInr, p.pro.yearlyInr]).toEqual([7990, 19990, 49990]);
     expect([p.free.conversations, p.starter.conversations, p.growth.conversations, p.pro.conversations]).toEqual([50, 500, 2000, 10000]);
     expect(paidPlans().map((x) => x.id)).toEqual(["starter", "growth", "pro"]);
-    expect(TOPUP).toEqual({ priceInr: 249, conversations: 500 });
+    expect(TOPUP).toEqual({ priceInr: 399, conversations: 500 });
     expect(FOUNDING).toMatchObject({ plan: "growth", priceInr: 999, slots: 25, lockMonths: 12 });
     expect(p.pro.bots).toBe(3);
     expect(planDef("nonsense").id).toBe("free");
@@ -186,14 +186,14 @@ describe("checkout", () => {
 });
 
 describe("top-ups", () => {
-  it("creates a ₹249 one-time order for this month, not for trials", async () => {
+  it("creates a ₹399 one-time order for this month, not for trials", async () => {
     admin.db = fakeDb({ plan: "trial" }).db;
     expect((await startTopup(ORG))?.error).toMatch(/Free and paid plans/);
     admin.db = fakeDb({ plan: "starter", timezone: "Asia/Kolkata", name: "Shop" }).db;
-    rzp.createOrder.mockResolvedValue({ id: "order_1", amount: 24900 });
-    expect(await startTopup(ORG)).toMatchObject({ orderId: "order_1", amount: 24900 });
+    rzp.createOrder.mockResolvedValue({ id: "order_1", amount: 39900 });
+    expect(await startTopup(ORG)).toMatchObject({ orderId: "order_1", amount: 39900 });
     const args = rzp.createOrder.mock.calls[0]![0] as { amountPaise: number; notes: Record<string, string> };
-    expect(args.amountPaise).toBe(24900);
+    expect(args.amountPaise).toBe(39900);
     expect(args.notes).toMatchObject({ kind: "topup", org_id: ORG, conversations: "500" });
     expect(args.notes.month).toMatch(/^\d{4}-\d{2}-01$/);
   });
@@ -205,7 +205,7 @@ describe("top-ups", () => {
     expect(await applyTopupOrder(m.db as never, order(), "pay_1", "22222222-2222-4222-8222-222222222222")).toBe("invalid");
     expect(m.rpcs).toHaveLength(0);
     expect(await applyTopupOrder(m.db as never, order(), "pay_1", ORG)).toBe("added");
-    expect(m.rpcs[0]).toEqual({ fn: "add_topup", args: { p_org_id: ORG, p_order_id: "order_1", p_payment_id: "pay_1", p_amount_paise: 24900, p_conversations: 500, p_month: "2026-11-01" } });
+    expect(m.rpcs[0]).toEqual({ fn: "add_topup", args: { p_org_id: ORG, p_order_id: "order_1", p_payment_id: "pay_1", p_amount_paise: 39900, p_conversations: 500, p_month: "2026-11-01" } });
     const d = fakeDb({}, { add_topup: "duplicate" });
     expect(await applyTopupOrder(d.db as never, order(), "pay_1")).toBe("duplicate");
   });
@@ -260,7 +260,7 @@ describe("Free plan", () => {
 describe("site copy", () => {
   it("homepage pricing and FAQ show the new plans and no old prices or GST wording", () => {
     const html = renderToStaticMarkup(createElement(Pricing)) + JSON.stringify(homeFaqs());
-    for (const s of ["₹0", "₹799", "₹1,999", "₹4,999", "₹7,990", "₹19,990", "₹49,990", "₹249", "₹999", "Free", "Starter", "Growth", "Pro", "first 25 shops", "12 months"]) expect(html).toContain(s);
+    for (const s of ["₹0", "₹799", "₹1,999", "₹4,999", "₹7,990", "₹19,990", "₹49,990", "₹399", "₹999", "Free", "Starter", "Growth", "Pro", "first 25 shops", "12 months"]) expect(html).toContain(s);
     for (const s of ["2,999", "9,999", "2999", "9999", "GST", "10,000 conversations a month\",\"Everything in Starter"]) expect(html).not.toContain(s);
     expect(html).toContain("Order-status lookup (Shopify, WooCommerce)");
   });
