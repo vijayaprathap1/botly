@@ -11,10 +11,12 @@
 -- retrieval index re-syncs (afterKnowledgeChange → syncChunks for the whole assistant).
 begin;
 
-update public.knowledge_sources set updated_at = now(), token_count = 59, content =
-'Q: Can I buy more conversations?
-A: Yes. Add 500 conversations for ₹399 any time from Billing. They are added to your workspace''s monthly total (shared by all your assistants), are for the current calendar month and don''t carry over.'
-where id = '4a95a86d-683c-4d36-93bc-4a16fe31eee7' and content like '%₹249%';
+update public.knowledge_sources set updated_at = now(), token_count = 66, title = 'Can I buy more conversations (a top-up)?', content =
+'Q: Can I buy more conversations (a top-up)?
+A: Yes. A top-up adds 500 conversations for ₹399, any time from Billing. They are added to your workspace''s monthly total (shared by all your assistants), are for the current calendar month only and don''t carry over.'
+where id = '4a95a86d-683c-4d36-93bc-4a16fe31eee7' and (content like '%₹249%' or title = 'Can I buy more conversations?');
+-- (Applied 17 Nov 2026 in production in two steps: the ₹399 text first, then this "top-up" title,
+-- because English visitors asking "How much is a top-up?" got no answer without the word.)
 
 update public.knowledge_sources set updated_at = now(), token_count = 260, content =
 'Q: How much does Botly cost?
