@@ -19,7 +19,7 @@ import { buildSystemPrompt } from "../prompts/assistant";
 import { hasBooking, hasGrowthTools, monthlyCap } from "../plans";
 import { availabilityForModel, bookingAllowed, pickService, type BookingSource } from "../booking/service";
 import type { BookingSettingsRow } from "../booking/types";
-import { effectiveQuota, monthKey, shouldSendQuotaWarning } from "../quota";
+import { conversationAllowance, monthKey, shouldSendQuotaWarning } from "../quota";
 import { checkLimits, type RateLimiter } from "../security/rate-limit";
 import type { BotWithOrg, ConversationRow, LeadType, ToolCallLog } from "../types";
 import { normalizePhone } from "../validation/phone";
@@ -144,8 +144,11 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
 
   // 3. Conversation (+ quota on the first message) ---------------------------------
   const month = monthKey(now, bot.org.timezone);
-  // Plan cap (or the admin's per-assistant override) plus any top-up packs bought this month.
-  const quota = monthlyCap(effectiveQuota(bot.org.monthly_conversation_quota, bot.monthly_conversation_quota), bot.org, month);
+  // The plan's monthly conversations plus this month's top-ups: ONE limit for the whole workspace,
+  // shared by all its assistants (Pro's 3 assistants share 10,000, not 10,000 each).
+  const orgCap = monthlyCap(bot.org.monthly_conversation_quota, bot.org, month);
+  let allowance: ReturnType<typeof conversationAllowance> | null = null;
+  let usedBefore = { org: 0, bot: 0, warned: false };
   let conversation: ConversationRow | null = null;
   if (req.conversationId) {
     const c = await deps.store.getConversation(req.conversationId);
@@ -154,6 +157,12 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   }
   let isNewConversation = false;
   if (!conversation) {
+    // Only a NEW conversation counts, so the workspace's usage is read only here (test chats never count).
+    if (!isTest) {
+      const u = await deps.store.getOrgUsage(bot.org.id, month);
+      usedBefore = { org: u.total, bot: u.byBot[bot.id] ?? 0, warned: u.warned };
+    }
+    allowance = conversationAllowance({ orgCap, botOverride: bot.monthly_conversation_quota, orgUsed: usedBefore.org, botUsed: usedBefore.bot });
     const id = await deps.store.beginConversation({
       botId: bot.id,
       visitorId: req.visitorId,
@@ -161,7 +170,8 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
       pageTitle: req.pageTitle ?? null,
       language: outcome.language,
       month,
-      quota,
+      // In this assistant's terms: its own count plus what the workspace has left (see conversationAllowance).
+      quota: allowance.quota,
       isTest,
     });
     if (!id) {
@@ -518,8 +528,11 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     costUsd: outcome.costUsd,
   });
 
-  // 80% quota warning, once per month (P15).
-  if (isNewConversation && !isTest && shouldSendQuotaWarning(usage.conversations, quota, Boolean(usage.quotaWarnedAt))) {
+  // 80% quota warning, once per month per workspace (P15). usage.conversations is this assistant's
+  // count after this conversation; the workspace total grew by the same amount.
+  const quotaUsed = allowance?.scope === "assistant" ? usage.conversations : usedBefore.org - usedBefore.bot + usage.conversations;
+  const quotaLimit = allowance?.limit ?? orgCap;
+  if (isNewConversation && !isTest && shouldSendQuotaWarning(quotaUsed, quotaLimit, usedBefore.warned || Boolean(usage.quotaWarnedAt))) {
     outcome.jobs.push(async () => {
       if (!(await deps.store.claimQuotaWarning(bot.id, month))) return;
       await dispatchNotice({
@@ -529,7 +542,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
         leadId: null,
         emails: bot.notify_emails,
         whatsapps: [],
-        notice: { kind: "quota_warning", businessName: bot.org.name, botName: bot.name, summary: "", quota: { used: usage.conversations, limit: quota } },
+        notice: { kind: "quota_warning", businessName: bot.org.name, botName: bot.name, summary: "", quota: { used: quotaUsed, limit: quotaLimit } },
       });
     });
   }

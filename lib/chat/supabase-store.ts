@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { KnowledgeSource } from "../knowledge";
 import type { BotWithOrg, ConversationRow, LeadRow, MessageRow } from "../types";
+import { sumOrgUsage, type OrgUsage } from "../quota";
 import type { ChatStore, NewLead, NewMessage, NotificationLog, ReplyGate, ReplyStatus } from "./store";
 
 function must<T>(res: { data: T; error: { message: string } | null }, what: string): T {
@@ -74,9 +75,14 @@ export class SupabaseStore implements ChatStore {
   async claimQuotaWarning(botId: string, month: string) {
     return must(await this.db.rpc("claim_quota_warning", { p_bot_id: botId, p_month: month }), "claimQuotaWarning") as boolean;
   }
-  async getUsedConversations(botId: string, month: string) {
-    const res = await this.db.from("usage_monthly").select("conversations").eq("bot_id", botId).eq("month", month).maybeSingle();
-    return (must(res, "getUsedConversations") as { conversations: number } | null)?.conversations ?? 0;
+  async getOrgUsage(orgId: string, month: string): Promise<OrgUsage> {
+    // One round trip: this month's usage rows for every assistant in the org.
+    const res = await this.db
+      .from("usage_monthly")
+      .select("bot_id, conversations, quota_warned_at, bots!inner(org_id)")
+      .eq("bots.org_id", orgId)
+      .eq("month", month);
+    return sumOrgUsage(must(res, "getOrgUsage") as { bot_id: string; conversations: number; quota_warned_at: string | null }[]);
   }
   async getLead(id: string) {
     return must(await this.db.from("leads").select("*").eq("id", id).maybeSingle(), "getLead") as LeadRow | null;

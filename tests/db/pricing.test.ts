@@ -31,7 +31,7 @@ describe("0015 new pricing", () => {
   it("credits each top-up order once; packs add up within a month and reset the next", () =>
     tx(async (c) => {
       const id = await org(c, "free");
-      const top = async (order: string, month: string) => (await c.query("select add_topup($1, $2, 'pay', 24900, 500, $3::date) r", [id, order, month])).rows[0].r;
+      const top = async (order: string, month: string) => (await c.query("select add_topup($1, $2, 'pay', 39900, 500, $3::date) r", [id, order, month])).rows[0].r;
       const state = async () => (await c.query("select topup_month::text m, topup_conversations n from organizations where id = $1", [id])).rows[0];
       expect(await top("o1", "2026-11-01")).toBe("added");
       expect(await top("o1", "2026-11-01")).toBe("duplicate");

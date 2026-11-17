@@ -16,7 +16,7 @@ export function renderLeadEmail(n: LeadNotice): { subject: string; html: string;
       preheader: `${n.quota.used} of ${n.quota.limit} conversations used this month.`,
       heading: `${pct}% of this month's conversations used`,
       paragraphs: [
-        `${n.botName} has used ${n.quota.used} of ${n.quota.limit} conversations this month.`,
+        `${n.businessName || n.botName} has used ${n.quota.used} of ${n.quota.limit} conversations this month (one limit shared by all your assistants).`,
         `At 100% the widget shows your contact details instead of AI replies until the month resets. Add ${TOPUP.conversations} conversations for ${fmtInr(TOPUP.priceInr)} or upgrade from Billing.`,
       ],
       stats: [

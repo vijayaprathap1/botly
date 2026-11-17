@@ -15,7 +15,7 @@ export type PlanDef = {
   name: string;
   priceInr: number; // per month
   yearlyInr: number; // per year (10 × monthly: two months free)
-  conversations: number; // per month, per assistant (usage_monthly is counted per bot)
+  conversations: number; // per month for the whole workspace, shared by all its assistants (see lib/quota.ts conversationAllowance)
   bots: number;
   crawlPages: number;
   growthTools: boolean; // order lookup (Shopify/WooCommerce), callback booking, weekly summary
@@ -45,9 +45,9 @@ export const PILOT = {
   replies: num("PILOT_REPLIES", 500),
 };
 
-/** One-off pack: more conversations for the current calendar month. */
+/** One-off pack: more conversations for the current calendar month, added to the workspace's shared limit. */
 export const TOPUP = {
-  priceInr: num("TOPUP_PRICE_INR", 249),
+  priceInr: num("TOPUP_PRICE_INR", 399),
   conversations: num("TOPUP_CONVERSATIONS", 500),
 };
 
@@ -98,7 +98,7 @@ export function plans(): Record<Plan, PlanDef> {
       id: "pro", name: "Pro", priceInr: pPro, yearlyInr: yearly(pPro), conversations: pro, bots: 3, crawlPages: 100, growthTools: true, booking: true, hideBranding: true,
       razorpayPlanEnv: "RAZORPAY_PLAN_PRO", razorpayYearlyEnv: "RAZORPAY_PLAN_PRO_YEARLY",
       blurb: "For busy stores and multiple brands",
-      features: [`${n(pro)} conversations a month`, "Everything in Growth", "Up to 3 assistants", "Learns up to 100 pages"],
+      features: [`${n(pro)} conversations a month`, "Everything in Growth", "Up to 3 assistants, sharing the monthly conversations", "Learns up to 100 pages"],
     },
   };
 }
@@ -149,7 +149,11 @@ export function trialState(org: { plan: Plan; trial_ends_at?: string | null; tri
   return { daysLeft, used, limit, left: Math.max(0, limit - used), expired, exhausted: used >= limit, over: expired || used >= limit };
 }
 
-/** Monthly conversation cap for one assistant, including top-up packs bought for `month`. */
+/**
+ * The workspace's monthly conversation cap for `month`: the plan's number plus any top-up packs
+ * bought for that month. It is ONE limit shared by all the workspace's assistants (Pro has 3),
+ * never multiplied per assistant. See conversationAllowance in lib/quota.ts for how it is enforced.
+ */
 export function monthlyCap(baseQuota: number, org: { topup_month?: string | null; topup_conversations?: number | null }, month: string): number {
   const extra = org.topup_month && org.topup_month.slice(0, 10) === month ? Math.max(0, org.topup_conversations ?? 0) : 0;
   return baseQuota + extra;

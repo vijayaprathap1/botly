@@ -73,7 +73,7 @@ export const config = {
   get crawlMaxPages() {
     return int("CRAWL_MAX_PAGES", 40);
   },
-  /** Monthly conversations per assistant for a plan (see lib/plans.ts; DEFAULT_QUOTA_* override). */
+  /** Monthly conversations for a plan, shared by all the workspace's assistants (see lib/plans.ts; DEFAULT_QUOTA_* override). */
   defaultQuota(plan: Plan) {
     if (plan === "trial") return 1_000_000; // trials are limited by replies, not conversations
     return plans()[plan].conversations;

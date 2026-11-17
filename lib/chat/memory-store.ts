@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { KnowledgeSource } from "../knowledge";
 import type { BotWithOrg, ConversationRow, LeadRow, MessageRow } from "../types";
+import { sumOrgUsage } from "../quota";
 import type { ChatStore, NewLead, NewMessage, NotificationLog, ReplyGate, ReplyStatus } from "./store";
 
 /** In-memory ChatStore for unit tests and fixture evals (no database). */
@@ -85,8 +86,14 @@ export class MemoryStore implements ChatStore {
     u.warned = new Date().toISOString();
     return true;
   }
-  async getUsedConversations(botId: string, month: string) {
-    return this.u(botId, month).conversations;
+  async getOrgUsage(orgId: string, month: string) {
+    const ids = [...this.bots.values()].filter((b) => b.org.id === orgId).map((b) => b.id);
+    return sumOrgUsage(
+      ids.filter((id) => this.usage.has(`${id}:${month}`)).map((id) => {
+        const u = this.usage.get(`${id}:${month}`)!;
+        return { bot_id: id, conversations: u.conversations, quota_warned_at: u.warned };
+      }),
+    );
   }
   async getLead(id: string) {
     return this.leads.get(id) ?? null;

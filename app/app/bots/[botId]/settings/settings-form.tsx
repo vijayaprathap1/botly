@@ -194,10 +194,10 @@ export function SettingsForm({ bot, isAdmin = true }: { bot: BotWithOrg; isAdmin
                 <option value="pro">Pro</option>
               </select>
             </Field>
-            <Field label="Monthly conversations (plan)" htmlFor="org_quota">
+            <Field label="Monthly conversations (plan, shared by all assistants)" htmlFor="org_quota">
               <input id="org_quota" name="org_quota" type="number" min={0} defaultValue={bot.org.monthly_conversation_quota} className={inputClass} />
             </Field>
-            <Field label="Quota override for this bot (optional)" htmlFor="bot_quota">
+            <Field label="Extra cap for this bot (optional; the plan limit above is shared by all assistants)" htmlFor="bot_quota">
               <input id="bot_quota" name="bot_quota" type="number" min={0} defaultValue={bot.monthly_conversation_quota ?? ""} className={inputClass} />
             </Field>
             <Field label="Model" htmlFor="model">

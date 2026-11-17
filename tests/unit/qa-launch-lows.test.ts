@@ -34,7 +34,7 @@ describe("QA launch lows 2026-10-25", () => {
       expect(replyGateFromOrg({ ...trial, plan: "starter", trial_ends_at: "2020-01-01T00:00:00Z", trial_replies_used: 99 }, now)).toBe("ok");
     });
     it("the widget config route uses it", () => {
-      expect(readFileSync("app/api/widget/config/route.ts", "utf8")).toMatch(/quotaExceeded: used >= quota \|\| replyGateFromOrg\(bot\.org\) !== "ok"/);
+      expect(readFileSync("app/api/widget/config/route.ts", "utf8")).toMatch(/quotaExceeded: \(!access\.isTest && used >= allowance\.quota\) \|\| replyGateFromOrg\(bot\.org\) !== "ok"/);
     });
   });
 

@@ -141,10 +141,10 @@ All plan numbers live in `lib/plans.ts` (prices are flat INR: exactly what the c
 | Growth | ₹1,999 | ₹19,990 | 2,000 | 1 | 40 | Shopify/WooCommerce order lookup, callback booking, weekly summary, branding can be hidden |
 | Pro | ₹4,999 | ₹49,990 | 10,000 | 3 | 100 | everything in Growth |
 
-- **Top-up:** ₹249 adds 500 conversations for the current calendar month (one-time Razorpay order, Billing → "Add 500 conversations"). Stored in `organizations.topup_month/topup_conversations`, ledger in `quota_topups` (idempotent by order id).
+- **Top-up:** ₹399 adds 500 conversations for the current calendar month, on top of the workspace's shared limit (one-time Razorpay order, Billing → "Add 500 conversations"). Stored in `organizations.topup_month/topup_conversations`, ledger in `quota_topups` (idempotent by order id).
 - **Founding offer:** the first 25 shops get Growth at ₹999/month, locked for 12 months. Sold from Billing once `RAZORPAY_PLAN_GROWTH_FOUNDING` is set (until then the site says "Contact us"). Slots are held for 30 minutes during checkout and counted atomically in `founding_claims`; `locked_until` records the lock. After 12 months, move a founding subscription to the regular Growth plan in Razorpay by hand (or leave it).
 - **Trials:** sign-up starts on Free. Super admin → Actions → "Start 14-day trial" (`TRIAL_DAYS`/`TRIAL_REPLIES`) or "Start 30-day pilot" (`PILOT_DAYS`/`PILOT_REPLIES`, setup done by us). An ended trial can move itself to Free from Billing.
-- Conversation caps are per assistant per month (`usage_monthly`), enforced by `begin_conversation`.
+- Conversation caps are per workspace per month: the plan's number (plus this month's top-ups) is ONE limit shared by all the workspace's assistants (Pro's 3 assistants share 10,000). `usage_monthly` is still counted per assistant; `conversationAllowance` (lib/quota.ts) turns the workspace's remaining conversations into the per-assistant `p_quota` that `begin_conversation` enforces atomically. The admin "extra cap for this bot" can only tighten one assistant, never raise the workspace total.
 
 ### Growth and Pro: order lookup and callbacks
 1. Settings → **Plan** → Growth (or Pro).
@@ -166,7 +166,7 @@ Anyone can now sign up at your site, build an assistant from their public profil
 2. First sign-in goes to `/start`: business name and type, website, social profile links and pasted bios, contact details and hours.
 3. Botly reads up to 15 public pages (plus Shopify products), Claude writes a **business profile document**, FAQs and a policy summary (all approved automatically for self-serve), picks a greeting, suggested questions and tone, then runs the 4 prompt-injection safety checks. If they pass, the bot goes live.
 4. The customer lands on their Overview (on the Free plan): live preview, their business profile (edit/download), the install snippet and a Go live / Pause switch.
-5. Free plan: 50 conversations a month per assistant. At the cap, visitors see the business's phone/WhatsApp/email instead of AI replies until next month, a top-up or an upgrade. Trials (admin-granted): `TRIAL_DAYS` days and `TRIAL_REPLIES` AI replies (preview replies count); when one ends the owner can choose a plan or move to Free.
+5. Free plan: 50 conversations a month per workspace. At the cap, visitors see the business's phone/WhatsApp/email instead of AI replies until next month, a top-up or an upgrade. Trials (admin-granted): `TRIAL_DAYS` days and `TRIAL_REPLIES` AI replies (preview replies count); when one ends the owner can choose a plan or move to Free.
 6. `/app/billing` → Razorpay Checkout (UPI, cards, net banking) → subscription active → plan quota applies. Renewals, failures and cancellations arrive by webhook.
 
 **Why social profiles aren't scraped:** Instagram, Facebook, LinkedIn and Google Maps forbid automated reading of their pages, and Google's Places API terms don't allow storing its data. Customers paste their bios instead; the links are kept in their profile.

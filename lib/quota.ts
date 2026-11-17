@@ -1,7 +1,52 @@
 export type QuotaState = "ok" | "warning" | "exceeded";
 
-export function effectiveQuota(orgQuota: number, botOverride: number | null | undefined): number {
-  return botOverride ?? orgQuota;
+/** This month's conversations for a whole workspace (all its assistants), from usage_monthly. */
+export type OrgUsage = {
+  /** Conversations started by all the workspace's assistants this month (test chats never count). */
+  total: number;
+  /** The same, per assistant (bot id → conversations). Missing ids have 0. */
+  byBot: Record<string, number>;
+  /** True when the 80% warning was already sent for any of the workspace's assistants this month. */
+  warned: boolean;
+};
+
+/** Folds usage_monthly rows (one per assistant) into the workspace total. */
+export function sumOrgUsage(rows: { bot_id: string; conversations: number; quota_warned_at?: string | null }[]): OrgUsage {
+  const byBot: Record<string, number> = {};
+  let total = 0;
+  let warned = false;
+  for (const r of rows) {
+    byBot[r.bot_id] = (byBot[r.bot_id] ?? 0) + (r.conversations ?? 0);
+    total += r.conversations ?? 0;
+    if (r.quota_warned_at) warned = true;
+  }
+  return { total, byBot, warned };
+}
+
+/**
+ * How far ONE assistant may go this month under its workspace's SHARED monthly limit.
+ *
+ * The plan's number (Free 50, Starter 500, Growth 2,000, Pro 10,000) plus top-ups is one total
+ * for the whole workspace, not per assistant: Pro's 3 assistants share 10,000. The atomic
+ * `begin_conversation` SQL function (migration 0002) counts a single assistant's usage_monthly
+ * row, so the shared limit is translated into that assistant's terms: it may reach its own count
+ * plus whatever the workspace has left.
+ *
+ * `botOverride` (super-admin "quota override for this bot") is an extra, tighter cap for one
+ * assistant inside the shared limit; it can never lift the workspace above its plan.
+ *
+ * Returns `quota` to pass to begin_conversation, plus `used`/`limit` for the 80% warning and UI.
+ */
+export function conversationAllowance(a: {
+  orgCap: number;
+  botOverride: number | null | undefined;
+  orgUsed: number;
+  botUsed: number;
+}): { quota: number; used: number; limit: number; scope: "workspace" | "assistant" } {
+  const left = Math.max(0, a.orgCap - a.orgUsed);
+  const shared = a.botUsed + left;
+  if (a.botOverride != null && a.botOverride < shared) return { quota: a.botOverride, used: a.botUsed, limit: a.botOverride, scope: "assistant" };
+  return { quota: shared, used: a.orgUsed, limit: a.orgCap, scope: "workspace" };
 }
 
 export function quotaState(used: number, quota: number): { state: QuotaState; percent: number } {
