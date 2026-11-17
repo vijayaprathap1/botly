@@ -75,8 +75,9 @@ export function accentText(accent: string, surfaces: string[], toward: string): 
 }
 
 export const SURFACES = {
-  light: { paper: "#FFFFFF", bg: "#FFF7EC" },
-  dark: { paper: "#2B1D14", bg: "#1C130D" },
+  // Must match --paper / --bg in styles.ts (bot bubbles and fields sit on --bg).
+  light: { paper: "#FFFFFF", bg: "#F3F4F7" },
+  dark: { paper: "#17181D", bg: "#262830" },
 } as const;
 
 /** Every CSS variable derived from the one brand colour, for the current theme. */
