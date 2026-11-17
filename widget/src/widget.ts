@@ -29,6 +29,8 @@ const LIMIT_REASONS = new Set(["quota", "cap"]);
 const svg = (body: string, extra = 'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"') =>
   `<svg viewBox="0 0 24 24" ${extra} aria-hidden="true">${body}</svg>`;
 const ICON_CLOSE = svg('<path d="M6 6l12 12M18 6L6 18"/>', 'fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"');
+const ICON_DOWN = svg('<path d="M6 9.5l6 6 6-6"/>', 'fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"');
+const ICON_NEXT = svg('<path d="M9 6l6 6-6 6"/>');
 const ICON_PERSON = svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>');
 const ICON_SEND = svg('<path d="M12 19V5M5 12l7-7 7 7"/>', 'fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"');
 const ICON_TICK = svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 'fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"');
@@ -130,6 +132,7 @@ export class BotlyWidget {
   private media = window.matchMedia("(prefers-color-scheme: dark)");
   private fonts: FontLoader;
   private lastLead: SavedLead | null = null;
+  private closeTimer = 0;
 
   constructor(private opts: WidgetOptions) {
     this.api = new Api(opts.base, opts.key, opts.testToken);
@@ -203,7 +206,7 @@ export class BotlyWidget {
       { class: "launcher", type: "button", "aria-label": `Ask ${this.botName}`, "aria-expanded": "false" },
       this.logo(),
       h("span", { class: "ll", text: `Ask ${this.botName}` }),
-      h("span", { class: "li li-close" }, icon(ICON_CLOSE)),
+      h("span", { class: "li li-close" }, icon(ICON_DOWN)),
     );
     this.launcher.addEventListener("click", () => (this.isOpen ? this.close() : this.open()));
     if (!this.opts.fullscreen) this.wrap.appendChild(this.launcher);
@@ -236,8 +239,8 @@ export class BotlyWidget {
   }
 
   /** The business's logo (the bot's https image), or its initial on a cream tile. */
-  private logo() {
-    const tile = h("span", { class: "logo", "aria-hidden": "true" });
+  private logo(extra = "") {
+    const tile = h("span", { class: extra ? `logo ${extra}` : "logo", "aria-hidden": "true" });
     const url = this.cfg.avatarUrl;
     if (url && /^https:\/\//.test(url)) {
       const img = h("img", { src: url, alt: "" });
@@ -305,6 +308,8 @@ export class BotlyWidget {
     this.dismissNudge();
     this.fonts.load("latin");
     if (!this.panel) this.buildPanel();
+    window.clearTimeout(this.closeTimer);
+    this.panel!.classList.remove("closing");
     this.panel!.hidden = false;
     this.wrap.classList.add("open");
     this.launcher.setAttribute("aria-expanded", "true");
@@ -318,7 +323,17 @@ export class BotlyWidget {
   close() {
     if (!this.isOpen || this.opts.fullscreen) return;
     this.isOpen = false;
-    this.panel!.hidden = true;
+    const panel = this.panel!;
+    // Fade/slide out, then hide. Reduced motion (or no animation support) hides at once.
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) panel.hidden = true;
+    else {
+      panel.classList.add("closing");
+      this.closeTimer = window.setTimeout(() => {
+        panel.classList.remove("closing");
+        if (!this.isOpen) panel.hidden = true;
+      }, 170);
+    }
     this.wrap.classList.remove("open");
     this.launcher.setAttribute("aria-expanded", "false");
     this.launcher.setAttribute("aria-label", `Ask ${this.botName}`);
@@ -368,9 +383,31 @@ export class BotlyWidget {
       "p",
       { class: "status" },
       h("i", { class: c.isOpen ? "dot" : "dot off", "aria-hidden": "true" }),
-      h("span", { text: `${this.business} · ${c.isOpen ? "replies instantly" : "closed now"}` }),
+      h("span", { text: c.isOpen ? "Online · replies instantly" : `${this.business} is closed · I can still help` }),
     );
-    const head = h("div", { class: "head" }, this.logo(), h("div", { class: "who" }, h("h2", { id: titleId, text: this.botName }), this.statusEl), closeBtn);
+    // Home header (Intercom/LiveChat-style welcome): a big hello that folds away once the chat starts.
+    const hero = h(
+      "div",
+      { class: "hero" },
+      h(
+        "div",
+        {},
+        h("p", { class: "hi", text: "Hi there! How can we help?" }),
+        h("p", {
+          class: "sub",
+          text:
+            this.botName.toLowerCase() === this.business.toLowerCase()
+              ? "Ask us anything. Answers come in seconds, any time of day."
+              : `Ask ${this.botName} anything about ${this.business}.`,
+        }),
+      ),
+    );
+    const head = h(
+      "div",
+      { class: "head" },
+      h("div", { class: "bar" }, this.logo(), h("div", { class: "who" }, h("h2", { id: titleId, text: this.botName }), this.statusEl), closeBtn),
+      hero,
+    );
 
     // Banners sit between the header and the conversation. role=status so they're announced.
     this.netBanner = h("div", { class: "banner net", role: "status", hidden: true }, icon(ICON_WIFI), h("span", { text: "You're offline. Reconnect to send messages." }));
@@ -379,9 +416,11 @@ export class BotlyWidget {
       : h("div", { class: "banner", role: "status" }, icon(ICON_CLOCK), h("span", { text: `${this.business} is closed now. I can still answer, and the team will get back to you.` }));
 
     this.list = h("div", { class: "msgs", role: "log", "aria-live": "polite", "aria-relevant": "additions", "aria-label": "Conversation", tabindex: "0" });
-    this.chips = h("div", { class: "chips", role: "group", "aria-label": "Suggested questions" });
+    // Chips live inside the conversation, right under the reply they follow. aria-live off so the
+    // log doesn't read every suggestion aloud; they're reachable as a labelled group of buttons.
+    this.chips = h("div", { class: "chips", role: "group", "aria-label": "Suggested questions", "aria-live": "off" });
 
-    this.input = h("textarea", { rows: "1", maxlength: String(MAX_LEN), placeholder: "Type your message…", "aria-label": "Message" });
+    this.input = h("textarea", { rows: "1", maxlength: String(MAX_LEN), placeholder: "Ask a question…", "aria-label": "Message" });
     this.sendBtn = h("button", { class: "send", type: "button", "aria-label": "Send message" }, icon(ICON_SEND));
     this.counter = h("div", { class: "count", "aria-live": "polite" });
     this.input.addEventListener("keydown", (e) => {
@@ -403,13 +442,14 @@ export class BotlyWidget {
 
     const foot = h("div", { class: "foot" }, h("div", { class: "composer" }, this.input, this.sendBtn), this.counter, meta);
 
-    this.panel = h("div", { class: "panel", role: "dialog", "aria-modal": this.opts.fullscreen ? "false" : "true", "aria-labelledby": titleId }, head, this.netBanner, closedBanner, this.list, this.chips, foot);
+    this.panel = h("div", { class: this.hadUserMessage || this.saved.conversationId ? "panel" : "panel home", role: "dialog", "aria-modal": this.opts.fullscreen ? "false" : "true", "aria-labelledby": titleId }, head, this.netBanner, closedBanner, this.list, this.chips, foot);
     this.panel.addEventListener("keydown", (e) => this.onPanelKey(e));
     this.wrap.appendChild(this.panel);
     window.visualViewport?.addEventListener("resize", this.fitViewport);
     window.visualViewport?.addEventListener("scroll", this.fitViewport);
 
     if (c.greeting) this.addBot(c.greeting, new Date(), false);
+    this.list.append(this.chips);
     this.renderChips(c.suggestions);
     if (c.quotaExceeded) this.addCard({ type: "fallback_contact", reason: "quota", contact: c.fallbackContact });
     this.setOffline(this.offline);
@@ -481,9 +521,12 @@ export class BotlyWidget {
 
   private renderChips(questions: string[]) {
     this.chips.replaceChildren();
-    if (this.limited) return;
+    if (this.limited || !questions.length) return;
+    // Keep the chips right under the newest message.
+    if (this.chips.nextSibling) this.list.append(this.chips);
+    if (this.panel?.classList.contains("home")) this.chips.append(h("p", { class: "chips-h", "aria-hidden": "true", text: "Suggested questions" }));
     for (const [i, q] of questions.slice(0, 4).entries()) {
-      const b = h("button", { class: "chip", type: "button", text: q });
+      const b = h("button", { class: "chip", type: "button" }, h("span", { text: q }), icon(ICON_NEXT));
       this.langFor(b, q);
       b.style.animationDelay = `${i * 60}ms`;
       b.addEventListener("click", () => {
@@ -497,6 +540,13 @@ export class BotlyWidget {
       });
       this.chips.append(b);
     }
+    this.scroll();
+  }
+
+  /** Leave the home screen: the big header folds into the compact bar. */
+  private leaveHome() {
+    this.panel?.classList.remove("home");
+    this.chips.querySelector(".chips-h")?.remove();
   }
 
   // ─── messages ──────────────────────────────────────────────────────────────
@@ -525,7 +575,7 @@ export class BotlyWidget {
     const bubble = h("div", { class: "bubble" });
     bubble.append(renderBlocks(parseMarkdownLite(text), document));
     this.langFor(bubble, text);
-    const row = h("div", { class: "row bot" }, bubble, h("div", { class: "time", text: this.time(at) }));
+    const row = h("div", { class: "row bot" }, this.logo("av"), h("div", { class: "col" }, bubble, h("div", { class: "time", text: this.time(at) })));
     if (!live) row.setAttribute("aria-live", "off");
     this.list.append(row);
     this.scroll();
@@ -543,8 +593,9 @@ export class BotlyWidget {
     const row = h(
       "div",
       { class: "row bot typing-row", role: "status" },
+      this.logo("av"),
       h("div", { class: "bubble typing", "aria-hidden": "true" }, h("i"), h("i"), h("i")),
-      h("span", { class: "typing-text", text: `${this.botName} is typing…` }),
+      h("span", { class: "typing-text sr", text: `${this.botName} is typing…` }),
     );
     this.list.append(row);
     this.scroll();
@@ -566,6 +617,7 @@ export class BotlyWidget {
         else this.addEvent(m.content);
       }
       this.hadUserMessage = true;
+      this.leaveHome();
       this.chips.replaceChildren();
       if (data.status === "handed_off" || data.hasLead) this.saved.handedOff = data.status === "handed_off";
     } catch {
@@ -609,6 +661,7 @@ export class BotlyWidget {
     if (this.limited) return;
     this.setBusy(true);
     this.hadUserMessage = true;
+    this.leaveHome();
     this.chips.replaceChildren();
     const userRow = existingRow ?? this.addUser(text);
     userRow.querySelector(".errline")?.remove();
@@ -721,6 +774,7 @@ export class BotlyWidget {
 
   // ─── cards ─────────────────────────────────────────────────────────────────
   private addCard(card: Card) {
+    this.leaveHome();
     let el: HTMLElement;
     if (card.type === "lead_form") el = this.leadForm(card);
     else if (card.type === "lead_saved") el = this.savedCard(card.name, card.handoff, null);
