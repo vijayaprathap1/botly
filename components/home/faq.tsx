@@ -1,5 +1,5 @@
 import { SPOKEN_LANGUAGES } from "@/lib/business";
-import { FOUNDING, fmtInr, plans, TOPUP } from "@/lib/plans";
+import { bookingPlan, FOUNDING, fmtInr, plans, TOPUP } from "@/lib/plans";
 import { SupportEmail } from "@/components/marketing/support-contact";
 import { Eyebrow, h2, lede, section, wrap } from "./ui";
 
@@ -11,6 +11,10 @@ export function homeFaqs() {
     },
     { q: "Do I need a website?", a: "No. You can start from what you type in, plus the bio you paste from your Instagram or Google profile. A website gives it more to learn from." },
     { q: "Which languages does it speak?", a: `${SPOKEN_LANGUAGES}. It replies in the same language and script the customer used.` },
+    {
+      q: "Can customers book appointments through it?",
+      a: `Yes, on ${bookingPlan().name} and above. You set your days, hours, breaks, holidays and services in the dashboard, then switch booking on. Customers pick a real free time in the chat, you get an email for every booking, and you confirm, cancel or mark it done from Bookings. It's off until you turn it on.`,
+    },
     {
       q: "How much does Botly cost?",
       a: (() => {

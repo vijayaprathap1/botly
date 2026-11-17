@@ -7,9 +7,10 @@ import type { EngineDeps } from "./engine";
 import { SupabaseStore } from "./supabase-store";
 import { SupabaseRetriever } from "../retrieval/retriever";
 import { loadOrderProvider } from "../orders";
+import { SupabaseBookingSource } from "../booking/service";
 
 export function serverDeps(): EngineDeps {
   const db = supabaseAdmin();
   const llm = getLlm();
-  return { store: new SupabaseStore(db), llm, limiter: new PostgresRateLimiter(db), notifiers: defaultNotifiers(), retriever: new SupabaseRetriever(db, llm), orders: (botId) => loadOrderProvider(db, botId) };
+  return { store: new SupabaseStore(db), llm, limiter: new PostgresRateLimiter(db), notifiers: defaultNotifiers(), retriever: new SupabaseRetriever(db, llm), orders: (botId) => loadOrderProvider(db, botId), booking: new SupabaseBookingSource(db) };
 }

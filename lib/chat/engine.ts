@@ -16,7 +16,9 @@ import { reportError } from "../alerts";
 import { dispatchNotice } from "../notify/dispatch";
 import type { Notifier } from "../notify/types";
 import { buildSystemPrompt } from "../prompts/assistant";
-import { hasGrowthTools, monthlyCap } from "../plans";
+import { hasBooking, hasGrowthTools, monthlyCap } from "../plans";
+import { availabilityForModel, bookingAllowed, pickService, type BookingSource } from "../booking/service";
+import type { BookingSettingsRow } from "../booking/types";
 import { effectiveQuota, monthKey, shouldSendQuotaWarning } from "../quota";
 import { checkLimits, type RateLimiter } from "../security/rate-limit";
 import type { BotWithOrg, ConversationRow, LeadType, ToolCallLog } from "../types";
@@ -46,7 +48,8 @@ export type ToolCard =
   | { type: "lead_saved"; name: string; handoff: boolean }
   | { type: "fallback_contact"; reason: "quota" | "inactive" | "error" | "busy" | "cap"; contact: BotWithOrg["fallback_contact"] }
   | ({ type: "order_status" } & OrderStatusCard)
-  | { type: "callback_form"; prefill: { name?: string; phone?: string; date?: string; slot?: string; need?: string }; minDate: string; error?: string };
+  | { type: "callback_form"; prefill: { name?: string; phone?: string; date?: string; slot?: string; need?: string }; minDate: string; error?: string }
+  | { type: "booking"; service?: string; date?: string };
 
 export type EngineDeps = {
   store: ChatStore;
@@ -58,6 +61,8 @@ export type EngineDeps = {
   retriever?: Retriever;
   /** Phase 3 order lookup (Growth plan). */
   orders?: (botId: string) => Promise<OrderProvider | null>;
+  /** Appointment booking (Starter and up, when the owner switched it on). */
+  booking?: BookingSource;
 };
 
 /** `bot`: already loaded by the route (the origin check before streaming), so it isn't read twice. */
@@ -175,12 +180,15 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
   // Stage times for the "[chat] timing" log line (no message text, no visitor data).
   const contextAt = Date.now();
   // 4. Context: knowledge, history, facts -------------------------------------------
-  const [sources, rows, lead, aiReplies] = await Promise.all([
+  const [sources, rows, lead, aiReplies, bookingSettings] = await Promise.all([
     deps.store.getApprovedKnowledge(bot.id),
     deps.store.getMessages(conversationId, config.historyTurns * 4),
     conversation.lead_id ? deps.store.getLead(conversation.lead_id) : Promise.resolve(null),
     isNewConversation ? Promise.resolve(0) : deps.store.countAiReplies(conversationId),
+    // Only plans with booking pay for this read; it runs alongside the others.
+    deps.booking && hasBooking(bot.org.plan) ? deps.booking.enabledSettings(bot.id).catch(() => null) : Promise.resolve(null),
   ]);
+  const booking = bookingAllowed(bot, bookingSettings) ? bookingSettings : null;
   const faqHit = matchApprovedFaq(sources, req.message);
   const replyCap = bot.org.is_demo ? config.demoMaxAiReplies : config.maxAiReplies(bot.org.plan);
   const capped = !faqHit && replyCap > 0 && aiReplies >= replyCap;
@@ -266,6 +274,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
     businessType: bot.org.business_type,
     tone: bot.tone,
     growth: hasGrowthTools(bot.org.plan),
+    booking: Boolean(booking),
     approvedKnowledge: approvedKnowledgeText,
     retrievedKnowledge,
     nowInBusinessTimezone: formatNow(now, bot.org.timezone),
@@ -300,7 +309,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
 
   const modelAt = Date.now();
   // 5. Model + tool loop ---------------------------------------------------------------
-  const tools = toolsForPlan(bot.org.plan);
+  const tools = toolsForPlan(bot.org.plan, { booking: Boolean(booking) });
   const baseMessages = structuredClone(messages);
   const say = (t: string) => {
     if (outcome.firstTokenMs === null) outcome.firstTokenMs = Date.now() - started;
@@ -413,6 +422,7 @@ export async function runChat(deps: EngineDeps, req: ChatRequest, ctx: EngineCon
           emit: emitTurn,
           outcome,
           lead,
+          booking,
           message: req.message,
         });
         outcome.toolCalls.push({ name: use.name, input: use.input, result });
@@ -600,6 +610,8 @@ type ToolCtx = {
   lead: Awaited<ReturnType<ChatStore["getLead"]>>;
   /** The visitor's latest message (used to keep a "thanks" from re-opening the lead form). */
   message?: string;
+  /** Booking settings when booking is on for this assistant. */
+  booking?: BookingSettingsRow | null;
 };
 
 const THANKS = /\b(?:thanks?|thank\s*(?:you|u)|thx|tq|ty|nandri|nanri|dhanyavaa?d|shukriya)\b|धन्यवाद|शुक्रिया|நன்றி/i;
@@ -769,6 +781,30 @@ async function executeTool(use: ToolUsePart, t: ToolCtx): Promise<Record<string,
       if (saved.notify) t.outcome.jobs.push(saved.notify);
       emit("tool_card", { type: "lead_saved", name: saved.lead.name, handoff: false } satisfies ToolCard);
       return { ok: true, saved: true, instruction: `Confirm briefly that the team will call on ${date} (${slot}).` };
+    }
+
+    case "show_booking": {
+      if (!t.booking || !deps.booking) return { ok: false, error: "Online booking is not available. Offer to connect the visitor with the team instead." };
+      const now = deps.now?.() ?? new Date();
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(str(input.date, 10)) ? str(input.date, 10) : undefined;
+      let ctx;
+      try {
+        ctx = await deps.booking.context(t.booking, now);
+      } catch (e) {
+        console.error("[chat] booking context failed", e instanceof Error ? e.message : e);
+        return { ok: false, error: "Booking times couldn't be loaded. Apologise and offer to connect the visitor with the team." };
+      }
+      const service = pickService(ctx, str(input.service, 80) || null);
+      const free = availabilityForModel(ctx, service, now, date);
+      emit("tool_card", { type: "booking", service: service.id, date } satisfies ToolCard);
+      return {
+        ok: true,
+        card_shown: true,
+        ...free,
+        instruction: free.next_free.length
+          ? "The booking card is now shown in the chat. In one or two short sentences, in the visitor's language, mention the nearest free times from next_free and ask them to pick a time in the card. Do not ask for their name or phone here, and do not say it is booked."
+          : "The booking card is shown, but there are no free times in the booking window. Say so briefly and offer to connect the visitor with the team.",
+      };
     }
 
     default:

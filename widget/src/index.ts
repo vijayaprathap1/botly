@@ -16,6 +16,8 @@ type BotlyApi = {
   close(): void;
   sendMessage(text: string): void;
   identify(id: { name?: string; phone?: string; email?: string }): void;
+  /** Opens the chat on the booking card (only when the business has booking switched on). */
+  book(): void;
   q?: Call[];
 };
 
@@ -57,6 +59,7 @@ declare global {
       else if (name === "close") widget.close();
       else if (name === "sendMessage" && typeof args[0] === "string") void widget.send(args[0]);
       else if (name === "identify" && args[0] && typeof args[0] === "object") widget.identify(args[0] as never);
+      else if (name === "book") widget.startBooking();
     } catch {
       /* never throw into the host page */
     }
@@ -66,6 +69,7 @@ declare global {
     close: () => call("close", []),
     sendMessage: (text) => call("sendMessage", [text]),
     identify: (id) => call("identify", [id]),
+    book: () => call("book", []),
   };
 
   const start = async () => {

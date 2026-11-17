@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart3, BookOpen, Bot, CreditCard, Crown, Download, Gauge, Inbox, LayoutGrid, LogOut, Menu, MessagesSquare,
   Plus, Presentation, Settings, Sparkles, UserRound, X,
+  CalendarDays,
 } from "lucide-react";
 import { Logo } from "./ui";
 import { currentTrial } from "@/app/app/trial-actions";
@@ -74,6 +75,7 @@ export function AppShell(p: ShellProps) {
         { href: `${base}/knowledge`, icon: BookOpen, label: "Knowledge" },
         { href: `${base}/conversations`, icon: MessagesSquare, label: "Conversations" },
         { href: `${base}/leads`, icon: UserRound, label: "Leads" },
+        { href: `${base}/booking`, icon: CalendarDays, label: "Bookings" },
         { href: `${base}/unanswered`, icon: Inbox, label: "Unanswered" },
         { href: `${base}/reports`, icon: BarChart3, label: "Reports" },
         { href: `${base}/onboarding`, icon: Download, label: p.isAdmin ? "Onboarding" : "Import" },
