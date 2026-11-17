@@ -115,8 +115,8 @@ svg{flex:none}
 .close svg{width:18px;height:18px}
 .hero{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .45s var(--ease),opacity .2s}
 .hero > div{overflow:hidden;min-height:0;padding-right:16px}
-.hero .hi{font-weight:700;font-size:26px;line-height:1.2;letter-spacing:-.022em;padding-top:24px;text-wrap:balance}
-.hero .sub{font-size:15px;line-height:1.5;opacity:.86;margin-top:8px;text-wrap:pretty}
+.hero .hi{font-weight:700;font-size:13px;line-height:1.3;letter-spacing:-.022em;padding-top:24px;text-wrap:balance}
+.hero .sub{font-size:12px;line-height:1.5;opacity:.86;margin-top:8px;text-wrap:pretty}
 .home .head{padding:16px 8px 56px 24px;box-shadow:none}
 .home .hero{grid-template-rows:1fr;opacity:1}
 .home .hero .hi{animation:rise .55s var(--spring) .06s backwards}
@@ -206,7 +206,7 @@ svg{flex:none}
 .home .row.bot:first-child .time{display:none}
 .home .chips{flex-direction:column;flex-wrap:nowrap;gap:2px;margin-top:-4px;background:var(--paper);border-radius:16px;box-shadow:var(--e2),0 0 0 1px var(--line);padding:8px;justify-content:flex-start;animation:msgIn .5s var(--spring) .08s both}
 .home .chips-h{display:block;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);padding:8px 12px 6px}
-.home .chip{width:100%;border:0;border-radius:12px;min-height:44px;padding:10px 12px;color:var(--ink);font-weight:500;font-size:14.5px;box-shadow:none;animation:none}
+.home .chip{width:100%;border:0;border-radius:12px;min-height:44px;padding:10px 12px;color:var(--ink);font-weight:500;font-size:12.5px;box-shadow:none;animation:none}
 .home .chip svg{display:block}
 @media (hover:hover){.home .chip:hover{background:var(--bg);transform:none;box-shadow:none}.home .chip:hover svg{transform:translateX(3px);color:var(--p-text)}}
 
