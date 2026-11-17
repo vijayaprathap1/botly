@@ -4,6 +4,8 @@ import { FontLoader } from "./fonts";
 import { parseMarkdownLite, renderBlocks, streamSafe } from "./markdown";
 import { getJSON, randomId, setJSON } from "./storage";
 import { CSS } from "./styles";
+import { FollowupGate } from "./followups";
+import { pickSpeechLang, speechCtor, transcriptOf, voiceErrorText, type SpeechRec } from "./voice";
 import { normalizePhone, isValidEmail } from "../../lib/validation/phone";
 
 type Identity = { name?: string; phone?: string; email?: string };
@@ -31,6 +33,9 @@ const svg = (body: string, extra = 'fill="none" stroke="currentColor" stroke-wid
 const ICON_CLOSE = svg('<path d="M6 6l12 12M18 6L6 18"/>', 'fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"');
 const ICON_DOWN = svg('<path d="M6 9.5l6 6 6-6"/>', 'fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"');
 const ICON_NEXT = svg('<path d="M9 6l6 6-6 6"/>');
+const ICON_MIC = svg('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>');
+const ICON_STOP = svg('<rect x="7" y="7" width="10" height="10" rx="2.5"/>', 'fill="currentColor"');
+const ICON_JUMP = svg('<path d="M12 5v14M6 13l6 6 6-6"/>');
 const ICON_PERSON = svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>');
 const ICON_SEND = svg('<path d="M12 19V5M5 12l7-7 7 7"/>', 'fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"');
 const ICON_TICK = svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 'fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"');
@@ -133,6 +138,15 @@ export class BotlyWidget {
   private fonts: FontLoader;
   private lastLead: SavedLead | null = null;
   private closeTimer = 0;
+  /** Follow the newest message only while the visitor is at (or near) the bottom. */
+  private stick = true;
+  private jumpUntil = 0;
+  private jumpBtn!: HTMLButtonElement;
+  private micBtn: HTMLButtonElement | null = null;
+  private voiceMsg!: HTMLElement;
+  private rec: SpeechRec | null = null;
+  private voiceTimer = 0;
+  private lastUserText = "";
 
   constructor(private opts: WidgetOptions) {
     this.api = new Api(opts.base, opts.key, opts.testToken);
@@ -317,12 +331,18 @@ export class BotlyWidget {
     this.lockScroll(true);
     this.fitViewport();
     if (!this.restored) void this.restore();
-    window.setTimeout(() => (this.input.disabled ? this.panel?.querySelector<HTMLElement>(".close") : this.input)?.focus({ preventScroll: true }), 30);
+    // Desktop: straight into the composer. Phones: focus the dialog's close button so the keyboard
+    // doesn't jump up over the home screen before the visitor has chosen anything.
+    window.setTimeout(
+      () => (this.input.disabled ? this.panel?.querySelector<HTMLElement>(".close") : this.isMobile() ? this.panel : this.input)?.focus({ preventScroll: true }),
+      30,
+    );
   }
 
   close() {
     if (!this.isOpen || this.opts.fullscreen) return;
     this.isOpen = false;
+    this.stopVoice();
     const panel = this.panel!;
     // Fade/slide out, then hide. Reduced motion (or no animation support) hides at once.
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -405,7 +425,7 @@ export class BotlyWidget {
     const head = h(
       "div",
       { class: "head" },
-      h("div", { class: "bar" }, this.logo(), h("div", { class: "who" }, h("h2", { id: titleId, text: this.botName }), this.statusEl), closeBtn),
+      h("div", { class: "bar" }, h("span", { class: c.isOpen ? "hav on" : "hav" }, this.logo()), h("div", { class: "who" }, h("h2", { id: titleId, text: this.botName }), this.statusEl), closeBtn),
       hero,
     );
 
@@ -416,6 +436,22 @@ export class BotlyWidget {
       : h("div", { class: "banner", role: "status" }, icon(ICON_CLOCK), h("span", { text: `${this.business} is closed now. I can still answer, and the team will get back to you.` }));
 
     this.list = h("div", { class: "msgs", role: "log", "aria-live": "polite", "aria-relevant": "additions", "aria-label": "Conversation", tabindex: "0" });
+    this.list.addEventListener(
+      "scroll",
+      () => {
+        if (Date.now() < this.jumpUntil) return;
+        this.stick = this.list.scrollHeight - this.list.scrollTop - this.list.clientHeight < 64;
+        if (this.stick) this.jumpBtn.hidden = true;
+      },
+      { passive: true },
+    );
+    this.jumpBtn = h("button", { class: "jump", type: "button", "aria-label": "Jump to the latest message", hidden: true }, icon(ICON_JUMP));
+    this.jumpBtn.addEventListener("click", () => {
+      this.stick = true;
+      this.jumpUntil = Date.now() + 450;
+      this.jumpBtn.hidden = true;
+      this.list.scrollTo({ top: this.list.scrollHeight, behavior: "smooth" });
+    });
     // Chips live inside the conversation, right under the reply they follow. aria-live off so the
     // log doesn't read every suggestion aloud; they're reachable as a labelled group of buttons.
     this.chips = h("div", { class: "chips", role: "group", "aria-label": "Suggested questions", "aria-live": "off" });
@@ -423,6 +459,13 @@ export class BotlyWidget {
     this.input = h("textarea", { rows: "1", maxlength: String(MAX_LEN), placeholder: "Ask a question…", "aria-label": "Message" });
     this.sendBtn = h("button", { class: "send", type: "button", "aria-label": "Send message" }, icon(ICON_SEND));
     this.counter = h("div", { class: "count", "aria-live": "polite" });
+    this.voiceMsg = h("div", { class: "vmsg", role: "status", "aria-live": "polite" });
+    // Voice input: only where the browser can turn speech into text itself (Chrome, Edge, Safari).
+    if (speechCtor()) {
+      this.micBtn = h("button", { class: "mic", type: "button", "aria-label": "Start voice input", "aria-pressed": "false" }, icon(ICON_MIC), h("span", { class: "mic-stop" }, icon(ICON_STOP)));
+      this.micBtn.addEventListener("click", () => (this.rec ? this.stopVoice() : this.startVoice()));
+    }
+    const wave = h("span", { class: "wave", "aria-hidden": "true" }, h("i"), h("i"), h("i"), h("i"), h("i"));
     this.input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
@@ -440,9 +483,9 @@ export class BotlyWidget {
     by.append(h("a", { href: c.privacyUrl, target: "_blank", rel: "noopener noreferrer", text: "Privacy" }));
     const meta = h("div", { class: "meta" }, human, by);
 
-    const foot = h("div", { class: "foot" }, h("div", { class: "composer" }, this.input, this.sendBtn), this.counter, meta);
+    const foot = h("div", { class: "foot" }, this.jumpBtn, h("div", { class: "composer" }, wave, this.input, this.micBtn, this.sendBtn), this.voiceMsg, this.counter, meta);
 
-    this.panel = h("div", { class: this.hadUserMessage || this.saved.conversationId ? "panel" : "panel home", role: "dialog", "aria-modal": this.opts.fullscreen ? "false" : "true", "aria-labelledby": titleId }, head, this.netBanner, closedBanner, this.list, this.chips, foot);
+    this.panel = h("div", { class: this.hadUserMessage || this.saved.conversationId ? "panel" : "panel home", role: "dialog", tabindex: "-1", "aria-modal": this.opts.fullscreen ? "false" : "true", "aria-labelledby": titleId }, head, this.netBanner, closedBanner, this.list, this.chips, foot);
     this.panel.addEventListener("keydown", (e) => this.onPanelKey(e));
     this.wrap.appendChild(this.panel);
     window.visualViewport?.addEventListener("resize", this.fitViewport);
@@ -450,6 +493,7 @@ export class BotlyWidget {
 
     if (c.greeting) this.addBot(c.greeting, new Date(), false);
     this.list.append(this.chips);
+    this.stick = true;
     this.renderChips(c.suggestions);
     if (c.quotaExceeded) this.addCard({ type: "fallback_contact", reason: "quota", contact: c.fallbackContact });
     this.setOffline(this.offline);
@@ -516,11 +560,13 @@ export class BotlyWidget {
     this.sendBtn.setAttribute("aria-label", queued ? "Queued, sends after the reply" : "Send message");
     // Typing stays possible while a reply streams in (it queues); offline or paused stops sending.
     this.sendBtn.disabled = this.offline || this.limited || !el.value.trim();
+    if (this.micBtn) this.micBtn.disabled = this.offline || this.limited;
     this.langFor(el, el.value);
   }
 
-  private renderChips(questions: string[]) {
+  private renderChips(questions: string[], afterReply = false) {
     this.chips.replaceChildren();
+    this.chips.classList.toggle("after", afterReply);
     if (this.limited || !questions.length) return;
     // Keep the chips right under the newest message.
     if (this.chips.nextSibling) this.list.append(this.chips);
@@ -528,7 +574,8 @@ export class BotlyWidget {
     for (const [i, q] of questions.slice(0, 4).entries()) {
       const b = h("button", { class: "chip", type: "button" }, h("span", { text: q }), icon(ICON_NEXT));
       this.langFor(b, q);
-      b.style.animationDelay = `${i * 60}ms`;
+      b.style.setProperty("--i", String(i));
+      if (!afterReply) b.style.animationDelay = `${i * 60}ms`;
       b.addEventListener("click", () => {
         if (this.busy) {
           if (!this.input.value.trim()) this.input.value = q;
@@ -558,8 +605,21 @@ export class BotlyWidget {
     }
   }
 
-  private scroll() {
-    this.list.scrollTop = this.list.scrollHeight;
+  /**
+   * Keep the newest message in view, but never yank the visitor back down while they're reading
+   * further up: then a "jump to latest" button appears instead. `force` = the visitor just sent.
+   */
+  private scroll(force = false) {
+    if (force) this.stick = true;
+    // Home screen reads top-down (greeting, then questions): never start it scrolled.
+    if (this.panel?.classList.contains("home")) {
+      this.list.scrollTop = 0;
+      return;
+    }
+    if (this.stick) {
+      this.list.scrollTop = this.list.scrollHeight;
+      this.jumpBtn.hidden = true;
+    } else if (this.list.scrollHeight - this.list.scrollTop - this.list.clientHeight > 64) this.jumpBtn.hidden = false;
   }
 
   private addUser(text: string, at = new Date()) {
@@ -567,7 +627,8 @@ export class BotlyWidget {
     this.langFor(bubble, text);
     const row = h("div", { class: "row user" }, bubble, h("div", { class: "time", text: this.time(at) }));
     this.list.append(row);
-    this.scroll();
+    this.lastUserText = text;
+    this.scroll(true);
     return row;
   }
 
@@ -619,6 +680,9 @@ export class BotlyWidget {
       this.hadUserMessage = true;
       this.leaveHome();
       this.chips.replaceChildren();
+      // History appears at once, without every old message sliding in.
+      this.list.querySelectorAll(".row").forEach((r) => r.classList.add("old"));
+      this.scroll(true);
       if (data.status === "handed_off" || data.hasLead) this.saved.handedOff = data.status === "handed_off";
     } catch {
       /* restoring is best-effort */
@@ -627,6 +691,7 @@ export class BotlyWidget {
 
   // ─── sending ───────────────────────────────────────────────────────────────
   private submit() {
+    this.stopVoice();
     const text = this.input.value.trim();
     if (!text || this.offline || this.limited) return;
     if (this.busy) {
@@ -667,6 +732,8 @@ export class BotlyWidget {
     userRow.querySelector(".errline")?.remove();
 
     const typing = this.addTyping();
+    const followups = new FollowupGate();
+    let carded = false;
     let bot: { row: HTMLElement; bubble: HTMLElement } | null = null;
     let full = "";
     let raf = 0;
@@ -719,11 +786,14 @@ export class BotlyWidget {
               }
             } else if (event === "tool_card") {
               typing.remove();
+              carded = true;
               this.addCard(data as Card);
             } else if (event === "suggestions") {
-              this.renderChips(data.questions ?? []);
+              // Held until the reply has finished streaming (see followups.ts).
+              followups.hold(data.questions);
             } else if (event === "error") {
               typing.remove();
+              followups.fail();
               // These codes arrive together with a contact card, which says it better.
               if (data.code !== "inactive" && data.code !== "llm_error" && data.code !== "ai_unavailable") this.addEvent(data.message ?? "Something went wrong.");
             } else if (event === "done") {
@@ -741,6 +811,7 @@ export class BotlyWidget {
     } catch (e) {
       const err = e as { status?: number; retryAfterMs?: number | null };
       failed = { status: err?.status, retryAfterMs: err?.retryAfterMs };
+      followups.fail();
     } finally {
       window.clearTimeout(timer);
       typing.remove();
@@ -752,6 +823,9 @@ export class BotlyWidget {
         if (!full.trim()) b.row.remove();
       }
       this.setBusy(false);
+      // Pills only now, under the finished reply, and not if another message is about to go out.
+      const pills = followups.release(Boolean(full.trim()) || carded);
+      if (pills && !this.sendAfterReply) this.renderChips(pills, true);
       this.flushQueued();
     }
     if (failed && !full) {
@@ -1036,6 +1110,76 @@ export class BotlyWidget {
     const links = contactLinks(c);
     if (links.wa || links.tel) this.addCard({ type: "fallback_contact", reason: "human", contact: c });
     else this.addCard({ type: "lead_form", leadType: "human", prefill: {} });
+  }
+
+  // ─── voice input ───────────────────────────────────────────────────────────
+  private startVoice() {
+    const Rec = speechCtor();
+    if (!Rec || this.rec || this.offline || this.limited || !this.micBtn) return;
+    let r: SpeechRec;
+    try {
+      r = new Rec();
+    } catch {
+      return this.voiceNote(voiceErrorText("start"));
+    }
+    r.lang = pickSpeechLang({ lastUserText: this.lastUserText, pageLang: document.documentElement.lang, greeting: this.cfg.greeting });
+    r.interimResults = true;
+    r.continuous = false; // stops by itself after a pause
+    r.maxAlternatives = 1;
+    // Whatever was already typed stays; speech is added after it.
+    const typed = this.input.value.replace(/\s+$/, "");
+    const prefix = typed ? typed + " " : "";
+    r.onresult = (e) => {
+      this.input.value = (prefix + transcriptOf(e.results)).slice(0, MAX_LEN);
+      this.onInput();
+      this.input.scrollTop = this.input.scrollHeight;
+    };
+    r.onerror = (e) => this.voiceNote(voiceErrorText(e.error));
+    r.onend = () => {
+      if (this.rec === r) this.setListening(false);
+    };
+    try {
+      r.start();
+    } catch {
+      return this.voiceNote(voiceErrorText("start"));
+    }
+    this.rec = r;
+    this.setListening(true);
+  }
+
+  private stopVoice() {
+    const r = this.rec;
+    if (!r) return;
+    this.setListening(false);
+    try {
+      r.stop();
+    } catch {
+      /* already stopped */
+    }
+  }
+
+  private setListening(on: boolean) {
+    if (!on) this.rec = null;
+    const comp = this.input.parentElement;
+    comp?.classList.toggle("listening", on);
+    this.input.placeholder = on ? "Listening… speak now" : this.limited ? this.input.placeholder : "Ask a question…";
+    if (this.micBtn) {
+      this.micBtn.setAttribute("aria-pressed", String(on));
+      this.micBtn.setAttribute("aria-label", on ? "Stop voice input" : "Start voice input");
+    }
+    if (on) this.voiceNote(null);
+    else if (!this.isMobile()) {
+      // Ready to review: caret at the end of the transcript.
+      const n = this.input.value.length;
+      this.input.focus({ preventScroll: true });
+      this.input.setSelectionRange(n, n);
+    }
+  }
+
+  private voiceNote(text: string | null) {
+    window.clearTimeout(this.voiceTimer);
+    this.voiceMsg.textContent = text ?? "";
+    if (text) this.voiceTimer = window.setTimeout(() => (this.voiceMsg.textContent = ""), 6000);
   }
 
   // ─── public API ────────────────────────────────────────────────────────────
