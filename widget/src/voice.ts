@@ -20,10 +20,22 @@ export type SpeechRec = {
   onend: (() => void) | null;
 };
 type Ctor = new () => SpeechRec;
+type Policy = { allowsFeature(feature: string): boolean };
 
 /** The recogniser constructor, or null when this browser (or an insecure page) can't do it. */
 export function speechCtor(w: Record<string, unknown> = window as unknown as Record<string, unknown>): Ctor | null {
   if (w.isSecureContext === false) return null;
+  // The host page's Permissions-Policy can switch the microphone off (e.g. `microphone=()`).
+  // Then the mic would always fail with "blocked", so hide the button instead.
+  const doc = w.document as { permissionsPolicy?: Policy; featurePolicy?: Policy } | undefined;
+  const policy = doc?.permissionsPolicy || doc?.featurePolicy;
+  if (policy && typeof policy.allowsFeature === "function") {
+    try {
+      if (!policy.allowsFeature("microphone")) return null;
+    } catch {
+      /* unknown feature name: assume allowed */
+    }
+  }
   const c = (w.SpeechRecognition || w.webkitSpeechRecognition) as Ctor | undefined;
   return typeof c === "function" ? c : null;
 }
