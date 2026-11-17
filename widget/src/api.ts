@@ -15,7 +15,28 @@ export type WidgetConfig = {
   privacyUrl: string;
   fallbackContact: { phone?: string; email?: string; whatsapp?: string };
   quotaExceeded: boolean;
+  /** Present only when the business has appointment booking switched on. */
+  booking?: { title: string };
 };
+
+export type BookingService = { id: string; name: string; description: string | null; duration: number; price: number | null };
+export type BookingSlots = {
+  ok: true;
+  title: string;
+  timezone: string;
+  confirmation: "auto" | "manual";
+  collectEmail: "off" | "optional" | "required";
+  instructions: string | null;
+  cancellationPolicy: string | null;
+  services: BookingService[];
+  service: string;
+  days: { date: string; n: number }[];
+  date: string | null;
+  slots: { start: string; t: string; left: number }[];
+};
+export type BookingResult =
+  | { ok: true; booking: { id: string; status: "pending" | "confirmed"; service: string; start: string; when: string; duration: number; name: string; phone: string }; instructions: string | null }
+  | { ok: false; error?: string; field?: string; code?: string };
 
 export type ChatHandlers = {
   onEvent: (event: string, data: any) => void;
@@ -71,6 +92,32 @@ export class Api {
       return await res.json();
     } catch {
       return { ok: false, error: "Couldn't send. Please try again." };
+    }
+  }
+
+  async bookingSlots(service?: string | null, date?: string | null): Promise<BookingSlots | { ok: false; error?: string }> {
+    const extra: Record<string, string> = {};
+    if (service) extra.service = service;
+    if (date) extra.date = date;
+    try {
+      const res = await fetch(`${this.base}/api/widget/booking?${this.q(extra)}`, { credentials: "omit", referrerPolicy: "strict-origin" });
+      return await res.json();
+    } catch {
+      return { ok: false, error: "Couldn't load times. Check your connection." };
+    }
+  }
+
+  async book(body: Record<string, unknown>): Promise<BookingResult> {
+    try {
+      const res = await fetch(`${this.base}/api/widget/booking`, {
+        method: "POST",
+        credentials: "omit",
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        body: JSON.stringify({ key: this.key, testToken: this.testToken, ...body }),
+      });
+      return await res.json();
+    } catch {
+      return { ok: false, error: "Couldn't book. Check your connection and try again." };
     }
   }
 

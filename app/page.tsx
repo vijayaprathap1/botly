@@ -6,13 +6,14 @@ import { HomeNav } from "@/components/home/nav";
 import { Hero } from "@/components/home/hero";
 import { FinalCta, HowItWorks, Languages, Leads, Trust, WorksOn } from "@/components/home/sections";
 import { Pricing } from "@/components/home/pricing";
+import { Booking } from "@/components/home/booking";
 import { Faq } from "@/components/home/faq";
 import { HomeFooter } from "@/components/home/footer";
 
 export const metadata: Metadata = {
   // absolute: the layout's "%s · Botly" template would repeat the brand.
   title: { absolute: "Botly: AI customer support in your customers' language" },
-  description: `AI support assistant trained on your website. Answers customers in English, Tamil and Hindi and emails you every lead. Free plan, paid plans from ₹${plans().starter.priceInr.toLocaleString("en-IN")}/month.`,
+  description: `AI support assistant trained on your website. Answers customers in English, Tamil and Hindi, books appointments and emails you every lead. Free plan, paid plans from ₹${plans().starter.priceInr.toLocaleString("en-IN")}/month.`,
   robots: { index: true, follow: true },
   // One address for search engines: the old vercel.app host and www serve the same page.
   alternates: { canonical: "/" },
@@ -52,6 +53,7 @@ export default function Landing() {
         <HowItWorks />
         <Languages />
         <Leads />
+        <Booking />
         <Trust />
         <Pricing />
         <Faq />

@@ -81,7 +81,7 @@ export class ResendNotifier implements Notifier {
 }
 
 /** Plain transactional email (invites, weekly reports). Returns instead of throwing. */
-export async function sendEmail(msg: { to: string; subject: string; html: string; text: string }): Promise<{ sent: boolean; id?: string; error?: string }> {
+export async function sendEmail(msg: { to: string; subject: string; html: string; text: string; replyTo?: string }): Promise<{ sent: boolean; id?: string; error?: string }> {
   if (!process.env.RESEND_API_KEY) return { sent: false, error: "RESEND_API_KEY not configured" };
   let lastError = "";
   for (const delay of [0, 1500, 5000]) {
@@ -90,7 +90,7 @@ export async function sendEmail(msg: { to: string; subject: string; html: string
       const res = await fetch(`${process.env.RESEND_API_URL || "https://api.resend.com"}/emails`, {
         method: "POST",
         headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from: process.env.EMAIL_FROM || "Botly <onboarding@resend.dev>", reply_to: business.email, to: [msg.to], subject: msg.subject, html: msg.html, text: msg.text }),
+        body: JSON.stringify({ from: process.env.EMAIL_FROM || "Botly <onboarding@resend.dev>", reply_to: msg.replyTo || business.email, to: [msg.to], subject: msg.subject, html: msg.html, text: msg.text }),
         signal: AbortSignal.timeout(10_000),
       });
       if (res.ok) return { sent: true, id: ((await res.json()) as { id?: string }).id };

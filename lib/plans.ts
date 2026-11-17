@@ -19,6 +19,7 @@ export type PlanDef = {
   bots: number;
   crawlPages: number;
   growthTools: boolean; // order lookup (Shopify/WooCommerce), callback booking, weekly summary
+  booking: boolean; // appointment booking with live availability (see docs/appointment-booking.md)
   hideBranding: boolean; // may turn off "Powered by Botly"
   razorpayPlanEnv?: string;
   razorpayYearlyEnv?: string;
@@ -72,29 +73,29 @@ export function plans(): Record<Plan, PlanDef> {
   const pPro = num("PRICE_PRO_INR", 4999);
   return {
     trial: {
-      id: "trial", name: "Free trial", priceInr: 0, yearlyInr: 0, conversations: TRIAL.replies, bots: 1, crawlPages: TRIAL.crawlPages, growthTools: false, hideBranding: false,
+      id: "trial", name: "Free trial", priceInr: 0, yearlyInr: 0, conversations: TRIAL.replies, bots: 1, crawlPages: TRIAL.crawlPages, growthTools: false, booking: true, hideBranding: false,
       blurb: `${TRIAL.replies} AI replies over ${TRIAL.days} days`,
-      features: ["Assistant trained on your website", "Preview and install on your site", "Leads by email"],
+      features: ["Assistant trained on your website", "Preview and install on your site", "Leads by email", "Appointment booking"],
     },
     free: {
-      id: "free", name: "Free", priceInr: 0, yearlyInr: 0, conversations: free, bots: 1, crawlPages: num("FREE_CRAWL_PAGES", 10), growthTools: false, hideBranding: false,
+      id: "free", name: "Free", priceInr: 0, yearlyInr: 0, conversations: free, bots: 1, crawlPages: num("FREE_CRAWL_PAGES", 10), growthTools: false, booking: false, hideBranding: false,
       blurb: "Try Botly on your site, free for ever",
       features: [`${n(free)} conversations a month`, "English, Tamil, Hindi, Tanglish, Hinglish", "Leads by email", "\"Powered by Botly\" on the widget"],
     },
     starter: {
-      id: "starter", name: "Starter", priceInr: pStarter, yearlyInr: yearly(pStarter), conversations: starter, bots: 1, crawlPages: 40, growthTools: false, hideBranding: false,
+      id: "starter", name: "Starter", priceInr: pStarter, yearlyInr: yearly(pStarter), conversations: starter, bots: 1, crawlPages: 40, growthTools: false, booking: true, hideBranding: false,
       razorpayPlanEnv: "RAZORPAY_PLAN_STARTER", razorpayYearlyEnv: "RAZORPAY_PLAN_STARTER_YEARLY",
-      blurb: "For a shop or clinic getting started",
-      features: [`${n(starter)} conversations a month`, "Everything in Free", "Leads by email, one-tap WhatsApp reply", "Unanswered-questions inbox", "Monthly report"],
+      blurb: "For a clinic, salon or shop getting started",
+      features: [`${n(starter)} conversations a month`, "Everything in Free", "Appointment booking with live availability", "Leads by email, one-tap WhatsApp reply", "Unanswered-questions inbox", "Monthly report"],
     },
     growth: {
-      id: "growth", name: "Growth", priceInr: pGrowth, yearlyInr: yearly(pGrowth), conversations: growth, bots: 1, crawlPages: 40, growthTools: true, hideBranding: true,
+      id: "growth", name: "Growth", priceInr: pGrowth, yearlyInr: yearly(pGrowth), conversations: growth, bots: 1, crawlPages: 40, growthTools: true, booking: true, hideBranding: true,
       razorpayPlanEnv: "RAZORPAY_PLAN_GROWTH", razorpayYearlyEnv: "RAZORPAY_PLAN_GROWTH_YEARLY",
       blurb: "For stores with online orders",
       features: [`${n(growth)} conversations a month`, "Everything in Starter", "Order-status lookup (Shopify, WooCommerce)", "Callback booking", "Weekly summary email", "No Botly branding"],
     },
     pro: {
-      id: "pro", name: "Pro", priceInr: pPro, yearlyInr: yearly(pPro), conversations: pro, bots: 3, crawlPages: 100, growthTools: true, hideBranding: true,
+      id: "pro", name: "Pro", priceInr: pPro, yearlyInr: yearly(pPro), conversations: pro, bots: 3, crawlPages: 100, growthTools: true, booking: true, hideBranding: true,
       razorpayPlanEnv: "RAZORPAY_PLAN_PRO", razorpayYearlyEnv: "RAZORPAY_PLAN_PRO_YEARLY",
       blurb: "For busy stores and multiple brands",
       features: [`${n(pro)} conversations a month`, "Everything in Growth", "Up to 3 assistants", "Learns up to 100 pages"],
@@ -112,6 +113,10 @@ export const paidPlans = () => PAID_PLANS.map((p) => plans()[p]);
 /** Order lookup, callback booking and the weekly summary (Growth and Pro). */
 export const hasGrowthTools = (p: Plan | string) => planDef(p).growthTools;
 export const canHideBranding = (p: Plan | string) => planDef(p).hideBranding;
+/** Appointment booking: Starter and up (and admin-granted trials/pilots). Not on Free. */
+export const hasBooking = (p: Plan | string) => planDef(p).booking;
+/** The smallest paid plan with appointment booking, for upgrade prompts. */
+export const bookingPlan = () => plans().starter;
 /** The smallest paid plan that has order lookup, for upgrade prompts. */
 export const growthToolsPlan = () => plans().growth;
 export const fmtInr = (v: number) => `₹${v.toLocaleString("en-IN")}`;

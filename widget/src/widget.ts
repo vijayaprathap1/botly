@@ -7,6 +7,8 @@ import { CSS } from "./styles";
 import { FollowupGate } from "./followups";
 import { pickSpeechLang, speechCtor, transcriptOf, voiceErrorText, type SpeechRec } from "./voice";
 import { normalizePhone, isValidEmail } from "../../lib/validation/phone";
+import { h, icon, svg } from "./dom";
+import { BookingFlow, ICON_CAL } from "./booking";
 
 type Identity = { name?: string; phone?: string; email?: string };
 type Saved = { visitorId: string; conversationId: string | null; at: number; handedOff?: boolean };
@@ -19,7 +21,8 @@ type Card =
   | { type: "lead_saved"; name: string; handoff: boolean }
   | { type: "fallback_contact"; reason: string; contact: Contact }
   | OrderCard
-  | CallbackCard;
+  | CallbackCard
+  | { type: "booking"; service?: string; date?: string };
 /** What the visitor told us in the lead form (shown back in the "Lead saved" card). */
 type SavedLead = { name: string; phone?: string; need?: string };
 
@@ -28,8 +31,6 @@ const DAY = 24 * 60 * 60 * 1000;
 /** Server reasons that mean "no more AI replies for now" (quota, PR #1's per-chat cap). */
 const LIMIT_REASONS = new Set(["quota", "cap"]);
 
-const svg = (body: string, extra = 'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"') =>
-  `<svg viewBox="0 0 24 24" ${extra} aria-hidden="true">${body}</svg>`;
 const ICON_CLOSE = svg('<path d="M6 6l12 12M18 6L6 18"/>', 'fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"');
 const ICON_DOWN = svg('<path d="M6 9.5l6 6 6-6"/>', 'fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"');
 const ICON_NEXT = svg('<path d="M9 6l6 6-6 6"/>');
@@ -48,30 +49,6 @@ const ICON_WA = svg(
   '<path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.3 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z"/>',
   'fill="currentColor"',
 );
-
-/** Tiny element helper. Text goes through textContent only. */
-function h<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  attrs: Record<string, string | boolean | undefined> = {},
-  ...children: (Node | string | null | undefined)[]
-): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v === undefined || v === false) continue;
-    if (k === "class") el.className = String(v);
-    else if (k === "text") el.textContent = String(v);
-    else el.setAttribute(k, v === true ? "" : String(v));
-  }
-  for (const c of children) if (c != null) el.append(typeof c === "string" ? document.createTextNode(c) : c);
-  return el;
-}
-/** Static, trusted SVG icons from this file only (never model output). */
-function icon(svgMarkup: string): HTMLElement {
-  const s = document.createElement("span");
-  s.style.display = "contents";
-  s.innerHTML = svgMarkup;
-  return s;
-}
 
 /** "+91 98765 43210" → "+91 98765 •••10": enough for the visitor to recognise their number. */
 export function maskPhone(display: string): string {
@@ -147,6 +124,8 @@ export class BotlyWidget {
   private rec: SpeechRec | null = null;
   private voiceTimer = 0;
   private lastUserText = "";
+  private booking: BookingFlow | null = null;
+  private homeBook: HTMLElement | null = null;
 
   constructor(private opts: WidgetOptions) {
     this.api = new Api(opts.base, opts.key, opts.testToken);
@@ -478,10 +457,12 @@ export class BotlyWidget {
     const human = h("button", { class: "human", type: "button" }, icon(ICON_PERSON), h("span", { text: "Talk to a person" }));
     human.addEventListener("click", () => this.talkToPerson());
 
+    const bookBtn = c.booking ? h("button", { class: "human book", type: "button" }, icon(ICON_CAL), h("span", { text: "Book" })) : null;
+    bookBtn?.addEventListener("click", () => this.startBooking());
     const by = h("span", { class: "by" });
     if (c.showPoweredBy) by.append(h("span", { text: "Powered by Botly\u00a0·" }));
     by.append(h("a", { href: c.privacyUrl, target: "_blank", rel: "noopener noreferrer", text: "Privacy" }));
-    const meta = h("div", { class: "meta" }, human, by);
+    const meta = h("div", { class: "meta" }, h("div", { class: "acts" }, human, bookBtn), by);
 
     const foot = h("div", { class: "foot" }, this.jumpBtn, h("div", { class: "composer" }, wave, this.input, this.micBtn, this.sendBtn), this.voiceMsg, this.counter, meta);
 
@@ -492,6 +473,19 @@ export class BotlyWidget {
     window.visualViewport?.addEventListener("scroll", this.fitViewport);
 
     if (c.greeting) this.addBot(c.greeting, new Date(), false);
+    // Booking on: a clear "Book an appointment" entry on the home screen, under the greeting.
+    if (c.booking && !this.hadUserMessage && !this.saved.conversationId) {
+      const entry = h(
+        "button",
+        { class: "bk-entry", type: "button" },
+        h("span", { class: "bk-ic" }, icon(ICON_CAL)),
+        h("span", { class: "bk-et" }, h("b", { text: c.booking.title || "Book an appointment" }), h("small", { text: "See free times and book in a minute" })),
+        icon(ICON_NEXT),
+      );
+      entry.addEventListener("click", () => this.startBooking());
+      this.homeBook = h("div", { class: "row bk-row" }, entry);
+      this.list.append(this.homeBook);
+    }
     this.list.append(this.chips);
     this.stick = true;
     this.renderChips(c.suggestions);
@@ -594,6 +588,46 @@ export class BotlyWidget {
   private leaveHome() {
     this.panel?.classList.remove("home");
     this.chips.querySelector(".chips-h")?.remove();
+    this.homeBook?.remove();
+    this.homeBook = null;
+  }
+
+  /** Opens the booking card (home entry, the "Book" button, Botly.book(), or the AI's show_booking). */
+  startBooking(opts: { service?: string; date?: string } = {}) {
+    if (!this.cfg.booking) return;
+    if (!this.isOpen) this.open();
+    this.chips.replaceChildren();
+    this.addCard({ type: "booking", ...opts });
+  }
+
+  private bookingCard(card: { service?: string; date?: string }) {
+    // One booking card at a time: an unfinished one moves down to the newest position.
+    if (this.booking && !this.booking.done) this.booking.el.closest(".row")?.remove();
+    this.booking = new BookingFlow(
+      {
+        api: this.api,
+        business: this.business,
+        identity: () => this.identity,
+        visitorId: () => this.saved.visitorId,
+        conversationId: () => this.saved.conversationId,
+        scroll: () => this.revealBooking(),
+        talkToPerson: () => this.talkToPerson(),
+        maskPhone,
+      },
+      this.cfg.booking?.title || "Book an appointment",
+      card,
+    );
+    return this.booking.el;
+  }
+
+  /** After a booking step: show the whole card, or its top when it's taller than the chat. */
+  private revealBooking() {
+    const row = this.booking?.el.closest<HTMLElement>(".row");
+    if (!row || !this.list) return this.scroll();
+    const view = this.list.getBoundingClientRect();
+    const r = row.getBoundingClientRect();
+    if (r.height <= view.height - 16) return this.scroll(true);
+    this.list.scrollTop += r.top - view.top - 8;
   }
 
   // ─── messages ──────────────────────────────────────────────────────────────
@@ -854,6 +888,7 @@ export class BotlyWidget {
     else if (card.type === "lead_saved") el = this.savedCard(card.name, card.handoff, null);
     else if (card.type === "order_status") el = this.orderCard(card);
     else if (card.type === "callback_form") el = this.callbackForm(card);
+    else if (card.type === "booking") el = this.bookingCard(card);
     else {
       if (LIMIT_REASONS.has(card.reason)) this.setLimited();
       el = this.handoffCard(card.contact ?? {}, card.reason);

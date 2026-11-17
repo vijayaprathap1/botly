@@ -94,14 +94,33 @@ export const TOOL_REQUEST_CALLBACK: ToolDef = {
   },
 };
 
+export const TOOL_SHOW_BOOKING: ToolDef = {
+  name: "show_booking",
+  description:
+    "Online appointment booking is switched on for this business. Call it when the visitor wants to book, asks for an appointment, or asks which days or times are free. It opens the booking card in the chat, where the visitor picks the service, date and time and enters their own details, and it returns the real free times. Quote only times from its result. Never say an appointment is booked or confirmed yourself, and never ask for name or phone in the chat for a booking: the card collects them.",
+  input_schema: {
+    type: "object",
+    properties: {
+      service: { type: "string", description: "The service the visitor named, in English, if any (e.g. consultation, haircut, trial class)." },
+      date: { type: "string", description: "YYYY-MM-DD if the visitor asked about a specific day, resolved from what they said using the current date." },
+    },
+    required: [],
+  },
+};
+
 /** Tools whose results don't need the model to speak again once it has already answered. */
 export const TERMINAL_TOOLS = new Set(["suggest_followups", "report_unanswered"]);
 
-/** Tools for a plan. Growth and Pro add order lookup and callback booking. */
-export function toolsForPlan(plan: Plan): ToolDef[] {
+/**
+ * Tools for a plan. Growth and Pro add order lookup and callback booking. When appointment
+ * booking is switched on (Starter and up), show_booking replaces request_callback, so the
+ * model has one clear way to book.
+ */
+export function toolsForPlan(plan: Plan, opts: { booking?: boolean } = {}): ToolDef[] {
   const base = [TOOL_CAPTURE_LEAD, TOOL_HANDOFF, TOOL_REPORT_UNANSWERED, TOOL_SUGGEST_FOLLOWUPS];
-  return hasGrowthTools(plan) ? [...base, TOOL_LOOKUP_ORDER, TOOL_REQUEST_CALLBACK] : base;
+  const growth = hasGrowthTools(plan) ? [TOOL_LOOKUP_ORDER, ...(opts.booking ? [] : [TOOL_REQUEST_CALLBACK])] : [];
+  return [...base, ...growth, ...(opts.booking ? [TOOL_SHOW_BOOKING] : [])];
 }
 
 /** Every tool name (used to strip tool calls a model wrote as text). */
-export const ALL_TOOL_NAMES = [TOOL_CAPTURE_LEAD, TOOL_HANDOFF, TOOL_REPORT_UNANSWERED, TOOL_SUGGEST_FOLLOWUPS, TOOL_LOOKUP_ORDER, TOOL_REQUEST_CALLBACK].map((t) => t.name);
+export const ALL_TOOL_NAMES = [TOOL_CAPTURE_LEAD, TOOL_HANDOFF, TOOL_REPORT_UNANSWERED, TOOL_SUGGEST_FOLLOWUPS, TOOL_LOOKUP_ORDER, TOOL_REQUEST_CALLBACK, TOOL_SHOW_BOOKING].map((t) => t.name);

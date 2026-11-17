@@ -251,6 +251,69 @@ svg{flex:none}
 .summary b{font-weight:600;text-align:right;overflow-wrap:anywhere}
 .track{margin-top:12px}
 
+/* Appointment booking: home entry, then one card that steps service → day/time → details → done */
+.bk-row{max-width:100%;align-self:stretch}
+.bk-entry{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:12px 14px;border-radius:16px;background:var(--paper);
+  box-shadow:var(--e2),0 0 0 1px var(--line);text-align:left;animation:msgIn .5s var(--spring) .04s both;transition:box-shadow .2s,transform .25s var(--spring)}
+.bk-entry svg{flex:none;width:18px;height:18px;color:var(--ink3);transition:transform .2s var(--ease),color .15s}
+@media (hover:hover){.bk-entry:hover{box-shadow:var(--e2),0 0 0 1.5px var(--p-line);transform:translateY(-1px)}.bk-entry:hover .bk-et + span svg{transform:translateX(3px);color:var(--p-text)}}
+.bk-entry:active{transform:scale(.985)}
+.bk-et{flex:1;display:flex;flex-direction:column;min-width:0;text-align:left}
+.bk-et b{font-weight:650;font-size:15px;line-height:1.3}
+.bk-et small{font-size:13px;color:var(--ink2);line-height:1.4}
+.bk-ic{flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--p-tint);color:var(--p-text)}
+.bk-ic svg{width:20px;height:20px;color:inherit}
+.bk{padding:16px 16px 18px}
+.bk-head{display:flex;align-items:center;gap:12px}
+.bk-ht{min-width:0}
+.bk-ht .note{margin-top:1px}
+.bk-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:14px 0 4px}
+.bk-steps i{height:4px;border-radius:999px;background:var(--line2);transition:background .3s var(--ease)}
+.bk-steps i.on{background:var(--p)}
+.bk-body{animation:fadeIn .25s var(--ease) both}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.bk-svcs{display:grid;gap:8px;margin-top:12px}
+.bk-svc{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:12px 14px;border-radius:12px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--line2);text-align:left;transition:box-shadow .15s,background .15s}
+.bk-svc svg{flex:none;width:18px;height:18px;color:var(--ink3)}
+@media (hover:hover){.bk-svc:hover{background:var(--p-tint);box-shadow:inset 0 0 0 1.5px var(--p-line)}}
+.bk-svc-t{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}
+.bk-svc-t b{font-weight:600;font-size:15px;line-height:1.35}
+.bk-svc-t small,.bk-pick small{font-size:13px;color:var(--ink2)}
+.bk-svc-t .bk-desc{color:var(--ink3);font-size:12.5px}
+.bk-pick{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;padding:8px 12px;border-radius:12px;background:var(--bg)}
+.bk-pick span{display:flex;flex-direction:column;min-width:0}
+.bk-pick b{font-weight:600;font-size:14px}
+.bk-pick .link{margin:0;min-height:36px}
+.bk-days{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x proximity;margin:12px -16px 0;padding:2px 16px 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.bk-days::-webkit-scrollbar{display:none}
+.bk-day{flex:none;width:56px;min-height:72px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;scroll-snap-align:center;
+  box-shadow:inset 0 0 0 1px var(--line2);background:var(--paper);transition:background .15s,box-shadow .15s,transform .25s var(--spring)}
+.bk-day small{font-size:11.5px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.03em;line-height:1.2}
+.bk-day b{font-size:19px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.bk-day.on{background:var(--p);color:var(--on-p);box-shadow:var(--e2)}
+.bk-day.on small{color:inherit;opacity:.85}
+.bk-day:disabled{opacity:.38;cursor:default;background:transparent}
+.bk-day:disabled b{text-decoration:line-through;text-decoration-thickness:1.5px}
+@media (hover:hover){.bk-day:not(:disabled):not(.on):hover{box-shadow:inset 0 0 0 1.5px var(--p-line);background:var(--p-tint)}}
+.bk-day:not(:disabled):active{transform:scale(.95)}
+.bk-times{min-height:96px}
+.bk-g{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);margin:14px 0 8px}
+.bk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.bk-slot{min-height:44px;text-align:center;white-space:nowrap;border-radius:12px;font-weight:600;font-size:14px;color:var(--p-text);background:var(--paper);box-shadow:inset 0 0 0 1px var(--p-line);
+  font-variant-numeric:tabular-nums;animation:chipIn .4s var(--spring) both;animation-delay:calc(var(--i,0) * 25ms);transition:background .15s,color .15s,transform .25s var(--spring)}
+@media (hover:hover){.bk-slot:hover{background:var(--p);color:var(--on-p)}}
+.bk-slot:active{transform:scale(.95)}
+.bk-empty{font-size:14px;color:var(--ink2);margin:16px 0 4px;text-align:center}
+.bk-skel{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
+.bk-skel i{height:44px;border-radius:12px;background:linear-gradient(90deg,var(--bg) 0%,color-mix(in srgb,var(--bg) 40%,var(--paper)) 50%,var(--bg) 100%);background-size:200% 100%;animation:shimmer 1.2s linear infinite}
+@keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+.bk-form .bk-sum{margin-top:12px}
+.bk-form .link{display:inline-flex;gap:2px;margin:2px 0 0 -4px;min-height:40px;font-size:13.5px}
+.bk-form .link svg{width:16px;height:16px}
+.acts{display:flex;align-items:center;gap:0;min-width:0}
+.acts .human{white-space:nowrap;padding:0 10px 0 8px}
+.human.book svg{color:var(--p-text)}
+
 /* Footer + composer */
 .foot{position:relative;padding:8px 12px 4px;background:var(--paper);flex:none;box-shadow:0 -1px 0 var(--line)}
 .home .foot{box-shadow:none}
