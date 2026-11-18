@@ -233,17 +233,14 @@ export class BotlyWidget {
 
   /** The business's logo (the bot's https image), or its initial on a cream tile. */
   private logo(extra = "") {
-    const tile = h("span", { class: extra ? `logo ${extra}` : "logo" });
+    const tile = h("span", { class: extra ? `logo ${extra}` : "logo", "aria-hidden": "true" });
     const url = this.cfg.avatarUrl;
     if (url && /^https:\/\//.test(url)) {
       const img = h("img", { src: url, alt: "" });
       img.addEventListener("error", () => img.replaceWith(this.initial()));
       tile.append(img);
     } else {
-      tile.append(svg(
-        '<path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7a2.5 2.5 0 0 1-2.5 2.5H11l-4 4v-4A2 2 0 0 1 5 14V6.5z"/><path d="M9.5 10h.01M14.5 10h.01"/>',
-        'viewBox="0 0 24 24" class="h-[58%] w-[58%]" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"',
-      ));
+      tile.append(this.initial());
     }
     return tile;
   }
