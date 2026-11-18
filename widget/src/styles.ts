@@ -115,7 +115,7 @@ svg{flex:none}
 .close svg{width:18px;height:18px}
 .hero{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .45s var(--ease),opacity .2s}
 .hero > div{overflow:hidden;min-height:0;padding-right:16px}
-.hero .hi{font-weight:700;font-size:13px;line-height:1.3;letter-spacing:-.022em;padding-top:24px;text-wrap:balance}
+.hero .hi{font-weight:700;font-size:16px;line-height:1.3;letter-spacing:-.022em;padding-top:24px;text-wrap:balance}
 .hero .sub{font-size:12px;line-height:1.5;opacity:.86;margin-top:8px;text-wrap:pretty}
 .home .head{padding:16px 8px 56px 24px;box-shadow:none}
 .home .hero{grid-template-rows:1fr;opacity:1}
