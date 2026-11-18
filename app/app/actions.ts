@@ -78,7 +78,7 @@ export async function createOrgAndBot(_: ActionState, form: FormData): Promise<A
       website_url: d.websiteUrl || null,
       model: config.defaultModel,
       allowed_origins: site ? cleanOrigins([new URL(site).host]) : [],
-      branding: { primary_color: "#C2410C", avatar_url: null, assistant_name: d.assistantName, position: "right", theme: "auto", show_powered_by: true },
+      branding: { primary_color: "#C2410C", avatar_url: '../../public/logo.png', assistant_name: d.assistantName, position: "right", theme: "auto", show_powered_by: true },
       notify_emails: session.email ? [session.email] : [],
       // Not a made-up default: set the client's real hours in Settings.
       business_hours: HOURS_NOT_SET,
